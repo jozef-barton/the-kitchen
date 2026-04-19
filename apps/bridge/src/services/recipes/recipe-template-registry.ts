@@ -2,6 +2,7 @@ import type {
   RecipeActionDefinition,
   RecipeActionVisibility,
   RecipeBridgeActionHandler,
+  RecipePromptAction,
   RecipeTemplateId,
   RecipeTemplateSection,
   RecipeTemplateUpdateOperation
@@ -40,6 +41,7 @@ function bridgeAction(
     intent?: RecipeActionDefinition['intent'];
     visibility?: Partial<RecipeActionVisibility>;
     payload?: Record<string, unknown>;
+    prompt?: RecipePromptAction;
   } = {}
 ): RecipeActionDefinition {
   return {
@@ -48,6 +50,7 @@ function bridgeAction(
     kind: 'bridge',
     intent: options.intent ?? 'neutral',
     description: options.description,
+    prompt: options.prompt,
     visibility: {
       requiresSelection: options.visibility?.requiresSelection ?? 'none',
       whenBuildReady: options.visibility?.whenBuildReady ?? true,
@@ -156,7 +159,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'get-hotel-details': bridgeAction('get-hotel-details', 'Get details', 'run_template_followup', {
         intent: 'primary',
-        visibility: { requiresSelection: 'single' }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Get booking details and current availability for the selected hotel.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       }),
       'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
     },
@@ -174,11 +178,13 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'get-flight-details': bridgeAction('get-flight-details', 'Flight details', 'run_template_followup', {
         intent: 'primary',
-        visibility: { requiresSelection: 'single' }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Get full details and fare rules for the selected flight itinerary.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       }),
       'continue-booking': bridgeAction('continue-booking', 'Continue booking', 'run_template_followup', {
         intent: 'primary',
-        visibility: { requiresSelection: 'single' }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Continue booking the selected flight and provide the next steps.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       }),
       'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
     },
@@ -196,7 +202,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'get-trip-details': bridgeAction('get-trip-details', 'Get details', 'run_template_followup', {
         intent: 'primary',
-        visibility: { requiresSelection: 'single' }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Get details for the selected trip item and suggest next steps.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       }),
       'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
     },
@@ -214,9 +221,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'run-followup': bridgeAction('run-followup', 'Run follow-up', 'run_template_followup', {
         intent: 'primary',
-        visibility: {
-          requiresSelection: 'single'
-        }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Follow up on the selected research item: expand notes, find additional sources, or answer open questions.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: ['raw_data', 'normalized_data'], outboundRequestsAllowed: true, expectedOutput: 'recipe_data_update', timeoutMs: 120_000, retryable: true }
       }),
       'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
     },
@@ -239,7 +245,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
       }),
       'remediate-finding': bridgeAction('remediate-finding', 'Remediate', 'run_template_followup', {
         intent: 'primary',
-        visibility: { requiresSelection: 'single' }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Provide a remediation plan for the selected security finding, including steps, priority, and affected components.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       })
     },
     transitions: []
@@ -258,7 +265,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'compare-vendor': bridgeAction('compare-vendor', 'Compare in detail', 'run_template_followup', {
         intent: 'primary',
-        visibility: { requiresSelection: 'single' }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Compare the selected option in depth: strengths, weaknesses, pricing, and a recommendation relative to the other candidates.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       }),
       'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
     },
@@ -304,15 +312,12 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'move-job-stage': bridgeAction('move-job-stage', 'Update stage', 'move_template_card_stage', {
         intent: 'primary',
-        visibility: {
-          requiresSelection: 'single'
-        }
+        visibility: { requiresSelection: 'single' }
       }),
       'run-interview-prep': bridgeAction('run-interview-prep', 'Interview prep', 'generate_interview_prep', {
         intent: 'primary',
-        visibility: {
-          requiresSelection: 'single'
-        }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Prepare targeted interview questions, key talking points, and research notes for the selected job posting.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 90_000, retryable: true }
       }),
       'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
     },
@@ -330,15 +335,13 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'flesh-out-idea': bridgeAction('flesh-out-idea', 'Flesh out', 'expand_template_idea', {
         intent: 'primary',
-        visibility: {
-          requiresSelection: 'single'
-        }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Expand the selected content idea into a full brief with goals, audience, format, key messages, and a draft outline.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: ['raw_data', 'normalized_data'], outboundRequestsAllowed: false, expectedOutput: 'recipe_data_update', timeoutMs: 60_000, retryable: true }
       }),
       'write-campaign-email': bridgeAction('write-campaign-email', 'Write email', 'generate_campaign_email', {
         intent: 'primary',
-        visibility: {
-          requiresSelection: 'single'
-        }
+        visibility: { requiresSelection: 'single' },
+        prompt: { promptTemplate: 'Write a complete campaign email for the selected idea: subject line, body copy, and a clear CTA.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
       })
     },
     transitions: []
@@ -356,9 +359,7 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     actions: {
       'save-place': bridgeAction('save-place', 'Save place', 'save_template_place', {
         intent: 'primary',
-        visibility: {
-          requiresSelection: 'single'
-        }
+        visibility: { requiresSelection: 'single' }
       }),
       'switch-to-event-planner': bridgeAction('switch-to-event-planner', 'Convert to event plan', 'switch_template', {
         intent: 'primary',

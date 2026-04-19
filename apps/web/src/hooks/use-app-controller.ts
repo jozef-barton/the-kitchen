@@ -1996,13 +1996,29 @@ export function useAppController() {
             return currentPayload;
           }
 
+          // Wins #1/#2/#3/#4: inject partialTemplateState into the recipe's dynamic field so
+          // DynamicRecipeView can render the progressive template shell before final promotion.
+          // The partial state is only applied when the recipe doesn't already have a promoted template.
+          const partialTemplateState = event.partialTemplateState ?? null;
+          const hasPromotedTemplate = Boolean(event.recipe.dynamic?.recipeTemplate);
+          const recipeToStore =
+            partialTemplateState && !hasPromotedTemplate
+              ? {
+                  ...event.recipe,
+                  dynamic: {
+                    ...event.recipe.dynamic,
+                    recipeTemplate: partialTemplateState
+                  }
+                }
+              : event.recipe;
+
           return {
             ...currentPayload,
             session: {
               ...currentPayload.session,
               attachedRecipeId: event.recipe.id
             },
-            attachedRecipe: event.recipe
+            attachedRecipe: recipeToStore
           };
         });
 

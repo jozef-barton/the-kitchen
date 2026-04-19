@@ -1467,22 +1467,132 @@ export interface StructuredRecipeIntent {
 }
 
 export function classifyStructuredRecipeIntent(content: string, hasRecipeContext = false): StructuredRecipeIntent | null {
+  // --- Domain-specific templates — checked first so generic keywords can't hijack them ---
+
+  // Inbox triage / email cleanup  →  inbox-triage-board
   if (
-    isLocalSearchIntent(content) ||
-    /\b(lodging|lodgings|stay|stays|places?|venues?|coffee shops?|cafes?|restaurants?)\b/i.test(content)
+    /\b(inbox triage|inbox triaging|inbox cleanup|email triage|triage my emails?|triage.*inbox|unread email|bulk archive|sender cleanup|clean up.*inbox|manage my inbox|email cleanup)\b/i.test(content) ||
+    (isEmailIntent(content) && /\b(triaging?|clean up|cleanup|organize|sort|archive|manage|filter)\b/i.test(content))
+  ) {
+    return {
+      category: 'results',
+      preferredContentFormat: 'card',
+      label: 'inbox triage'
+    };
+  }
+
+  // Security review / audit  →  security-review-board
+  if (/\b(security review|security audit|threat findings?|audit board|severity triage|vulnerability scan|penetration test|pentest|CVE|OWASP|threat model)\b/i.test(content)) {
+    return {
+      category: 'plan',
+      preferredContentFormat: 'table',
+      label: 'security review'
+    };
+  }
+
+  // Job search / career pipeline  →  job-search-pipeline
+  if (/\b(job search|job listings?|job postings?|career opportunities|open positions?|job hunt|job pipeline|find.*jobs?|apply.*jobs?|hiring pipeline)\b/i.test(content)) {
+    return {
+      category: 'results',
+      preferredContentFormat: 'card',
+      label: 'job search'
+    };
+  }
+
+  // Flight comparison  →  flight-comparison
+  if (
+    /\b(flight comparison|compare flights?|airline options?|compare itineraries|outbound.*return|round.?trip.*flights?)\b/i.test(content) ||
+    (/\b(flights?|airlines?)\b/i.test(content) && /\b(compare|book|options?|itinerary|search|find)\b/i.test(content))
+  ) {
+    return {
+      category: 'places',
+      preferredContentFormat: 'table',
+      label: 'flight comparison'
+    };
+  }
+
+  // Travel itinerary / trip planning  →  travel-itinerary-planner  (before generic plan)
+  if (/\b(trip itinerary|travel itinerary|travel planner|travel plan|itinerary for.*trip|plan.*trip|trip plan|packing list|bookings? and packing|trip notes|travel notes)\b/i.test(content)) {
+    return {
+      category: 'places',
+      preferredContentFormat: 'card',
+      label: 'travel planner'
+    };
+  }
+
+  // Event planning  →  event-planner  (before generic plan)
+  if (/\b(event planner|plan.*event|event checklist|venue and guests|plan.*party|plan.*wedding|plan.*birthday|plan.*conference|plan.*dinner party|host.*event|plan.*celebration)\b/i.test(content)) {
+    return {
+      category: 'plan',
+      preferredContentFormat: 'card',
+      label: 'event planner'
+    };
+  }
+
+  // Content / campaign planning  →  content-campaign-planner
+  if (/\b(campaign planner|content plan|content calendar|campaign ideas?|marketing plan|newsletter plan|content ideas?|drafts? and schedule|social media plan|launch campaign)\b/i.test(content)) {
+    return {
+      category: 'plan',
+      preferredContentFormat: 'card',
+      label: 'campaign planner'
+    };
+  }
+
+  // Price comparison (specific shopping intent)  →  price-comparison-grid
+  if (/\b(price comparison|compare prices?|cheapest|best price|merchant grid|same product|best deal)\b/i.test(content)) {
+    return {
+      category: 'shopping',
+      preferredContentFormat: 'table',
+      label: 'price comparison'
+    };
+  }
+
+  // --- Local discovery templates — specific before generic ---
+
+  // Restaurant finder  →  restaurant-finder
+  if (
+    /\b(restaurants? nearby|restaurants? near|dinner options?|places to eat|restaurant shortlist|find.*restaurants?)\b/i.test(content) ||
+    (/\b(restaurants?|brunch|dinner)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content))
   ) {
     return {
       category: 'places',
       preferredContentFormat: 'card',
-      label: 'nearby shortlist'
+      label: 'restaurant shortlist'
     };
   }
 
+  // Hotel shortlist  →  hotel-shortlist
+  if (
+    /\b(hotel shortlist|where to stay|compare hotels?|lodging options?|hotels? near|hotels? in)\b/i.test(content) ||
+    (/\b(hotels?|lodging|accommodation)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content))
+  ) {
+    return {
+      category: 'places',
+      preferredContentFormat: 'card',
+      label: 'hotel shortlist'
+    };
+  }
+
+  // General local discovery  →  local-discovery-comparison
+  if (
+    isLocalSearchIntent(content) ||
+    /\b(lodging|lodgings?|stay|stays|places? nearby|venues?|coffee shops?|cafes?|service providers?|venue shortlist)\b/i.test(content)
+  ) {
+    return {
+      category: 'places',
+      preferredContentFormat: 'card',
+      label: 'nearby places'
+    };
+  }
+
+  // --- Planning templates ---
+
+  // Project / action plan — no dedicated template; maps to research-notebook
   if (/\b(project plan|action plan|roadmap|timeline|milestones?|launch plan|implementation plan|rollout plan)\b/i.test(content)) {
     return {
       category: 'plan',
       preferredContentFormat: 'table',
-      label: 'project plan'
+      label: 'research notebook'
     };
   }
 
@@ -1508,11 +1618,13 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     };
   }
 
-  if (/\b(how to|step by step|tutorial|guide|walkthrough|set up|install|configure|deploy)\b/i.test(content)) {
+  // Step-by-step instructions  →  step-by-step-instructions
+  // "guide" excluded — too generic and causes false positives across domain-specific templates
+  if (/\b(how to|step by step|step-by-step|tutorial|walkthrough|set up|install|configure|deploy|getting started|quick start)\b/i.test(content)) {
     return {
       category: 'plan',
       preferredContentFormat: 'table',
-      label: 'step-by-step guide'
+      label: 'step by step'
     };
   }
 
@@ -1524,6 +1636,7 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     };
   }
 
+  // Finance (no dedicated template; will fall through to generic in template selection)
   if (/\b(finance|financial|budget|budgets|expenses?|cost breakdown|line items?|portfolio|holdings|allocations?)\b/i.test(content)) {
     return {
       category: 'finance',
@@ -1532,20 +1645,34 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     };
   }
 
+  // --- Comparison / shopping templates ---
+
+  // Technology / vendor comparison matrix  →  vendor-evaluation-matrix  (before generic comparison)
   if (
-    /\b(compare|comparison|vs\\.?|options|shortlist|candidates|shopping|buy|buying|products?|purchase|purchasing)\b/i.test(content)
+    /\b(compare|comparison|vs\.?|versus)\b/i.test(content) &&
+    /\b(frameworks?|vendors?|technologies|tools?|libraries?|services?|platforms?|apps?)\b/i.test(content)
+  ) {
+    return {
+      category: 'shopping',
+      preferredContentFormat: 'table',
+      label: 'comparison matrix'
+    };
+  }
+
+  // Generic shopping / comparison  →  shopping-shortlist
+  if (
+    /\b(compare|comparison|vs\.?|options|shortlist|candidates|shopping|buy|buying|products?|purchase|purchasing)\b/i.test(content)
   ) {
     return {
       category: 'shopping',
       preferredContentFormat: 'card',
-      label: 'comparison shortlist'
+      label: 'shopping results'
     };
   }
 
+  // Research notebook  →  research-notebook
   if (
-    /\b(research|sources?|papers?|studies?|summary|summaries|tradeoffs?|pros and cons|claims?|notes?|notebook|follow-?ups?)\b/i.test(
-      content
-    ) &&
+    /\b(research|sources?|papers?|studies?|summary|summaries|tradeoffs?|pros and cons|claims?|notes?|notebook|follow-?ups?)\b/i.test(content) &&
     (
       isDiscoveryIntent(content) ||
       /\b(create|build|make|organize|gather|track|capture)\b.*\b(research|notes?|notebook|sources?|claims?|follow-?ups?)\b/i.test(content)
@@ -1554,7 +1681,7 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     return {
       category: 'research',
       preferredContentFormat: 'markdown',
-      label: 'research summary'
+      label: 'research notebook'
     };
   }
 

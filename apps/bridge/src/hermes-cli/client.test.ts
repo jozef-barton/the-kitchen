@@ -110,7 +110,7 @@ describe('HermesCli', () => {
     expect(classifyStructuredRecipeIntent('Create a recovered markdown recipe with research notes.', false)).toEqual({
       category: 'research',
       preferredContentFormat: 'markdown',
-      label: 'research summary'
+      label: 'research notebook'
     });
   });
 
@@ -132,9 +132,9 @@ describe('HermesCli', () => {
       .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'research notebook' });
   });
 
-  it('classifies how-to requests as step-by-step guide intents', () => {
+  it('classifies how-to requests as step-by-step intents', () => {
     expect(classifyStructuredRecipeIntent('How to deploy a Next.js app to Vercel', false))
-      .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'step-by-step guide' });
+      .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'step by step' });
   });
 
   it('classifies recommendation requests as research notebook intents', () => {

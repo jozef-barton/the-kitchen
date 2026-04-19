@@ -1170,9 +1170,8 @@ describe('HermesBridge recipe entry actions', () => {
     database.close();
   });
 
-  it('deletes actionable Gmail-backed entries from the source and removes them from the recipe', async () => {
+  it('rejects delete_source entry actions — source deletion must go through a prompt-based template action', async () => {
     const database = createDatabase();
-    const deleteGmailMessages = vi.fn().mockResolvedValue(['gmail-message-1']);
     const { recipe } = createAttachedRecipe(
       database,
       normalizeRecipeTabs({
@@ -1192,56 +1191,7 @@ describe('HermesBridge recipe entry actions', () => {
     );
     const bridge = new HermesBridge({
       database,
-      hermesCli: {
-        deleteGmailMessages
-      } as unknown as HermesCli,
-      now: () => '2026-04-10T12:05:00.000Z'
-    });
-    const entry = getRecipeContentEntries(recipe)[0]!;
-
-    const response = await bridge.applyRecipeEntryAction(recipe.id, {
-      profileId: 'jbarton',
-      action: 'delete_source',
-      entryIds: [entry.id]
-    });
-
-    expect(deleteGmailMessages).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'jbarton'
-      }),
-      ['gmail-message-1']
-    );
-    expect(response.deletedSourceEntryIds).toEqual([entry.id]);
-    expect(getRecipeContentEntries(response.recipe)).toHaveLength(0);
-    expect(response.recipe.metadata.changeSummary).toContain('Deleted 1 email entry');
-
-    database.close();
-  });
-
-  it('records telemetry and returns a clean error when direct source deletion fails', async () => {
-    const database = createDatabase();
-    const { session, recipe } = createAttachedRecipe(
-      database,
-      normalizeRecipeTabs({
-        contentFormat: 'table',
-        contentData: {
-          columns: [
-            { id: 'subject', label: 'Subject', emphasis: 'primary', presentation: 'text' },
-            { id: 'from', label: 'From', emphasis: 'none', presentation: 'text' },
-            { id: 'messageId', label: 'Message ID', emphasis: 'none', presentation: 'text' }
-          ],
-          rows: [
-            { subject: 'Launch follow-up', from: 'ops@example.com', messageId: 'gmail-message-1' }
-          ],
-          emptyMessage: 'No emails.'
-        }
-      })
-    );
-    const bridge = new HermesBridge({
-      database,
-      hermesCli: {
-        deleteGmailMessages: vi.fn().mockRejectedValue(new Error('invalid_grant'))
-      } as unknown as HermesCli,
+      hermesCli: {} as unknown as HermesCli,
       now: () => '2026-04-10T12:05:00.000Z'
     });
     const entry = getRecipeContentEntries(recipe)[0]!;
@@ -1253,16 +1203,10 @@ describe('HermesBridge recipe entry actions', () => {
         entryIds: [entry.id]
       })
     ).rejects.toMatchObject({
-      code: 'RECIPE_ENTRY_SOURCE_DELETE_FAILED',
-      message: 'Could not delete the selected emails. Check the logs for more information.'
+      code: 'RECIPE_ACTION_OUTBOUND_NOT_ALLOWED'
     } satisfies Partial<BridgeError>);
 
-    const telemetry = database.listTelemetryEvents({
-      profileId: 'jbarton',
-      sessionId: session.id,
-      limit: 10
-    });
-    expect(telemetry.some((event) => event.code === 'RECIPE_ENTRY_SOURCE_DELETE_FAILED' && event.detail === 'invalid_grant')).toBe(true);
+    // Entry must be untouched — no side effects allowed before the prompt-based flow runs
     expect(getRecipeContentEntries(database.getRecipe(recipe.id)!)).toHaveLength(1);
 
     database.close();

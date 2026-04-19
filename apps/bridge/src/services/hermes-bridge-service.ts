@@ -1108,6 +1108,26 @@ export const __recipeParsingForTests = {
   extractRecipeOperations
 };
 
+// Maps classifier labels (from classifyStructuredRecipeIntent) to their target template IDs.
+// Labels are kept in sync with each template's selectionSignals so selection is predictable.
+const INTENT_LABEL_TO_TEMPLATE_ID: Partial<Record<string, RecipeTemplateId>> = {
+  'inbox triage': 'inbox-triage-board',
+  'security review': 'security-review-board',
+  'job search': 'job-search-pipeline',
+  'flight comparison': 'flight-comparison',
+  'travel planner': 'travel-itinerary-planner',
+  'event planner': 'event-planner',
+  'campaign planner': 'content-campaign-planner',
+  'price comparison': 'price-comparison-grid',
+  'restaurant shortlist': 'restaurant-finder',
+  'hotel shortlist': 'hotel-shortlist',
+  'nearby places': 'local-discovery-comparison',
+  'research notebook': 'research-notebook',
+  'comparison matrix': 'vendor-evaluation-matrix',
+  'shopping results': 'shopping-shortlist',
+  'step by step': 'step-by-step-instructions'
+};
+
 export class HermesBridge {
   private readonly now: () => string;
   private readonly recipeRoot: string;
@@ -2417,10 +2437,14 @@ export class HermesBridge {
       .filter(([, value]) => value !== null && String(value).trim().length > 0)
       .map(([key, value]) => `${key}: ${String(value).trim()}`);
 
+    const taskInstruction = context.action.prompt?.promptTemplate
+      ? context.action.prompt.promptTemplate
+      : `Perform the requested action: ${context.action.label}`;
+
     return [
       `Update the attached Home recipe using the approved "${context.templateState.templateId}" template flow.`,
       `Recipe title: ${recipe.title}`,
-      `Requested action: ${context.action.label}`,
+      `Task: ${taskInstruction}`,
       selectedItems.length > 0
         ? `Selected items:\n${selectedItems
             .map((item) => `- ${item.title}${item.subtitle ? ` — ${item.subtitle}` : ''}${item.footer ? ` (${item.footer})` : ''}`)
@@ -4370,7 +4394,8 @@ export class HermesBridge {
   private async emitRecipeBuildProgress(
     build: RecipeBuild,
     onEvent: (event: ChatStreamEvent) => Promise<void> | void,
-    messageOverride?: string | null
+    messageOverride?: string | null,
+    partialTemplateState?: RecipeTemplateState | null
   ) {
     const message = messageOverride ?? build.progressMessage ?? 'Building recipe…';
     await onEvent({
@@ -4382,7 +4407,8 @@ export class HermesBridge {
       type: 'recipe_build_progress',
       recipeId: build.recipeId,
       build,
-      recipe: this.options.database.getRecipe(build.recipeId)
+      recipe: this.options.database.getRecipe(build.recipeId),
+      partialTemplateState: partialTemplateState ?? null
     });
   }
 
@@ -4404,6 +4430,7 @@ export class HermesBridge {
       userFacingMessage?: string | null;
       retryable?: boolean | null;
       configuredTimeoutMs?: number | null;
+      partialTemplateState?: RecipeTemplateState | null;
     }
   ) {
     const timestamp = this.now();
@@ -4456,7 +4483,7 @@ export class HermesBridge {
       });
     }
 
-    await this.emitRecipeBuildProgress(nextBuild, onEvent, update.progressMessage);
+    await this.emitRecipeBuildProgress(nextBuild, onEvent, update.progressMessage, update.partialTemplateState ?? null);
     return nextBuild;
   }
 
@@ -7527,9 +7554,27 @@ Emit one corrected TSX module now.`;
     currentRecipe = this.persistRecipePipeline(requestId, nextPipeline, currentRecipe) ?? currentRecipe;
 
     const currentTemplate = context.currentTemplate;
+
+    // Win #3: emit an optimistic ghost shell immediately using the predicted template from the
+    // intent label — gives the frontend a skeleton to render before the selection LLM call completes.
+    const predictedTemplateId = INTENT_LABEL_TO_TEMPLATE_ID[context.intent.label] ?? null;
+    const optimisticGhostState = predictedTemplateId
+      ? createRecipeTemplateGhostState({
+          templateId: predictedTemplateId,
+          currentState: currentTemplate ?? null,
+          transitionReason: null,
+          updatedAt: this.now(),
+          phase: 'selected',
+          failureCategory: null,
+          errorMessage: null,
+          failureScope: 'all'
+        }).state
+      : null;
+
     build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
       phase: 'template_selecting',
-      progressMessage: 'Selecting the recipe template…'
+      progressMessage: 'Selecting the recipe template…',
+      partialTemplateState: optimisticGhostState
     });
     const selectionTimeoutPolicy = this.describeRecipeTemplateStageTimeout(settings, 'select');
     const selectionOutcome = await this.runRecipeGenerationStageWithRetries<RecipeTemplateSelection>({
@@ -7802,12 +7847,14 @@ Emit one corrected TSX module now.`;
     let nextActionSpec: RecipeActionSpec | null = null;
     let compiledTemplate: ReturnType<typeof compileRecipeTemplateState> | null = null;
 
+    // Win #2: confirmed ghost state (correct template ID) sent immediately after selection
     build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
       phase: 'template_text_generating',
       progressMessage:
         normalizedMode === 'switch'
           ? 'Generating the staged template text for the template switch…'
-          : 'Generating the staged template text and labels…'
+          : 'Generating the staged template text and labels…',
+      partialTemplateState: latestTemplatePreviewState
     });
     let latestTextFailure = {
       invalidJson: '{}',
@@ -8169,12 +8216,14 @@ Emit one corrected TSX module now.`;
         createRecipeTemplateFillFromText(stagedTextArtifact!)
       ) ?? latestTemplatePreviewState;
 
+    // Win #1: text-labeled shell sent — user sees correct section structure before content fills in
     build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
       phase: 'template_hydrating',
       progressMessage:
         normalizedMode === 'switch'
           ? 'Hydrating the selected template with concrete content for the switch…'
-          : 'Hydrating the selected template with concrete content…'
+          : 'Hydrating the selected template with concrete content…',
+      partialTemplateState: latestTemplatePreviewState
     });
     let latestHydrationFailure = {
       invalidJson: '{}',
@@ -8464,9 +8513,12 @@ Emit one corrected TSX module now.`;
     latestTemplatePreviewState =
       persistTemplatePreviewState('template_hydration', 'hydrating', assembledFill!) ?? latestTemplatePreviewState;
 
+    // Win #4: hydrated content streamed to frontend before action-button stage runs —
+    // user sees all card/row data immediately rather than waiting for the full pipeline.
     build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
       phase: 'template_actions_generating',
-      progressMessage: 'Generating the staged template actions and buttons…'
+      progressMessage: 'Generating the staged template actions and buttons…',
+      partialTemplateState: latestTemplatePreviewState
     });
     latestTemplatePreviewState =
       persistTemplatePreviewState('template_actions_generation', 'actions', assembledFill!) ?? latestTemplatePreviewState;
@@ -12154,49 +12206,14 @@ Emit one corrected TSX module now.`;
     const deletedSourceEntryIds: string[] = [];
 
     if (parsedInput.action === 'delete_source') {
-      const profile = await this.ensureProfile(parsedInput.profileId);
-      const gmailMessageTargets = targetEntries
-        .filter((entry) => entry.source?.integration === 'google-workspace' && entry.source.kind === 'gmail_message')
-        .map((entry) => ({
-          entryId: entry.id,
-          resourceId: entry.source!.resourceId
-        }));
-
-      if (gmailMessageTargets.length !== targetEntries.length) {
-        throw new BridgeError(
-          400,
-          'RECIPE_ENTRY_SOURCE_UNSUPPORTED',
-          'One or more selected entries do not support direct source deletion.'
-        );
-      }
-
-      try {
-        const deletedMessageIds = await this.options.hermesCli.deleteGmailMessages(
-          profile,
-          gmailMessageTargets.map((target) => target.resourceId)
-        );
-        deletedSourceEntryIds.push(
-          ...gmailMessageTargets.filter((target) => deletedMessageIds.includes(target.resourceId)).map((target) => target.entryId)
-        );
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : 'Deleting the selected source items failed.';
-        this.recordTelemetry({
-          profileId: parsedInput.profileId,
-          sessionId: currentRecipe.primarySessionId,
-          requestId: null,
-          severity: 'error',
-          category: 'recipes',
-          code: 'RECIPE_ENTRY_SOURCE_DELETE_FAILED',
-          message: `Failed to delete source items for recipe ${currentRecipe.id}.`,
-          detail,
-          payload: {
-            entryIds: targetEntryIds,
-            recipeId: currentRecipe.id,
-            sourceKinds: targetEntries.map((entry) => entry.source?.kind ?? 'unknown')
-          }
-        });
-        throw new BridgeError(502, 'RECIPE_ENTRY_SOURCE_DELETE_FAILED', 'Could not delete the selected emails. Check the logs for more information.');
-      }
+      // Direct outbound API calls are not permitted from action handlers.
+      // Source deletion must go through a Hermes prompt action so the agent
+      // can reason about the operation, apply safe guards, and respect auth scopes.
+      throw new BridgeError(
+        400,
+        'RECIPE_ACTION_OUTBOUND_NOT_ALLOWED',
+        'Source deletion must be performed through a prompt-based template action, not a direct entry action. Use a run_template_followup action configured with outboundRequestsAllowed: true.'
+      );
     }
 
     removedEntryIds.push(...(parsedInput.action === 'remove' ? targetEntryIds : deletedSourceEntryIds));
@@ -13548,6 +13565,13 @@ Emit one corrected TSX module now.`;
         case 'expand_template_idea':
         case 'generate_campaign_email':
         case 'run_template_followup': {
+          if (!context.action.prompt) {
+            throw new BridgeError(
+              400,
+              'RECIPE_ACTION_PROMPT_MISSING',
+              `Template action "${context.action.id}" invokes Hermes but has no associated prompt definition. Add a prompt.promptTemplate to the action in the template registry.`
+            );
+          }
           const transcriptContent = this.buildTemplateActionTranscriptContent(context.action, selectedItems);
           const hermesContent = this.buildPromptBoundTemplateActionContent(recipe, context, parsedInput, selectedItems);
           await this.streamHermesRequest(

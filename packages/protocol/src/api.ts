@@ -24,6 +24,7 @@ import {
   RecipeSchema,
   RecipeStatusSchema,
   RecipeTabSchema,
+  RecipeTemplateStateSchema,
   RecipeUiStateSchema,
   SkillSchema,
   TelemetryEventSchema,
@@ -330,7 +331,8 @@ export const RecipeBuildProgressEventSchema = z
   .object({
     recipeId: z.string().min(1),
     build: RecipeBuildSchema,
-    recipe: RecipeSchema.nullable().default(null)
+    recipe: RecipeSchema.nullable().default(null),
+    partialTemplateState: RecipeTemplateStateSchema.nullable().default(null)
   })
   .strict();
 export type RecipeBuildProgressEvent = z.infer<typeof RecipeBuildProgressEventSchema>;
@@ -434,7 +436,8 @@ const ChatStreamRecipeBuildProgressEventSchema = z.object({
   type: z.literal('recipe_build_progress'),
   recipeId: z.string().min(1),
   build: RecipeBuildSchema,
-  recipe: RecipeSchema.nullable().default(null)
+  recipe: RecipeSchema.nullable().default(null),
+  partialTemplateState: RecipeTemplateStateSchema.nullable().default(null)
 });
 type ChatStreamRecipeBuildProgressEvent = z.infer<typeof ChatStreamRecipeBuildProgressEventSchema>;
 
