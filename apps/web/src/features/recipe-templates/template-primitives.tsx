@@ -13,15 +13,14 @@ import { templateToneStyles } from './template-style-helpers';
 
 export function TemplateSurface({
   children,
-  bg = 'var(--surface-elevated)',
-  padding = '4'
+  padding = '0'
 }: {
   children: ReactNode;
-  bg?: string;
+  bg?: string; // kept for API compat, ignored
   padding?: string;
 }) {
   return (
-    <Box rounded="8px" border="1px solid var(--border-subtle)" bg={bg} px={padding} py={padding} boxShadow="var(--shadow-xs)">
+    <Box px={padding} py={padding}>
       {children}
     </Box>
   );
@@ -65,20 +64,14 @@ export function TemplateChipPill({ chip }: { chip: TemplateChip }) {
 
   return (
     <Badge
-      rounded="8px"
-      px="2.5"
-      py="1"
-      fontSize="11px"
-      fontWeight="700"
-      border="1px solid"
-      borderColor={tone.border}
+      rounded="full"
+      px="2"
+      py="0.5"
+      fontSize="10px"
+      fontWeight="600"
       bg={tone.bg}
       color={tone.color}
-      _dark={{
-        borderColor: tone.darkBorder,
-        bg: tone.darkBg,
-        color: tone.darkColor
-      }}
+      _dark={{ bg: tone.darkBg, color: tone.darkColor }}
     >
       {chip.label}
     </Badge>
@@ -108,16 +101,13 @@ export function TemplateActionButton({
     <Button
       size={compact ? 'xs' : 'sm'}
       rounded="8px"
-      bg={isPrimary ? 'var(--accent)' : isDanger ? 'red.50' : 'var(--surface-2)'}
-      color={isPrimary ? 'var(--accent-contrast)' : isDanger ? 'red.700' : 'var(--text-primary)'}
-      border={isPrimary ? 'none' : '1px solid var(--border-subtle)'}
+      bg={isPrimary ? 'var(--accent)' : isDanger ? 'rgba(239,68,68,0.10)' : 'var(--surface-hover)'}
+      color={isPrimary ? 'var(--accent-contrast)' : isDanger ? 'var(--status-danger)' : 'var(--text-primary)'}
       _hover={{
-        bg: isPrimary ? 'var(--accent-strong)' : isDanger ? 'red.100' : 'rgba(148, 163, 184, 0.12)'
+        bg: isPrimary ? 'var(--accent-strong)' : isDanger ? 'rgba(239,68,68,0.16)' : 'var(--surface-2)',
+        opacity: 1
       }}
-      _dark={{
-        bg: isPrimary ? 'var(--accent)' : isDanger ? 'rgba(239, 68, 68, 0.18)' : 'rgba(148, 163, 184, 0.08)',
-        color: isPrimary ? 'var(--accent-contrast)' : isDanger ? 'red.100' : 'whiteAlpha.940'
-      }}
+      transition="background-color 150ms ease-in-out"
       onClick={href ? undefined : onClick}
       loading={loading}
       disabled={disabled}
@@ -135,16 +125,9 @@ export function TemplateActionButton({
       asChild
       size={compact ? 'xs' : 'sm'}
       rounded="8px"
-      bg={isPrimary ? 'var(--accent)' : isDanger ? 'red.50' : 'var(--surface-2)'}
-      color={isPrimary ? 'var(--accent-contrast)' : isDanger ? 'red.700' : 'var(--text-primary)'}
-      border={isPrimary ? 'none' : '1px solid var(--border-subtle)'}
-      _hover={{
-        bg: isPrimary ? 'var(--accent-strong)' : isDanger ? 'red.100' : 'rgba(148, 163, 184, 0.12)'
-      }}
-      _dark={{
-        bg: isPrimary ? 'var(--accent)' : isDanger ? 'rgba(239, 68, 68, 0.18)' : 'rgba(148, 163, 184, 0.08)',
-        color: isPrimary ? 'var(--accent-contrast)' : isDanger ? 'red.100' : 'whiteAlpha.940'
-      }}
+      bg={isPrimary ? 'var(--accent)' : isDanger ? 'rgba(239,68,68,0.10)' : 'var(--surface-hover)'}
+      color={isPrimary ? 'var(--accent-contrast)' : isDanger ? 'var(--status-danger)' : 'var(--text-primary)'}
+      _hover={{ bg: isPrimary ? 'var(--accent-strong)' : isDanger ? 'rgba(239,68,68,0.16)' : 'var(--surface-2)' }}
       disabled={disabled}
     >
       <a href={href} target={openInNewTab ? '_blank' : undefined} rel={openInNewTab ? 'noopener noreferrer' : undefined}>
@@ -156,47 +139,37 @@ export function TemplateActionButton({
 
 export function TemplateStatStrip({ title, items }: { title?: string; items: TemplateStat[] }) {
   return (
-    <TemplateSurface bg="var(--surface-2)">
-      <VStack align="stretch" gap="3">
-        {title ? (
-          <Text fontSize="sm" fontWeight="500" color="var(--text-secondary)">
-            {title}
-          </Text>
-        ) : null}
-        <SimpleGrid columns={{ base: 1, md: Math.min(items.length, 3) }} gap="3">
-          {items.map((item) => {
-            const tone = templateToneStyles(item.tone);
-            return (
-              <Box
-                key={`${item.label}-${item.value}`}
-                rounded="8px"
-                border="1px solid"
-                borderColor={tone.border}
-                bg={tone.bg}
-                px="3.5"
-                py="3"
-                _dark={{
-                  borderColor: tone.darkBorder,
-                  bg: tone.darkBg
-                }}
-              >
-                <Text fontSize="xs" fontWeight="500" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0">
-                  {item.label}
+    <VStack align="stretch" gap="3">
+      {title ? (
+        <Text fontSize="xs" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.05em">
+          {title}
+        </Text>
+      ) : null}
+      <Flex gap="0" wrap="wrap">
+        {items.map((item, i) => {
+          const tone = templateToneStyles(item.tone);
+          return (
+            <Box
+              key={`${item.label}-${item.value}`}
+              px={i === 0 ? '0' : '5'}
+              borderLeft={i === 0 ? 'none' : '1px solid var(--border-subtle)'}
+            >
+              <Text fontSize="10px" fontWeight="600" color={item.tone ? tone.color : 'var(--text-muted)'} textTransform="uppercase" letterSpacing="0.05em" _dark={item.tone ? { color: tone.darkColor } : undefined}>
+                {item.label}
+              </Text>
+              <Text mt="0.5" fontSize="xl" fontWeight="700" color="var(--text-primary)">
+                {item.value}
+              </Text>
+              {item.helper ? (
+                <Text mt="0.5" fontSize="xs" color="var(--text-muted)">
+                  {item.helper}
                 </Text>
-                <Text mt="1.5" fontSize="xl" fontWeight="700" color="var(--text-primary)">
-                  {item.value}
-                </Text>
-                {item.helper ? (
-                  <Text mt="1" fontSize="sm" color="var(--text-secondary)">
-                    {item.helper}
-                  </Text>
-                ) : null}
-              </Box>
-            );
-          })}
-        </SimpleGrid>
-      </VStack>
-    </TemplateSurface>
+              ) : null}
+            </Box>
+          );
+        })}
+      </Flex>
+    </VStack>
   );
 }
 
@@ -263,10 +236,10 @@ export function TemplateGroupedList({
               </HStack>
               <VStack align="stretch" gap="2">
                 {group.items.map((item) => (
-                  <Box key={`${group.id}-${item.title}`} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+                  <Box key={`${group.id}-${item.title}`} py="2.5" borderBottom="1px solid var(--border-subtle)">
                     <Flex justify="space-between" align="start" gap="3">
-                      <VStack align="start" gap="1" minW={0}>
-                        <Text fontWeight="700" color="var(--text-primary)">
+                      <VStack align="start" gap="0.5" minW={0}>
+                        <Text fontWeight="600" color="var(--text-primary)" fontSize="sm">
                           {item.title}
                         </Text>
                         {item.subtitle ? (
@@ -275,23 +248,23 @@ export function TemplateGroupedList({
                           </Text>
                         ) : null}
                         {item.meta ? (
-                          <Text fontSize="sm" color="var(--text-muted)">
+                          <Text fontSize="xs" color="var(--text-muted)">
                             {item.meta}
                           </Text>
                         ) : null}
                       </VStack>
                     </Flex>
                     {item.chips?.length ? (
-                      <Flex mt="2.5" gap="2" wrap="wrap">
+                      <Flex mt="2" gap="1.5" wrap="wrap">
                         {item.chips.map((chip) => (
                           <TemplateChipPill key={`${item.title}-${chip.label}`} chip={chip} />
                         ))}
                       </Flex>
                     ) : null}
                     {item.actions?.length ? (
-                      <Flex mt="2.5" gap="2" wrap="wrap">
+                      <Flex mt="2" gap="2" wrap="wrap">
                         {item.actions.map((label) => (
-                          <Button key={label} size="xs" rounded="8px" variant="ghost" bg="rgba(148, 163, 184, 0.08)">
+                          <Button key={label} size="xs" rounded="6px" variant="ghost" color="var(--text-muted)" _hover={{ color: 'var(--text-primary)', bg: 'var(--surface-hover)' }}>
                             {label}
                           </Button>
                         ))}
@@ -317,56 +290,49 @@ function TemplateCard({
   wide?: boolean;
 }) {
   return (
-    <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" overflow="hidden">
-      <Box
-        px="4"
-        py="3.5"
-        bg="linear-gradient(180deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0.02))"
-        borderBottom="1px solid var(--border-subtle)"
-      >
-        <Text fontSize="11px" fontWeight="600" letterSpacing="0" textTransform="uppercase" color="var(--text-muted)">
-          {card.imageLabel ?? 'Preview state'}
+    <Box py="3.5" borderBottom="1px solid var(--border-subtle)">
+      {card.imageLabel ? (
+        <Text fontSize="10px" fontWeight="600" letterSpacing="0.05em" textTransform="uppercase" color="var(--text-muted)" mb="1">
+          {card.imageLabel}
         </Text>
-        <Text mt="1.5" fontWeight="600" color="var(--text-primary)">
-          {card.title}
+      ) : null}
+      <Text fontWeight="600" color="var(--text-primary)" fontSize="sm">
+        {card.title}
+      </Text>
+      {card.subtitle ? (
+        <Text mt="0.5" fontSize="sm" color="var(--text-secondary)">
+          {card.subtitle}
         </Text>
-        {card.subtitle ? (
-          <Text mt="1" fontSize="sm" color="var(--text-secondary)">
-            {card.subtitle}
-          </Text>
-        ) : null}
-      </Box>
-      <VStack align="stretch" gap="3" px="4" py="3.5">
-        {card.price ? (
-          <Text fontSize="lg" fontWeight="700" color="var(--text-primary)">
-            {card.price}
-          </Text>
-        ) : null}
-        {card.chips?.length ? (
-          <Flex gap="2" wrap="wrap">
-            {card.chips.map((chip) => (
-              <TemplateChipPill key={`${card.title}-${chip.label}`} chip={chip} />
-            ))}
-          </Flex>
-        ) : null}
-        {card.bullets?.length ? (
-          <VStack align="stretch" gap="1.5">
-            {card.bullets.map((bullet) => (
-              <HStack key={bullet} align="start" gap="2">
-                <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--accent)" flexShrink={0} />
-                <Text fontSize="sm" color="var(--text-secondary)">
-                  {bullet}
-                </Text>
-              </HStack>
-            ))}
-          </VStack>
-        ) : null}
-        {card.footer ? (
-          <Text fontSize={wide ? 'sm' : 'xs'} color="var(--text-muted)">
-            {card.footer}
-          </Text>
-        ) : null}
-      </VStack>
+      ) : null}
+      {card.price ? (
+        <Text mt="1.5" fontSize="lg" fontWeight="700" color="var(--text-primary)">
+          {card.price}
+        </Text>
+      ) : null}
+      {card.chips?.length ? (
+        <Flex mt="2" gap="1.5" wrap="wrap">
+          {card.chips.map((chip) => (
+            <TemplateChipPill key={`${card.title}-${chip.label}`} chip={chip} />
+          ))}
+        </Flex>
+      ) : null}
+      {card.bullets?.length ? (
+        <VStack mt="2" align="stretch" gap="1">
+          {card.bullets.map((bullet) => (
+            <HStack key={bullet} align="start" gap="2">
+              <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--text-muted)" flexShrink={0} />
+              <Text fontSize="sm" color="var(--text-secondary)">
+                {bullet}
+              </Text>
+            </HStack>
+          ))}
+        </VStack>
+      ) : null}
+      {card.footer ? (
+        <Text mt="1.5" fontSize="xs" color="var(--text-muted)">
+          {card.footer}
+        </Text>
+      ) : null}
     </Box>
   );
 }
@@ -398,63 +364,76 @@ export function TemplateComparisonTable({
   footnote
 }: Extract<RecipeTemplatePreviewSection, { kind: 'comparison-table' }>) {
   return (
-    <TemplateSurface>
-      <VStack align="stretch" gap="4">
-        <TemplateSectionHeader title={title} />
-        <Table.ScrollArea borderWidth="1px" borderColor="var(--border-subtle)" rounded="8px">
-          <Table.Root size="sm" variant="outline">
-            <Table.Header>
-              <Table.Row>
-                <Table.ColumnHeader minW="180px">Item</Table.ColumnHeader>
-                {columns.map((column) => (
-                  <Table.ColumnHeader key={column.id} textAlign={column.align ?? 'start'}>
-                    {column.label}
-                  </Table.ColumnHeader>
-                ))}
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {rows.map((row) => (
-                <Table.Row key={row.id}>
-                  <Table.Cell>
-                    <Text fontWeight="700" color="var(--text-primary)">
-                      {row.label}
-                    </Text>
-                  </Table.Cell>
-                  {row.cells.map((cell, index) => {
-                    const tone = templateToneStyles(cell.tone);
-                    return (
-                      <Table.Cell key={`${row.id}-${columns[index]?.id ?? index}`} textAlign={columns[index]?.align ?? 'start'}>
-                        <Text fontWeight={cell.emphasis ? '800' : '600'} color={cell.tone ? tone.color : 'var(--text-primary)'} _dark={cell.tone ? { color: tone.darkColor } : undefined}>
-                          {cell.value}
-                        </Text>
-                        {cell.subvalue ? (
-                          <Text fontSize="xs" color="var(--text-muted)">
-                            {cell.subvalue}
-                          </Text>
-                        ) : null}
-                      </Table.Cell>
-                    );
-                  })}
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table.Root>
-        </Table.ScrollArea>
-        {footerChips?.length ? (
-          <Flex gap="2" wrap="wrap">
-            {footerChips.map((chip) => (
-              <TemplateChipPill key={`${title}-${chip.label}`} chip={chip} />
+    <VStack align="stretch" gap="4">
+      <TemplateSectionHeader title={title} />
+      <Box overflowX="auto">
+        {/* Column headers */}
+        {columns.length > 0 ? (
+          <Flex pb="2" mb="1" borderBottom="1px solid var(--border-subtle)">
+            <Box w="38%" flexShrink={0} />
+            {columns.map((col) => (
+              <Text
+                key={col.id}
+                flex="1"
+                fontSize="xs"
+                fontWeight="600"
+                color="var(--text-secondary)"
+                textAlign={col.align ?? 'start'}
+              >
+                {col.label}
+              </Text>
             ))}
           </Flex>
         ) : null}
-        {footnote ? (
-          <Text fontSize="sm" color="var(--text-muted)">
-            {footnote}
-          </Text>
-        ) : null}
-      </VStack>
-    </TemplateSurface>
+        {/* Rows */}
+        <VStack align="stretch" gap="0">
+          {rows.map((row) => (
+            <Flex key={row.id} py="2.5" borderBottom="1px solid var(--border-subtle)" align="start">
+              <Text
+                w="38%"
+                flexShrink={0}
+                fontSize="10px"
+                fontWeight="600"
+                color="var(--text-muted)"
+                textTransform="uppercase"
+                letterSpacing="0.05em"
+                pt="0.5"
+              >
+                {row.label}
+              </Text>
+              {row.cells.map((cell, index) => {
+                const tone = templateToneStyles(cell.tone);
+                return (
+                  <Box key={`${row.id}-${columns[index]?.id ?? index}`} flex="1" textAlign={columns[index]?.align ?? 'start'}>
+                    <Text
+                      fontWeight={cell.emphasis ? '700' : '500'}
+                      fontSize="sm"
+                      color={cell.tone ? tone.color : 'var(--text-primary)'}
+                      _dark={cell.tone ? { color: tone.darkColor } : undefined}
+                    >
+                      {cell.value}
+                    </Text>
+                    {cell.subvalue ? (
+                      <Text fontSize="xs" color="var(--text-muted)">{cell.subvalue}</Text>
+                    ) : null}
+                  </Box>
+                );
+              })}
+            </Flex>
+          ))}
+        </VStack>
+      </Box>
+      {footerChips?.length ? (
+        <Flex gap="1.5" wrap="wrap">
+          {footerChips.map((chip) => (
+            <TemplateChipPill key={`${title}-${chip.label}`} chip={chip} />
+          ))}
+        </Flex>
+      ) : null}
+      {footnote ? (
+        <Text fontSize="xs" color="var(--text-muted)">{footnote}</Text>
+      ) : null}
+    </VStack>
   );
 }
 
@@ -482,97 +461,61 @@ export function TemplateDetailPanel({
             ))}
           </Flex>
         ) : null}
-        <SimpleGrid columns={{ base: 1, md: 2 }} gap="3">
-          {primaryFields.map((field) => (
-            <Box key={`${field.label}-${field.value ?? field.bullets?.join('-') ?? ''}`} rounded="6px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
-              <Text fontSize="xs" fontWeight="500" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)">
+        {/* All fields as flat label → value rows */}
+        <VStack align="stretch" gap="0">
+          {[...primaryFields, ...fullWidthFields].map((field) => (
+            <Flex key={`${field.label}-${field.value ?? field.bullets?.join('-') ?? ''}`} py="2.5" align="start" gap="4" borderBottom="1px solid var(--border-subtle)">
+              <Text
+                w="36%"
+                flexShrink={0}
+                fontSize="10px"
+                fontWeight="600"
+                color="var(--text-muted)"
+                textTransform="uppercase"
+                letterSpacing="0.05em"
+                pt="0.5"
+              >
                 {field.label}
               </Text>
-              {field.value ? (
-                <Text mt="1.5" fontWeight="700" color="var(--text-primary)">
-                  {field.value}
-                </Text>
-              ) : null}
-              {field.chips?.length ? (
-                <Flex mt="2" gap="2" wrap="wrap">
-                  {field.chips.map((chip) => (
-                    <TemplateChipPill key={`${field.label}-${chip.label}`} chip={chip} />
-                  ))}
-                </Flex>
-              ) : null}
-              {field.bullets?.length ? (
-                <VStack mt="2" align="stretch" gap="1.5">
-                  {field.bullets.map((bullet) => (
-                    <HStack key={bullet} align="start" gap="2">
-                      <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--accent)" flexShrink={0} />
-                      <Text fontSize="sm" color="var(--text-secondary)">
-                        {bullet}
-                      </Text>
-                    </HStack>
-                  ))}
-                </VStack>
-              ) : null}
-              {field.links?.length ? (
-                <VStack mt="2" align="stretch" gap="1.5">
-                  {field.links.map((link) => (
-                    <Text key={link.href} fontSize="sm" color="var(--text-secondary)">
-                      {link.label}:{' '}
-                      <a
-                        href={link.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
-                      >
-                        {link.href}
-                      </a>
-                    </Text>
-                  ))}
-                </VStack>
-              ) : null}
-            </Box>
-          ))}
-        </SimpleGrid>
-        {fullWidthFields.map((field) => (
-          <Box key={`${field.label}-${field.value ?? field.bullets?.join('-') ?? ''}`} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3.5">
-            <Text fontSize="xs" fontWeight="500" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)">
-              {field.label}
-            </Text>
-            {field.value ? (
-              <Text mt="1.5" fontSize="sm" color="var(--text-secondary)">
-                {field.value}
-              </Text>
-            ) : null}
-            {field.bullets?.length ? (
-              <VStack mt="2.5" align="stretch" gap="1.5">
-                {field.bullets.map((bullet) => (
-                  <HStack key={bullet} align="start" gap="2">
-                    <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--accent)" flexShrink={0} />
-                    <Text fontSize="sm" color="var(--text-secondary)">
-                      {bullet}
-                    </Text>
-                  </HStack>
-                ))}
-              </VStack>
-            ) : null}
-            {field.links?.length ? (
-              <VStack mt="2.5" align="stretch" gap="1.5">
-                {field.links.map((link) => (
-                  <Text key={link.href} fontSize="sm" color="var(--text-secondary)">
-                    {link.label}:{' '}
-                    <a
-                      href={link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
-                    >
-                      {link.href}
-                    </a>
+              <Box flex="1" minW={0}>
+                {field.value ? (
+                  <Text fontWeight="500" fontSize="sm" color="var(--text-primary)">
+                    {field.value}
                   </Text>
-                ))}
-              </VStack>
-            ) : null}
-          </Box>
-        ))}
+                ) : null}
+                {field.chips?.length ? (
+                  <Flex mt={field.value ? '1.5' : '0'} gap="1.5" wrap="wrap">
+                    {field.chips.map((chip) => (
+                      <TemplateChipPill key={`${field.label}-${chip.label}`} chip={chip} />
+                    ))}
+                  </Flex>
+                ) : null}
+                {field.bullets?.length ? (
+                  <VStack mt={field.value ? '1.5' : '0'} align="stretch" gap="1">
+                    {field.bullets.map((bullet) => (
+                      <HStack key={bullet} align="start" gap="2">
+                        <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--text-muted)" flexShrink={0} />
+                        <Text fontSize="sm" color="var(--text-secondary)">{bullet}</Text>
+                      </HStack>
+                    ))}
+                  </VStack>
+                ) : null}
+                {field.links?.length ? (
+                  <VStack mt={field.value ? '1.5' : '0'} align="stretch" gap="1">
+                    {field.links.map((link) => (
+                      <Text key={link.href} fontSize="sm" color="var(--text-secondary)">
+                        {link.label}:{' '}
+                        <a href={link.href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+                          {link.href}
+                        </a>
+                      </Text>
+                    ))}
+                  </VStack>
+                ) : null}
+              </Box>
+            </Flex>
+          ))}
+        </VStack>
         {actions?.length ? (
           <Flex gap="2" wrap="wrap">
             {actions.map((item) => (
@@ -581,15 +524,13 @@ export function TemplateDetailPanel({
           </Flex>
         ) : null}
         {note ? (
-          <Box rounded="8px" border="1px dashed var(--border-subtle)" bg="rgba(148, 163, 184, 0.05)" px="3.5" py="3">
+          <Box pt="1">
             {noteTitle ? (
-              <Text fontSize="xs" fontWeight="500" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)">
+              <Text fontSize="10px" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em" color="var(--text-muted)" mb="1">
                 {noteTitle}
               </Text>
             ) : null}
-            <Text fontSize="sm" color="var(--text-secondary)">
-              {note}
-            </Text>
+            <Text fontSize="sm" color="var(--text-muted)">{note}</Text>
           </Box>
         ) : null}
       </VStack>
@@ -612,22 +553,22 @@ export function TemplateTimeline({
                 <Box w="2.5" h="2.5" rounded="full" bg="var(--accent)" />
                 <Box w="1px" flex="1" minH="16px" bg="var(--border-subtle)" />
               </VStack>
-              <Box flex="1" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+              <Box flex="1" pb="3">
                 <Flex justify="space-between" align="center" gap="3" wrap="wrap">
-                  <Text fontWeight="700" color="var(--text-primary)">
+                  <Text fontWeight="600" fontSize="sm" color="var(--text-primary)">
                     {item.title}
                   </Text>
-                  <Text fontSize="sm" color="var(--text-muted)">
+                  <Text fontSize="xs" color="var(--text-muted)">
                     {item.time}
                   </Text>
                 </Flex>
                 {item.summary ? (
-                  <Text mt="1.5" fontSize="sm" color="var(--text-secondary)">
+                  <Text mt="1" fontSize="sm" color="var(--text-secondary)">
                     {item.summary}
                   </Text>
                 ) : null}
                 {item.chips?.length ? (
-                  <Flex mt="2.5" gap="2" wrap="wrap">
+                  <Flex mt="1.5" gap="1.5" wrap="wrap">
                     {item.chips.map((chip) => (
                       <TemplateChipPill key={`${item.title}-${chip.label}`} chip={chip} />
                     ))}
@@ -653,10 +594,8 @@ export function TemplateNotesPanel({
         <TemplateSectionHeader title={title} />
         <VStack align="stretch" gap="2">
           {lines.map((line) => (
-            <Box key={line} rounded="6px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
-              <Text fontSize="sm" color="var(--text-secondary)">
-                {line}
-              </Text>
+            <Box key={line} py="2.5" borderBottom="1px solid var(--border-subtle)">
+              <Text fontSize="sm" color="var(--text-secondary)">{line}</Text>
             </Box>
           ))}
         </VStack>
@@ -684,20 +623,16 @@ export function TemplateActivityLog({
           {entries.map((entry) => {
             const tone = templateToneStyles(entry.tone);
             return (
-              <Box key={`${entry.label}-${entry.timestamp ?? entry.detail}`} rounded="6px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+              <Box key={`${entry.label}-${entry.timestamp ?? entry.detail}`} py="2.5" borderBottom="1px solid var(--border-subtle)">
                 <Flex justify="space-between" align="center" gap="3">
-                  <Text fontWeight="700" color={entry.tone ? tone.color : 'var(--text-primary)'} _dark={entry.tone ? { color: tone.darkColor } : undefined}>
+                  <Text fontSize="sm" fontWeight="600" color={entry.tone ? tone.color : 'var(--text-primary)'} _dark={entry.tone ? { color: tone.darkColor } : undefined}>
                     {entry.label}
                   </Text>
                   {entry.timestamp ? (
-                    <Text fontSize="xs" color="var(--text-muted)">
-                      {entry.timestamp}
-                    </Text>
+                    <Text fontSize="xs" color="var(--text-muted)">{entry.timestamp}</Text>
                   ) : null}
                 </Flex>
-                <Text mt="1.5" fontSize="sm" color="var(--text-secondary)">
-                  {entry.detail}
-                </Text>
+                <Text mt="0.5" fontSize="sm" color="var(--text-secondary)">{entry.detail}</Text>
               </Box>
             );
           })}
@@ -711,38 +646,36 @@ function TemplateBoardColumnView({ column }: { column: TemplateBoardColumn }) {
   const tone = templateToneStyles(column.tone);
 
   return (
-    <Box minW={{ base: '100%', md: '240px' }} maxW={{ base: '100%', md: '240px' }} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)">
-      <VStack align="stretch" gap="3" px="3.5" py="3.5">
-        <HStack justify="space-between" align="center">
-          <Text fontWeight="600" color="var(--text-primary)">
+    <Box minW={{ base: '100%', md: '220px' }} maxW={{ base: '100%', md: '220px' }}>
+      <VStack align="stretch" gap="3">
+        <HStack justify="space-between" align="center" pb="2" borderBottom="1px solid var(--border-subtle)">
+          <Text fontSize="sm" fontWeight="600" color="var(--text-primary)">
             {column.label}
           </Text>
-          <Badge rounded="8px" px="2.5" py="1" border="1px solid" borderColor={tone.border} bg={tone.bg} color={tone.color}>
+          <Text fontSize="xs" fontWeight="600" color={tone.color} _dark={{ color: tone.darkColor }}>
             {column.cards.length}
-          </Badge>
+          </Text>
         </HStack>
-        <VStack align="stretch" gap="2.5">
+        <VStack align="stretch" gap="0">
           {column.cards.map((card) => (
-            <Box key={`${column.label}-${card.title}`} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-1)" px="3" py="3">
-              <Text fontWeight="700" color="var(--text-primary)">
+            <Box key={`${column.label}-${card.title}`} py="2.5" borderBottom="1px solid var(--border-subtle)">
+              <Text fontSize="sm" fontWeight="600" color="var(--text-primary)">
                 {card.title}
               </Text>
               {card.subtitle ? (
-                <Text mt="1" fontSize="sm" color="var(--text-secondary)">
+                <Text mt="0.5" fontSize="sm" color="var(--text-secondary)">
                   {card.subtitle}
                 </Text>
               ) : null}
               {card.chips?.length ? (
-                <Flex mt="2.5" gap="2" wrap="wrap">
+                <Flex mt="1.5" gap="1.5" wrap="wrap">
                   {card.chips.map((chip) => (
                     <TemplateChipPill key={`${card.title}-${chip.label}`} chip={chip} />
                   ))}
                 </Flex>
               ) : null}
               {card.footer ? (
-                <Text mt="2.5" fontSize="xs" color="var(--text-muted)">
-                  {card.footer}
-                </Text>
+                <Text mt="1.5" fontSize="xs" color="var(--text-muted)">{card.footer}</Text>
               ) : null}
             </Box>
           ))}
@@ -920,21 +853,8 @@ export function TemplateAccordionList({
                       </VStack>
                     ) : null}
                     {item.recommendation ? (
-                      <Box
-                        rounded="8px"
-                        border="1px solid"
-                        borderColor={item.recommendationTone ? recTone.border : 'var(--border-subtle)'}
-                        bg={item.recommendationTone ? recTone.bg : 'var(--surface-2)'}
-                        px="3"
-                        py="2.5"
-                        _dark={{
-                          borderColor: item.recommendationTone ? recTone.darkBorder : 'var(--border-subtle)',
-                          bg: item.recommendationTone ? recTone.darkBg : 'var(--surface-2)'
-                        }}
-                      >
-                        <Text fontSize="sm" color="var(--text-secondary)">
-                          {item.recommendation}
-                        </Text>
+                      <Box borderLeft="2px solid" borderColor={item.recommendationTone ? recTone.color : 'var(--border-default)'} pl="3" py="0.5" _dark={{ borderColor: item.recommendationTone ? recTone.darkColor : 'var(--border-default)' }}>
+                        <Text fontSize="sm" color="var(--text-secondary)">{item.recommendation}</Text>
                       </Box>
                     ) : null}
                     {item.actions && item.actions.length > 0 ? (
@@ -991,8 +911,8 @@ export function TemplateSelectableTable({
     <TemplateSurface>
       <VStack align="stretch" gap="4">
         {title ? <TemplateSectionHeader title={title} /> : null}
-        <Table.ScrollArea borderWidth="1px" borderColor="var(--border-subtle)" rounded="8px">
-          <Table.Root size="sm" variant="outline">
+        <Table.ScrollArea>
+          <Table.Root size="sm" variant="line">
             <Table.Header>
               <Table.Row>
                 <Table.ColumnHeader w="36px" px="3">

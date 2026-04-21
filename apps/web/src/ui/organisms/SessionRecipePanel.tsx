@@ -420,10 +420,7 @@ const markdownRendererCss = {
     lineHeight: 1.65
   },
   '& ul > li, & ol > li': {
-    padding: '0.72rem 0.8rem',
-    borderRadius: '6px',
-    border: '1px solid var(--border-subtle)',
-    background: 'var(--surface-2)'
+    padding: '0.2rem 0'
   },
   '& ul ul, & ol ul, & ul ol, & ol ol': {
     display: 'block',
