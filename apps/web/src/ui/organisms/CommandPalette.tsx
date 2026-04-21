@@ -11,7 +11,7 @@ type CommandItem = {
 
 const NAV_LABELS: Record<AppPage, string> = {
   chat: 'Chat',
-  recipes: 'Spaces',
+  recipes: 'Recipes',
   sessions: 'All Sessions',
   jobs: 'Jobs',
   tools: 'Tools',

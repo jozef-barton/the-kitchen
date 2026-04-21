@@ -98,6 +98,7 @@ export function ChatPage({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [recipePanelAnimKey, setRecipePanelAnimKey] = useState(0);
+  const [runtimePanelOpen, setRuntimePanelOpen] = useState(false);
   const prevRecipeIdRef = useRef<string | null>(null);
   const runtimeButtonRef = useRef<HTMLButtonElement | null>(null);
   const activeSession = sessionPayload?.session ?? null;
@@ -136,6 +137,10 @@ export function ChatPage({
   useEffect(() => {
     setRecipeChatCollapsed(false);
   }, [activeSession?.id, attachedRecipe?.id]);
+
+  useEffect(() => {
+    if (sending) setRuntimePanelOpen(true);
+  }, [sending]);
 
   async function handleRename(title: string) {
     if (!activeSession) {
@@ -214,36 +219,58 @@ export function ChatPage({
   }
 
   return (
-    <Flex direction="column" h="100%" minH={0} gap="4">
+    <Flex direction="column" h="100%" minH={0}>
+      {/* Session subtitle + actions — minimal, inline, no box */}
       {!attachedRecipe ? (
-        <HStack justify="space-between" align="start" gap="4">
-          <Box minW={0}>
-            <Text fontSize={{ base: 'xl', xl: '2xl' }} fontWeight="750" color="var(--text-primary)" lineClamp={2} lineHeight="1.15">
-              {activeSession?.title ?? 'Chat'}
-            </Text>
-            <Text mt="1" color="var(--text-secondary)" lineClamp={2}>
-              {activeSession?.summary ?? 'Choose a recent session or start a new one.'}
-            </Text>
-          </Box>
-          {activeSession ? (
-            <SessionActionMenu
-              label={`Chat actions for ${activeSession.title}`}
-              onRename={() => {
-                setActionError(null);
-                setRenameOpen(true);
-              }}
-              onDelete={() => {
-                setActionError(null);
-                setDeleteOpen(true);
-              }}
-            />
-          ) : null}
+        <HStack px={{ base: '4', lg: '6' }} pt="2" pb="1" justify="space-between" align="center" flexShrink={0} gap="3">
+          <Text fontSize="xs" color="var(--text-muted)" minW={0} lineClamp={1} opacity={0.7}>
+            {activeSession?.summary ?? 'Choose a recent session or start a new one.'}
+          </Text>
+          <HStack gap="1" flexShrink={0}>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              rounded="7px"
+              px="2"
+              h="6"
+              color={runtimePanelOpen ? 'var(--accent)' : 'var(--text-muted)'}
+              bg={runtimePanelOpen ? 'var(--accent-soft)' : 'transparent'}
+              _hover={{ bg: runtimePanelOpen ? 'var(--accent-soft)' : 'var(--surface-hover)', color: 'var(--text-primary)' }}
+              fontSize="xs"
+              fontWeight="450"
+              onClick={() => setRuntimePanelOpen((v) => !v)}
+              aria-label="Toggle runtime activity panel"
+            >
+              Activity
+            </Button>
+            {activeSession ? (
+              <SessionActionMenu
+                label={`Chat actions for ${activeSession.title}`}
+                onRename={() => { setActionError(null); setRenameOpen(true); }}
+                onDelete={() => { setActionError(null); setDeleteOpen(true); }}
+              />
+            ) : null}
+          </HStack>
         </HStack>
       ) : null}
 
-      {error ? <ErrorBanner title="Session load failed" detail={error} /> : null}
-      {chatError ? <ErrorBanner title="Hermes request failed" detail={chatError} /> : null}
-      {actionError ? <ErrorBanner title="Session update failed" detail={actionError} /> : null}
+      {/* Inline errors — compact, no full-width banners */}
+      {error ? (
+        <Box px={{ base: '4', lg: '6' }} flexShrink={0}>
+          <ErrorBanner title="Session load failed" detail={error} />
+        </Box>
+      ) : null}
+      {chatError ? (
+        <Box px={{ base: '4', lg: '6' }} flexShrink={0}>
+          <ErrorBanner title="Hermes request failed" detail={chatError} />
+        </Box>
+      ) : null}
+      {actionError ? (
+        <Box px={{ base: '4', lg: '6' }} flexShrink={0}>
+          <ErrorBanner title="Session update failed" detail={actionError} />
+        </Box>
+      ) : null}
 
       {attachedRecipe ? (
         <>
@@ -460,18 +487,16 @@ export function ChatPage({
           </Drawer.Root>
         </>
       ) : (
-        <Grid flex="1" minH={0} gap="5" templateColumns={{ base: '1fr', xl: 'minmax(0, 1fr) 372px' }}>
-          <Flex direction="column" minH={0} gap="4">
-            <Box
-              flex="1"
-              minH={0}
-              rounded="8px"
-              border="1px solid var(--border-subtle)"
-              bg="var(--surface-1)"
-              boxShadow="var(--shadow-sm)"
-              px={{ base: '3', xl: '4' }}
-              py={{ base: '3', xl: '4' }}
-            >
+        <Grid
+          flex="1"
+          minH={0}
+          templateColumns={runtimePanelOpen ? { base: '1fr', xl: 'minmax(0, 1fr) 340px' } : '1fr'}
+          css={{ transition: 'grid-template-columns 280ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+        >
+          {/* Primary thread column */}
+          <Flex direction="column" minH={0}>
+            {/* Scrollable messages — takes all remaining space */}
+            <Box flex="1" minH={0} overflow="hidden">
               <ChatTranscript
                 loading={loading}
                 messages={sessionPayload?.messages ?? []}
@@ -486,10 +511,31 @@ export function ChatPage({
               />
             </Box>
 
-            <ChatComposer onSend={onSend} sending={sending} disabled={loading} />
+            {/* Composer — anchored at bottom, centered, open canvas */}
+            <Box
+              flexShrink={0}
+              px={{ base: '3', md: '4', lg: '6' }}
+              pt="3"
+              pb={{ base: '4', lg: '5' }}
+              maxW={runtimePanelOpen ? undefined : '800px'}
+              mx={runtimePanelOpen ? undefined : 'auto'}
+              w="100%"
+            >
+              <ChatComposer onSend={onSend} sending={sending} disabled={loading} />
+            </Box>
           </Flex>
 
-          <Box minH={0}>
+          {/* Runtime activity panel — hidden by default, slides in */}
+          <Box
+            minH={0}
+            overflow="hidden"
+            borderLeft={runtimePanelOpen ? '1px solid var(--border-subtle)' : 'none'}
+            style={{
+              opacity: runtimePanelOpen ? 1 : 0,
+              pointerEvents: runtimePanelOpen ? 'auto' : 'none',
+              transition: 'opacity 220ms ease',
+            }}
+          >
             <ChatActivityFeed
               activities={activities}
               sending={sending}
