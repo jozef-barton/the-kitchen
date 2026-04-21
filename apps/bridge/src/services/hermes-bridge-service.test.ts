@@ -3875,8 +3875,6 @@ ${JSON.stringify(envelope)}`,
     expect(completeIndex).toBeGreaterThanOrEqual(0);
     // at least one recipe_event carrying baseline-ready state must appear AFTER complete
     expect(firstRecipeEventAfterComplete).toBeGreaterThanOrEqual(0);
-    // no recipe_event with baseline content should appear BEFORE complete
-    const recipeEventIndexBeforeComplete = eventTypes.slice(0, completeIndex).lastIndexOf('recipe_event');
     // recipe_events before complete are allowed (pipeline progress), but baseline_ready must come after
     const recipeEventIndicesAfterComplete = eventTypes
       .map((t, i) => (t === 'recipe_event' && i > completeIndex ? i : -1))

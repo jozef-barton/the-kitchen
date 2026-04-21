@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit *)",
+            "command": "LINT_OUT=$(pnpm lint 2>&1); LINT_EXIT=$?; if [ $LINT_EXIT -ne 0 ]; then echo \"$LINT_OUT\" >&2; printf '{\"continue\":false,\"stopReason\":\"ESLint failed — fix lint errors before committing.\"}'; fi",
+            "statusMessage": "Checking lint before commit...",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

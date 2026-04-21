@@ -212,27 +212,6 @@ function expectPromotedRichHomeRecipe(recipe: RecipeResponse['recipe'] | null | 
   expect(getPrimaryDynamicDataset(recipe)).not.toBeNull();
 }
 
-function expectFailedTemplateHomeRecipe(
-  recipe: RecipeResponse['recipe'] | null | undefined,
-  expectedSnippet?: string,
-  expectedFailureCategory?: string
-) {
-  expectBaselineHomeRecipe(recipe, expectedSnippet);
-  if (!recipe) {
-    return;
-  }
-
-  expect(recipe.renderMode).toBe('dynamic_v1');
-  expect(recipe.dynamic?.activeBuild?.buildKind).toBe('template_enrichment');
-  expect(recipe.dynamic?.activeBuild?.phase).toBe('failed');
-  if (expectedFailureCategory) {
-    expect(recipe.dynamic?.activeBuild?.failureCategory).toBe(expectedFailureCategory);
-    expect(recipe.metadata.recipePipeline?.applet.failureCategory).toBe(expectedFailureCategory);
-  }
-  expect(recipe.dynamic?.recipeTemplate).toBeUndefined();
-  expect(recipe.dynamic?.recipeDsl).toBeUndefined();
-  expect(recipe.dynamic?.recipeModel).toBeUndefined();
-}
 
 async function startServer(
   tempRoot: string,
