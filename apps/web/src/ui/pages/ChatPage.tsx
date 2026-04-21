@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Box, Button, CloseButton, Drawer, Flex, Grid, HStack, Text } from '@chakra-ui/react';
+import { Box, Button, CloseButton, Drawer, Flex, Grid, HStack, Portal, Text } from '@chakra-ui/react';
 import type { ChatActivity, ChatMessage, RuntimeRequest, SessionMessagesResponse, Recipe, UpdateRecipeRequest } from '@hermes-recipes/protocol';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
@@ -431,33 +431,35 @@ export function ChatPage({
             size={{ base: 'full', md: 'lg', xl: 'xl' }}
             finalFocusEl={() => (runtimeButtonRef.current && runtimeButtonRef.current.isConnected ? runtimeButtonRef.current : document.body)}
           >
-            <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
-            <Drawer.Positioner>
-              <Drawer.Content
-                bg="var(--surface-elevated)"
-                borderLeft="1px solid var(--border-subtle)"
-                overflow="hidden"
-                data-testid="recipe-runtime-drawer"
-              >
-                <Drawer.Header>
-                  <HStack justify="space-between" align="center" gap="3" minW={0}>
-                    <Drawer.Title color="var(--text-primary)">Runtime activity</Drawer.Title>
-                    <Drawer.CloseTrigger asChild>
-                      <CloseButton size="sm" aria-label="Close runtime drawer" title="Close runtime drawer" />
-                    </Drawer.CloseTrigger>
-                  </HStack>
-                </Drawer.Header>
-                <Drawer.Body overflowX="hidden" minW={0}>
-                  <ChatActivityFeed
-                    activities={activities}
-                    sending={sending}
-                    progress={progress}
-                    requestPreview={selectedActivityPreview}
-                    requestStatus={selectedActivityStatus}
-                  />
-                </Drawer.Body>
-              </Drawer.Content>
-            </Drawer.Positioner>
+            <Portal>
+              <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
+              <Drawer.Positioner>
+                <Drawer.Content
+                  bg="var(--surface-elevated)"
+                  borderLeft="1px solid var(--border-subtle)"
+                  overflow="hidden"
+                  data-testid="recipe-runtime-drawer"
+                >
+                  <Drawer.Header>
+                    <HStack justify="space-between" align="center" gap="3" minW={0}>
+                      <Drawer.Title color="var(--text-primary)">Runtime activity</Drawer.Title>
+                      <Drawer.CloseTrigger asChild>
+                        <CloseButton size="sm" aria-label="Close runtime drawer" title="Close runtime drawer" />
+                      </Drawer.CloseTrigger>
+                    </HStack>
+                  </Drawer.Header>
+                  <Drawer.Body overflowX="hidden" minW={0}>
+                    <ChatActivityFeed
+                      activities={activities}
+                      sending={sending}
+                      progress={progress}
+                      requestPreview={selectedActivityPreview}
+                      requestStatus={selectedActivityStatus}
+                    />
+                  </Drawer.Body>
+                </Drawer.Content>
+              </Drawer.Positioner>
+            </Portal>
           </Drawer.Root>
         </>
       ) : (
