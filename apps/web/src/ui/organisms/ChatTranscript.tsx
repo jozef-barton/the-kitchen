@@ -84,7 +84,7 @@ export const ChatTranscript = memo(function ChatTranscript({
     <ScrollArea.Root flex="1" minH={0} variant="hover">
       <ScrollArea.Viewport ref={viewportRef} data-testid="chat-transcript-scroll">
         <Box maxW="740px" mx="auto" w="100%">
-        <VStack align="stretch" gap={{ base: '6', md: '8' }} px={{ base: '2', md: '4' }} pt={{ base: '4', md: '6' }} pb={{ base: '2', md: '4' }}>
+        <VStack align="stretch" gap="6" px={{ base: '3', md: '5' }} pt="4" pb="3">
           {loading ? (
             <TranscriptBubble messageRole="system">
               <Text fontWeight="700">Loading session…</Text>
@@ -146,8 +146,8 @@ const MarkdownMessage = memo(function MarkdownMessage({ children }: { children: 
           fontSize: '0.98rem'
         },
         '& p': {
-          fontSize: '0.875rem',
-          lineHeight: 1.72
+          fontSize: '0.8125rem',
+          lineHeight: 1.65
         },
         '& p + p': {
           marginTop: '0.8rem'
@@ -336,7 +336,6 @@ const TranscriptTypingRow = memo(function TranscriptTypingRow({
 
 function TranscriptBubble({
   messageRole,
-  timestamp,
   clickable = false,
   selected = false,
   copyContent,
@@ -344,7 +343,7 @@ function TranscriptBubble({
   onClick
 }: {
   messageRole: ChatMessage['role'] | 'assistant_draft';
-  timestamp?: string;
+  timestamp?: string; // kept for prop compatibility, not displayed
   clickable?: boolean;
   selected?: boolean;
   copyContent?: string;
@@ -355,7 +354,8 @@ function TranscriptBubble({
   const isAssistant = messageRole === 'assistant' || messageRole === 'assistant_draft';
   const [copied, setCopied] = useState(false);
 
-  function handleCopy() {
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation(); // always stop — click on copy should never bubble to message click
     if (!copyContent) return;
     void navigator.clipboard.writeText(copyContent).then(() => {
       setCopied(true);
@@ -363,117 +363,111 @@ function TranscriptBubble({
     });
   }
 
-  const ActionRow = ({ stopProp }: { stopProp?: boolean }) => (
-    <HStack gap="1.5" opacity={0.5} _hover={{ opacity: 1 }} transition="opacity 140ms ease" mt="1.5">
-      {copyContent ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          minW={0}
-          px="2"
-          h="6"
-          rounded="6px"
-          color="var(--text-muted)"
-          fontSize="xs"
-          _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
-          onClick={stopProp ? (e) => { e.stopPropagation(); handleCopy(); } : handleCopy}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      ) : null}
-      {formatMessageTime(timestamp) ? (
-        <Text fontSize="xs" color="var(--text-muted)">{formatMessageTime(timestamp)}</Text>
-      ) : null}
-    </HStack>
-  );
+  /* ── Copy button — rendered but opacity controlled by .msg-outer:hover ── */
+  const CopyBtn = copyContent ? (
+    <Box className="msg-actions" display="inline-flex" mt="1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        minW={0}
+        px="1.5"
+        h="5"
+        rounded="4px"
+        color="var(--text-muted)"
+        fontSize="10px"
+        fontWeight="400"
+        _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
+        onClick={handleCopy}
+      >
+        {copied ? '✓ Copied' : 'Copy'}
+      </Button>
+    </Box>
+  ) : null;
 
-  /* ── User message: right-aligned soft bubble ── */
+  /* ── User message: right-aligned soft pill ── */
   if (isUser) {
-    const bubble = (
+    const inner = (
       <Box
-        maxW="min(620px, 88%)"
+        maxW="min(580px, 86%)"
         bg={selected ? 'var(--surface-selected)' : 'var(--surface-2)'}
-        rounded="20px"
-        roundedBottomRight="6px"
-        px={{ base: '4', md: '5' }}
-        py={{ base: '3', md: '3.5' }}
-        transition="background-color 160ms ease"
-        style={selected ? { outline: '2px solid var(--accent)', outlineOffset: '2px' } : undefined}
-        overflow="hidden"
+        rounded="16px"
+        roundedBottomRight="4px"
+        px="3"
+        pt="2.5"
+        pb="2"
         wordBreak="break-word"
+        overflow="hidden"
+        transition="background-color 150ms ease-in-out"
+        style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
       >
         {children}
-        <ActionRow stopProp={clickable} />
+        {CopyBtn}
       </Box>
     );
 
-    if (clickable) {
-      return (
-        <Box display="flex" justifyContent="flex-end">
-          <Box
-            role="button"
-            tabIndex={0}
-            cursor="pointer"
-            onClick={onClick}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
-          >
-            {bubble}
-          </Box>
-        </Box>
-      );
-    }
-    return <Box display="flex" justifyContent="flex-end">{bubble}</Box>;
+    return (
+      <Box
+        display="flex"
+        justifyContent="flex-end"
+        className="msg-outer"
+        {...(clickable ? {
+          role: 'button',
+          tabIndex: 0,
+          cursor: 'pointer',
+          onClick,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
+          }
+        } : {})}
+      >
+        {inner}
+      </Box>
+    );
   }
 
-  /* ── Assistant message: open canvas, no bubble ── */
+  /* ── Assistant message: open canvas ── */
   if (isAssistant) {
-    const content = (
+    const inner = (
       <HStack align="start" gap="3" w="100%" maxW="100%">
-        <Box flexShrink={0} mt="1px">
+        <Box flexShrink={0} mt="2px">
           <HermesAvatar size="sm" />
         </Box>
-        <VStack align="stretch" gap="0" flex="1" minW={0} overflow="hidden" wordBreak="break-word">
+        <Box flex="1" minW={0} overflow="hidden" wordBreak="break-word">
           {children}
-          <ActionRow stopProp={clickable} />
-        </VStack>
+          {CopyBtn}
+        </Box>
       </HStack>
     );
 
     if (clickable) {
       return (
         <Box
+          className="msg-outer"
           role="button"
           tabIndex={0}
           cursor="pointer"
-          rounded="12px"
-          px="3"
-          py="2"
-          mx="-3"
-          transition="background-color 140ms ease"
+          rounded="10px"
+          px="2"
+          py="1.5"
+          mx="-2"
+          transition="background-color 150ms ease-in-out"
           _hover={{ bg: 'var(--surface-hover)' }}
           style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
           onClick={onClick}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
         >
-          {content}
+          {inner}
         </Box>
       );
     }
-    return <Box>{content}</Box>;
+    return <Box className="msg-outer">{inner}</Box>;
   }
 
-  /* ── System message: centered, minimal ── */
+  /* ── System / empty state: centered, barely there ── */
   return (
-    <Box display="flex" justifyContent="center" py="2">
-      <Box
-        maxW="480px"
-        textAlign="center"
-        px="4"
-        py="3"
-        rounded="10px"
-        bg="var(--surface-hover)"
-      >
+    <Box display="flex" justifyContent="center">
+      <Box maxW="440px" textAlign="center" px="4" py="3" rounded="8px" bg="var(--surface-hover)">
         {children}
       </Box>
     </Box>

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Box, Button, HStack, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Textarea } from '@chakra-ui/react';
 
 export function ChatComposer({
   onSend,
@@ -23,17 +23,16 @@ export function ChatComposer({
   return (
     <Box
       as="form"
-      rounded="16px"
-      border="1px solid var(--border-default)"
+      rounded="12px"
+      border="1px solid var(--border-subtle)"
       bg="var(--surface-elevated)"
-      overflow="hidden"
-      boxShadow="var(--shadow-sm)"
+      boxShadow="0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)"
       data-testid="chat-composer"
       css={{
-        transition: 'box-shadow 200ms ease, border-color 200ms ease',
+        transition: 'border-color 150ms ease-in-out, box-shadow 150ms ease-in-out',
         '&:focus-within': {
-          borderColor: 'var(--accent)',
-          boxShadow: 'var(--focus-ring), var(--shadow-sm)'
+          borderColor: 'var(--border-default)',
+          boxShadow: 'var(--focus-ring)'
         }
       }}
       onSubmit={(event: React.FormEvent) => {
@@ -41,54 +40,53 @@ export function ChatComposer({
         if (canSubmit) void handleSubmit();
       }}
     >
-      <Textarea
-        value={draft}
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        placeholder="Ask Hermes something real."
-        autoresize
-        resize="none"
-        variant="subtle"
-        minH="0"
-        maxH="280px"
-        px="4"
-        pt="4"
-        pb="2"
-        fontSize="sm"
-        lineHeight="1.65"
-        color="var(--text-primary)"
-        disabled={disabled}
-        bg="transparent"
-        border="none"
-        _placeholder={{ color: 'var(--text-muted)', fontSize: 'sm' }}
-        _focus={{ boxShadow: 'none', bg: 'transparent' }}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-          event.preventDefault();
-          if (canSubmit) void handleSubmit();
-        }}
-      />
-      <HStack justify="space-between" align="center" gap="3" px="4" pb="3" pt="1">
-        <Text fontSize="xs" color="var(--text-muted)" opacity={0.7} display={{ base: 'none', md: 'block' }}>
-          Enter ↵ to send · Shift+Enter for newline
-        </Text>
+      <Flex align="flex-end" gap="2" px="3" py="2">
+        <Textarea
+          flex="1"
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          placeholder="Ask Hermes something real."
+          autoresize
+          resize="none"
+          variant="subtle"
+          minH="0"
+          maxH="200px"
+          py="1"
+          px="0"
+          fontSize="sm"
+          lineHeight="1.55"
+          color="var(--text-primary)"
+          disabled={disabled}
+          bg="transparent"
+          border="none"
+          _placeholder={{ color: 'var(--text-muted)' }}
+          _focus={{ boxShadow: 'none', bg: 'transparent' }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            if (canSubmit) void handleSubmit();
+          }}
+        />
         <Button
           type="submit"
-          size="sm"
-          rounded="10px"
-          px="4"
-          bg="var(--accent)"
-          color="var(--accent-contrast)"
-          fontWeight="600"
+          size="xs"
+          h="7"
+          px="3"
+          mb="0.5"
+          rounded="8px"
+          bg={canSubmit ? 'var(--accent)' : 'var(--surface-3)'}
+          color={canSubmit ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+          fontWeight="500"
           fontSize="xs"
-          _hover={{ bg: 'var(--accent-strong)' }}
+          flexShrink={0}
+          _hover={{ bg: canSubmit ? 'var(--accent-strong)' : undefined }}
+          transition="background-color 150ms ease-in-out, color 150ms ease-in-out"
           loading={sending}
           disabled={!canSubmit}
-          ml="auto"
-          flexShrink={0}
         >
           Send
         </Button>
-      </HStack>
+      </Flex>
     </Box>
   );
 }

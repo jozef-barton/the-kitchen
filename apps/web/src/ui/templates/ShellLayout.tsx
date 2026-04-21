@@ -35,20 +35,12 @@ function GatewayBanner({ detail, onDismiss }: { detail: string; onDismiss?: () =
 
 function ModelPill({ label }: { label?: string }) {
   if (!label) return null;
-  const parts = label.split('/');
-  const provider = parts.length > 1 ? parts[0] : null;
-  const model = parts.length > 1 ? parts.slice(1).join('/') : label;
+  // Show just the model name (last segment after /)
+  const model = label.split('/').pop() ?? label;
   return (
-    <HStack gap="1" align="center">
-      {provider ? (
-        <Text fontSize="11px" color="var(--text-muted)" fontWeight="400">
-          {provider}/
-        </Text>
-      ) : null}
-      <Text fontSize="11px" color="var(--text-secondary)" fontWeight="500">
-        {model}
-      </Text>
-    </HStack>
+    <Text fontSize="11px" color="var(--text-muted)" fontWeight="400" letterSpacing="0">
+      {model}
+    </Text>
   );
 }
 
@@ -100,8 +92,8 @@ export function ShellLayout({
         bg="var(--shell-bg)"
         overflow="hidden"
       >
-        {/* Top bar — nearly invisible chrome */}
-        <Box px={{ base: '4', lg: '5' }} py="1.5" flexShrink={0}>
+        {/* Top bar — minimal chrome */}
+        <Box px={{ base: '4', lg: '5' }} py="1" flexShrink={0}>
           <HStack justify="space-between" align="center" gap="3" data-testid="shell-toolbar">
             {headerMode === 'full' ? (
               <PageHeader profileName={profileName} pageName={pageTitle} detail={headerDetail} />

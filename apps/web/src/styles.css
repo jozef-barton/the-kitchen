@@ -83,17 +83,17 @@ body,
 
   /* Transitions */
   --transition-fast: 120ms ease;
-  --transition-base: 180ms ease;
-  --transition-slow: 280ms ease;
+  --transition-base: 160ms ease-in-out;
+  --transition-slow: 240ms ease-in-out;
 
   /* Typography scale */
-  --text-2xs: 11px;
-  --text-xs: 12px;
-  --text-sm: 13px;
-  --text-base: 15px;
-  --text-lg: 18px;
-  --text-xl: 24px;
-  --text-2xl: 32px;
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -440,6 +440,21 @@ tbody tr:hover {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SESSION ROW — hover-reveal actions
+   ───────────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   MESSAGE HOVER ACTIONS — copy button reveal, no layout shift
+   ───────────────────────────────────────────────────────────────────────────── */
+.msg-outer .msg-actions {
+  opacity: 0;
+  transition: opacity 150ms ease-in-out;
+}
+.msg-outer:hover .msg-actions,
+.msg-outer:focus-within .msg-actions {
+  opacity: 1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SESSION ROW
    ───────────────────────────────────────────────────────────────────────────── */
 .session-row {
   position: relative;
