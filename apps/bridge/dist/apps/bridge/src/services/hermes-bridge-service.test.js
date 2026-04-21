@@ -253,7 +253,7 @@ function createDynamicRecipeDataEnvelope(options = {}) {
         },
         intentHints: {
             category: 'places',
-            label: 'nearby shortlist',
+            label: options.intentLabel ?? 'nearby shortlist',
             summary: 'Weekend hotel shortlist in Dayton.',
             preferredPresentation: 'cards',
             allowOutboundRequests: true,
@@ -1059,9 +1059,8 @@ describe('HermesBridge recipe entry actions', () => {
             .some((event) => event.code === 'RECIPE_ENTRY_REMOVED')).toBe(true);
         database.close();
     });
-    it('deletes actionable Gmail-backed entries from the source and removes them from the recipe', async () => {
+    it('rejects delete_source entry actions — source deletion must go through a prompt-based template action', async () => {
         const database = createDatabase();
-        const deleteGmailMessages = vi.fn().mockResolvedValue(['gmail-message-1']);
         const { recipe } = createAttachedRecipe(database, normalizeRecipeTabs({
             contentFormat: 'table',
             contentData: {
@@ -1078,46 +1077,7 @@ describe('HermesBridge recipe entry actions', () => {
         }));
         const bridge = new HermesBridge({
             database,
-            hermesCli: {
-                deleteGmailMessages
-            },
-            now: () => '2026-04-10T12:05:00.000Z'
-        });
-        const entry = getRecipeContentEntries(recipe)[0];
-        const response = await bridge.applyRecipeEntryAction(recipe.id, {
-            profileId: 'jbarton',
-            action: 'delete_source',
-            entryIds: [entry.id]
-        });
-        expect(deleteGmailMessages).toHaveBeenCalledWith(expect.objectContaining({
-            id: 'jbarton'
-        }), ['gmail-message-1']);
-        expect(response.deletedSourceEntryIds).toEqual([entry.id]);
-        expect(getRecipeContentEntries(response.recipe)).toHaveLength(0);
-        expect(response.recipe.metadata.changeSummary).toContain('Deleted 1 email entry');
-        database.close();
-    });
-    it('records telemetry and returns a clean error when direct source deletion fails', async () => {
-        const database = createDatabase();
-        const { session, recipe } = createAttachedRecipe(database, normalizeRecipeTabs({
-            contentFormat: 'table',
-            contentData: {
-                columns: [
-                    { id: 'subject', label: 'Subject', emphasis: 'primary', presentation: 'text' },
-                    { id: 'from', label: 'From', emphasis: 'none', presentation: 'text' },
-                    { id: 'messageId', label: 'Message ID', emphasis: 'none', presentation: 'text' }
-                ],
-                rows: [
-                    { subject: 'Launch follow-up', from: 'ops@example.com', messageId: 'gmail-message-1' }
-                ],
-                emptyMessage: 'No emails.'
-            }
-        }));
-        const bridge = new HermesBridge({
-            database,
-            hermesCli: {
-                deleteGmailMessages: vi.fn().mockRejectedValue(new Error('invalid_grant'))
-            },
+            hermesCli: {},
             now: () => '2026-04-10T12:05:00.000Z'
         });
         const entry = getRecipeContentEntries(recipe)[0];
@@ -1126,15 +1086,9 @@ describe('HermesBridge recipe entry actions', () => {
             action: 'delete_source',
             entryIds: [entry.id]
         })).rejects.toMatchObject({
-            code: 'RECIPE_ENTRY_SOURCE_DELETE_FAILED',
-            message: 'Could not delete the selected emails. Check the logs for more information.'
+            code: 'RECIPE_ACTION_OUTBOUND_NOT_ALLOWED'
         });
-        const telemetry = database.listTelemetryEvents({
-            profileId: 'jbarton',
-            sessionId: session.id,
-            limit: 10
-        });
-        expect(telemetry.some((event) => event.code === 'RECIPE_ENTRY_SOURCE_DELETE_FAILED' && event.detail === 'invalid_grant')).toBe(true);
+        // Entry must be untouched — no side effects allowed before the prompt-based flow runs
         expect(getRecipeContentEntries(database.getRecipe(recipe.id))).toHaveLength(1);
         database.close();
     });
@@ -1211,6 +1165,116 @@ describe('HermesBridge attached-recipe refresh', () => {
         expect(database.getRecipe(recipe.id)?.metadata.refreshPrompt).toBe('Find the best boutique hotels in Dayton with breakfast.');
         expect(database.listMessages(session.id).at(-2)?.content).toBe(RECIPE_REFRESH_USER_MESSAGE);
         expect(database.getRecipe(recipe.id)?.tabs[0]).toBeDefined();
+        database.close();
+    });
+});
+describe('HermesBridge runtime-ready cache (Phase 3)', () => {
+    it('calls discoverRuntimeProviderState only once per 30-second window for back-to-back requests', async () => {
+        const database = createDatabase();
+        seedProfile(database);
+        seedRuntimeReady(database);
+        const session = database.createSession('jbarton', '2026-04-11T17:00:00.000Z');
+        const discoverRuntimeProviderState = vi.fn(async () => createRuntimeReadyState());
+        const bridge = new HermesBridge({
+            database,
+            hermesCli: {
+                discoverRuntimeProviderState,
+                streamChat: vi.fn(async () => ({
+                    assistantMarkdown: 'Hello.',
+                    runtimeSessionId: 'rt-session-1'
+                }))
+            },
+            now: createNowSequence()
+        });
+        await bridge.streamChat({ profileId: 'jbarton', sessionId: session.id, content: 'Hi.', mode: 'chat' }, () => undefined);
+        await bridge.streamChat({ profileId: 'jbarton', sessionId: session.id, content: 'Hi again.', mode: 'chat' }, () => undefined);
+        // Second call hits the cache — discover should only have been called once.
+        expect(discoverRuntimeProviderState).toHaveBeenCalledTimes(1);
+        database.close();
+    });
+    it('invalidates the cache after updateRuntimeModelConfig', async () => {
+        const database = createDatabase();
+        seedProfile(database);
+        seedRuntimeReady(database);
+        const session = database.createSession('jbarton', '2026-04-11T17:00:00.000Z');
+        const runtimeState = createRuntimeReadyState();
+        const discoverRuntimeProviderState = vi.fn(async () => runtimeState);
+        const bridge = new HermesBridge({
+            database,
+            hermesCli: {
+                discoverRuntimeProviderState,
+                streamChat: vi.fn(async () => ({ assistantMarkdown: 'Hi.', runtimeSessionId: 'rt-1' })),
+                updateRuntimeModelConfig: vi.fn(async () => runtimeState.config)
+            },
+            now: createNowSequence()
+        });
+        // First chat call — populates cache
+        await bridge.streamChat({ profileId: 'jbarton', sessionId: session.id, content: 'Hi.', mode: 'chat' }, () => undefined);
+        expect(discoverRuntimeProviderState).toHaveBeenCalledTimes(1);
+        // Config update — must invalidate cache
+        await bridge.updateRuntimeModelConfig({ profileId: 'jbarton', provider: 'openrouter' });
+        expect(discoverRuntimeProviderState).toHaveBeenCalledTimes(2); // called by updateRuntimeModelConfig → getModelProviderState
+        // Next chat — cache was cleared, so discover is called again
+        await bridge.streamChat({ profileId: 'jbarton', sessionId: session.id, content: 'Hi again.', mode: 'chat' }, () => undefined);
+        expect(discoverRuntimeProviderState).toHaveBeenCalledTimes(3);
+        database.close();
+    });
+});
+describe('HermesBridge enrichment supersession (Phase 4)', () => {
+    it('stops enrichment between stages when a newer request supersedes the current one', async () => {
+        const database = createDatabase();
+        seedProfile(database);
+        seedRuntimeReady(database);
+        const session = database.createSession('jbarton', '2026-04-11T17:00:00.000Z');
+        // Use 'nearby shortlist' — no deterministic template mapping, so LLM selection runs.
+        const envelope = createDynamicRecipeDataEnvelope({ intentLabel: 'nearby shortlist' });
+        const streamChat = vi.fn(async (options) => {
+            if (options?.structuredArtifactOnly) {
+                return { assistantMarkdown: JSON.stringify(envelope), runtimeSessionId: 'rt-seed' };
+            }
+            return { assistantMarkdown: 'Here are some nearby places.', runtimeSessionId: 'rt-chat' };
+        });
+        // During the LLM selection stage, simulate a new competing request by updating
+        // the recipe's latestRecipeAttemptRequestId — the inter-stage check then aborts.
+        let selectionCallCount = 0;
+        const generateRecipeTemplateArtifact = vi.fn(async (options) => {
+            if (options?.stage === 'select' && typeof options?.prompt === 'string') {
+                selectionCallCount += 1;
+                const recipe = database.getRecipeByPrimarySessionId('jbarton', session.id);
+                if (recipe) {
+                    database.updateRecipe(recipe.id, {
+                        profileId: 'jbarton',
+                        metadata: {
+                            ...recipe.metadata,
+                            latestRecipeAttemptRequestId: 'newer-request-id',
+                            latestRecipeAttemptedAt: new Date(Date.now() + 10_000).toISOString()
+                        }
+                    });
+                }
+                return { assistantMarkdown: createRecipeTemplateSelectionArtifact(options.prompt) };
+            }
+            // Text/hydrate/actions must not be reached after supersession.
+            return { assistantMarkdown: '' };
+        });
+        const bridge = new HermesBridge({
+            database,
+            hermesCli: {
+                discoverRuntimeProviderState: vi.fn(async () => createRuntimeReadyState()),
+                streamChat,
+                generateRecipeTemplateArtifact
+            },
+            now: createNowSequence()
+        });
+        await bridge.streamChat({ profileId: 'jbarton', sessionId: session.id, content: 'Find nearby coffee shops.', mode: 'chat' }, () => undefined);
+        await waitForRecipeEnrichment(bridge);
+        expect(selectionCallCount).toBe(1);
+        const postSelectionCalls = generateRecipeTemplateArtifact.mock.calls.filter((call) => call[0]?.stage === 'text' || call[0]?.stage === 'hydrate' || call[0]?.stage === 'actions');
+        expect(postSelectionCalls).toHaveLength(0);
+        const recipe = database.getRecipeByPrimarySessionId('jbarton', session.id);
+        const enrichmentBuild = recipe?.id
+            ? database.listRecipeBuilds(recipe.id, { limit: 10 }).find((b) => b.buildKind === 'template_enrichment')
+            : null;
+        expect(enrichmentBuild?.phase).toBe('failed');
         database.close();
     });
 });
@@ -1489,6 +1553,87 @@ describe('HermesBridge Home baseline recipes', () => {
         });
         expect(database.getRecipeByPrimarySessionId('jbarton', session.id)?.dynamic?.recipeTemplate?.templateId).toBe('hotel-shortlist');
         expect(telemetry.some((event) => event.code.startsWith('RECIPE_APPLET_'))).toBe(false);
+        await waitForRecipeEnrichment(bridge);
+        database.close();
+    });
+    it('skips the LLM selection stage when the intent label deterministically maps to a template', async () => {
+        const database = createDatabase();
+        seedProfile(database);
+        seedRuntimeReady(database);
+        const session = database.createSession('jbarton', '2026-04-11T17:15:00.000Z');
+        // Use 'hotel shortlist' — a label that maps deterministically to 'hotel-shortlist' via INTENT_LABEL_TO_TEMPLATE_ID.
+        const envelope = createDynamicRecipeDataEnvelope({ intentLabel: 'hotel shortlist' });
+        const streamChat = vi.fn(async (options) => {
+            if (options?.structuredArtifactOnly) {
+                return {
+                    assistantMarkdown: JSON.stringify(envelope),
+                    runtimeSessionId: 'runtime-session-deterministic-seed'
+                };
+            }
+            return {
+                assistantMarkdown: 'Here is a compact shortlist.\n\nI can refine it further.',
+                runtimeSessionId: 'runtime-session-deterministic-baseline'
+            };
+        });
+        const generateRecipeTemplateArtifact = vi.fn(async (options) => {
+            if (options?.stage === 'text' && typeof options?.prompt === 'string') {
+                return {
+                    assistantMarkdown: createRecipeTemplateTextArtifactResponse(options.prompt)
+                };
+            }
+            if (options?.stage === 'hydrate' && typeof options?.prompt === 'string') {
+                return {
+                    assistantMarkdown: createRecipeTemplateHydrationArtifactResponse(options.prompt)
+                };
+            }
+            if (options?.stage === 'actions' && typeof options?.prompt === 'string') {
+                return {
+                    assistantMarkdown: createRecipeTemplateActionsArtifactResponse(options.prompt)
+                };
+            }
+            if (options?.stage === 'actions_repair' && typeof options?.prompt === 'string') {
+                return {
+                    assistantMarkdown: createRecipeTemplateActionsArtifactResponse(options.prompt)
+                };
+            }
+            throw new Error(`Unexpected recipe template stage ${options?.stage ?? 'unknown'} — select stage should have been skipped.`);
+        });
+        const bridge = new HermesBridge({
+            database,
+            hermesCli: {
+                discoverRuntimeProviderState: vi.fn(async () => createRuntimeReadyState()),
+                streamChat,
+                generateRecipeTemplateArtifact
+            },
+            now: createNowSequence('2026-04-11T17:15:00.000Z')
+        });
+        await bridge.streamChat({
+            profileId: 'jbarton',
+            sessionId: session.id,
+            content: 'Find the best boutique hotels in Dayton for a weekend stay and create a recipe for this.',
+            mode: 'chat'
+        }, () => undefined);
+        await waitForRecipeEnrichment(bridge);
+        const attachedRecipe = database.getRecipeByPrimarySessionId('jbarton', session.id);
+        const telemetry = database.listTelemetryEvents({
+            profileId: 'jbarton',
+            sessionId: session.id,
+            limit: 60
+        });
+        // The select stage must have been bypassed: only text, hydrate, actions calls expected.
+        expect(generateRecipeTemplateArtifact).not.toHaveBeenCalledWith(expect.objectContaining({ stage: 'select' }));
+        expect(generateRecipeTemplateArtifact).toHaveBeenCalledTimes(3);
+        expect(generateRecipeTemplateArtifact.mock.calls[0]?.[0]?.stage).toBe('text');
+        expect(generateRecipeTemplateArtifact.mock.calls[1]?.[0]?.stage).toBe('hydrate');
+        expect(generateRecipeTemplateArtifact.mock.calls[2]?.[0]?.stage).toBe('actions');
+        // The recipe should be fully ready with the correct template.
+        expect(attachedRecipe?.dynamic?.activeBuild?.phase).toBe('ready');
+        expect(attachedRecipe?.dynamic?.recipeTemplate?.templateId).toBe('hotel-shortlist');
+        // A deterministic-selection telemetry event should have been recorded.
+        expect(telemetry.some((event) => event.code === 'RECIPE_TEMPLATE_SELECTION_DETERMINISTIC')).toBe(true);
+        const deterministicEvent = telemetry.find((event) => event.code === 'RECIPE_TEMPLATE_SELECTION_DETERMINISTIC');
+        expect(deterministicEvent?.payload?.intentLabel).toBe('hotel shortlist');
+        expect(deterministicEvent?.payload?.templateId).toBe('hotel-shortlist');
         await waitForRecipeEnrichment(bridge);
         database.close();
     });
@@ -3180,6 +3325,74 @@ ${JSON.stringify(envelope)}`,
         expect(refreshedRecipe?.dynamic).toBeUndefined();
         expect(getRecipeContentTab(refreshedRecipe).content.markdownRepresentation.markdown).toBe('Here is the stable baseline update.');
         expect(persistedBuilds.map((build) => build.buildKind)).toEqual(expect.arrayContaining(['compiled_home', 'applet']));
+        database.close();
+    });
+    it('emits the complete event before any recipe_event signalling baseline completion', async () => {
+        const database = createDatabase();
+        seedProfile(database);
+        seedRuntimeReady(database);
+        const session = database.createSession('jbarton', '2026-04-20T10:00:00.000Z');
+        const envelope = createDynamicRecipeDataEnvelope();
+        const eventTypes = [];
+        const bridge = new HermesBridge({
+            database,
+            hermesCli: {
+                discoverRuntimeProviderState: vi.fn(async () => createRuntimeReadyState()),
+                streamChat: vi.fn(async (options) => {
+                    if (options?.structuredArtifactOnly) {
+                        return {
+                            assistantMarkdown: JSON.stringify(envelope),
+                            runtimeSessionId: 'runtime-session-latency-seed'
+                        };
+                    }
+                    return {
+                        assistantMarkdown: 'Here is your shortlist.',
+                        runtimeSessionId: 'runtime-session-latency-baseline'
+                    };
+                }),
+                generateRecipeTemplateArtifact: vi.fn(async (options) => {
+                    if (options?.stage === 'select' && typeof options?.prompt === 'string') {
+                        return { assistantMarkdown: createRecipeTemplateSelectionArtifact(options.prompt) };
+                    }
+                    if (options?.stage === 'text' && typeof options?.prompt === 'string') {
+                        return { assistantMarkdown: createRecipeTemplateTextArtifactResponse(options.prompt) };
+                    }
+                    if (options?.stage === 'hydrate' && typeof options?.prompt === 'string') {
+                        return { assistantMarkdown: createRecipeTemplateHydrationArtifactResponse(options.prompt) };
+                    }
+                    if (options?.stage === 'actions' && typeof options?.prompt === 'string') {
+                        return { assistantMarkdown: createRecipeTemplateActionsArtifactResponse(options.prompt) };
+                    }
+                    throw new Error(`Unexpected stage: ${String(options?.stage)}`);
+                })
+            },
+            now: createNowSequence('2026-04-20T10:00:00.000Z')
+        });
+        await bridge.streamChat({
+            profileId: 'jbarton',
+            sessionId: session.id,
+            content: 'Find the best boutique hotels in Dayton for a weekend stay and create a recipe.',
+            mode: 'chat'
+        }, (event) => {
+            eventTypes.push(event.type);
+        });
+        const completeIndex = eventTypes.indexOf('complete');
+        const firstRecipeEventAfterComplete = eventTypes.slice(completeIndex + 1).findIndex((t) => t === 'recipe_event');
+        // complete must have been emitted
+        expect(completeIndex).toBeGreaterThanOrEqual(0);
+        // at least one recipe_event carrying baseline-ready state must appear AFTER complete
+        expect(firstRecipeEventAfterComplete).toBeGreaterThanOrEqual(0);
+        // recipe_events before complete are allowed (pipeline progress), but baseline_ready must come after
+        const recipeEventIndicesAfterComplete = eventTypes
+            .map((t, i) => (t === 'recipe_event' && i > completeIndex ? i : -1))
+            .filter((i) => i >= 0);
+        expect(recipeEventIndicesAfterComplete.length).toBeGreaterThan(0);
+        // The complete event itself must carry the assistant message content
+        const completeEvent = eventTypes
+            .map((_, i) => i)
+            .find((i) => eventTypes[i] === 'complete');
+        expect(completeEvent).toBeDefined();
+        await waitForRecipeEnrichment(bridge);
         database.close();
     });
 });

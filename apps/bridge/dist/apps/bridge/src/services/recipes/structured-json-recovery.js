@@ -112,6 +112,25 @@ function extractJsonCandidate(text, diagnostics) {
         trailingText: ''
     };
 }
+/**
+ * Attempt to parse a partial/truncated JSON string produced by a streaming LLM.
+ *
+ * Uses the existing `complete_trailing_delimiters` strategy from `extractJsonCandidate`: it finds
+ * the first `{`, walks balanced braces/brackets, then closes any open ones.  Strings that end
+ * inside a quoted value are rejected (non-deterministic completion) and return null.
+ *
+ * Returns the parsed object on success, or null if the chunk is too short / unparseable.
+ * Never throws.
+ */
+export function parsePartialJsonObject(raw) {
+    if (!raw || raw.trim().length < 2)
+        return null;
+    const result = extractRecoverableJsonObject(raw, { requireObject: true });
+    if (result.rawValue !== null && typeof result.rawValue === 'object' && !Array.isArray(result.rawValue)) {
+        return result.rawValue;
+    }
+    return null;
+}
 export function extractRecoverableJsonObject(responseText, options = {}) {
     const trimmed = responseText.trim();
     const requireObject = options.requireObject ?? true;

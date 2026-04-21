@@ -270,8 +270,8 @@ const JobSearchPipelineDataSchema = z
     eyebrow: OptionalTextSchema,
     heroChips: z.array(RecipeTemplateChipSchema).default([]),
     stats: z.array(RecipeTemplateStatSchema).default([]),
-    columns: z.array(RecipeTemplateAuthoringBoardColumnSchema).default([]),
-    detail: RecipeTemplateAuthoringDetailSchema
+    cards: z.array(RecipeTemplateAuthoringCardItemSchema).default([]),
+    noteLines: z.array(z.string().min(1)).default([])
 })
     .strict();
 const ContentCampaignPlannerDataSchema = z
@@ -429,18 +429,6 @@ const RecipeTemplateTimelineLinksOverlaySchema = z
     links: z.array(RecipeTemplateAuthoringLinkSchema).default([])
 })
     .strict();
-const RecipeTemplateBoardCardLinksOverlaySchema = z
-    .object({
-    id: z.string().min(1),
-    links: z.array(RecipeTemplateAuthoringLinkSchema).default([])
-})
-    .strict();
-const RecipeTemplateBoardColumnLinksOverlaySchema = z
-    .object({
-    id: z.string().min(1),
-    cards: z.array(RecipeTemplateBoardCardLinksOverlaySchema).default([])
-})
-    .strict();
 const RecipeTemplateDetailFieldLinksOverlaySchema = z
     .object({
     label: z.string().min(1),
@@ -525,8 +513,7 @@ const EventPlannerActionsDataSchema = z
     .strict();
 const JobSearchPipelineActionsDataSchema = z
     .object({
-    columns: z.array(RecipeTemplateBoardColumnLinksOverlaySchema).default([]),
-    detail: RecipeTemplateDetailLinksOverlaySchema.optional()
+    cards: z.array(RecipeTemplateCardLinksOverlaySchema).default([])
 })
     .strict();
 const ContentCampaignPlannerActionsDataSchema = z

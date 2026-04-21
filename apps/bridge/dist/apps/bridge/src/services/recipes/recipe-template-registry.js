@@ -5,6 +5,7 @@ function bridgeAction(id, label, handler, options = {}) {
         kind: 'bridge',
         intent: options.intent ?? 'neutral',
         description: options.description,
+        prompt: options.prompt,
         visibility: {
             requiresSelection: options.visibility?.requiresSelection ?? 'none',
             whenBuildReady: options.visibility?.whenBuildReady ?? true,
@@ -51,7 +52,7 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         useCase: 'Compare the same product or adjacent products across multiple merchants.',
         selectionSignals: ['price comparison', 'same product', 'cheapest store', 'merchant grid'],
         slots: [
-            { id: 'offer-grid', kind: 'comparison-table', required: true },
+            { id: 'offer-grid', kind: 'comparison-table', required: false },
             { id: 'operator-note', kind: 'notes' },
         ],
         allowedUpdateOps: ['set_header', 'set_scope_tags', 'upsert_table_rows', 'remove_items', 'append_note_lines'],
@@ -59,9 +60,9 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
     }),
     'shopping-shortlist': withDefaults({
         id: 'shopping-shortlist',
-        name: 'Shopping Shortlist',
-        useCase: 'Curate image-forward candidate items with fast shortlist decisions.',
-        selectionSignals: ['shortlist', 'top picks', 'saved items', 'shopping cards'],
+        name: 'Shopping Results',
+        useCase: 'Show a wide variety of items as small tiled cards with name, photo, and price.',
+        selectionSignals: ['shopping results', 'find me', 'browse items', 'show me options', 'gift ideas'],
         slots: [
             { id: 'shortlist', kind: 'card-grid', required: true },
             { id: 'notes', kind: 'notes' },
@@ -106,7 +107,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'get-hotel-details': bridgeAction('get-hotel-details', 'Get details', 'run_template_followup', {
                 intent: 'primary',
-                visibility: { requiresSelection: 'single' }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Get booking details and current availability for the selected hotel.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             }),
             'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
         },
@@ -124,11 +126,13 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'get-flight-details': bridgeAction('get-flight-details', 'Flight details', 'run_template_followup', {
                 intent: 'primary',
-                visibility: { requiresSelection: 'single' }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Get full details and fare rules for the selected flight itinerary.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             }),
             'continue-booking': bridgeAction('continue-booking', 'Continue booking', 'run_template_followup', {
                 intent: 'primary',
-                visibility: { requiresSelection: 'single' }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Continue booking the selected flight and provide the next steps.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             }),
             'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
         },
@@ -146,7 +150,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'get-trip-details': bridgeAction('get-trip-details', 'Get details', 'run_template_followup', {
                 intent: 'primary',
-                visibility: { requiresSelection: 'single' }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Get details for the selected trip item and suggest next steps.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: true, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             }),
             'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
         },
@@ -164,9 +169,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'run-followup': bridgeAction('run-followup', 'Run follow-up', 'run_template_followup', {
                 intent: 'primary',
-                visibility: {
-                    requiresSelection: 'single'
-                }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Follow up on the selected research item: expand notes, find additional sources, or answer open questions.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: ['raw_data', 'normalized_data'], outboundRequestsAllowed: true, expectedOutput: 'recipe_data_update', timeoutMs: 120_000, retryable: true }
             }),
             'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
         },
@@ -189,16 +193,17 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
             }),
             'remediate-finding': bridgeAction('remediate-finding', 'Remediate', 'run_template_followup', {
                 intent: 'primary',
-                visibility: { requiresSelection: 'single' }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Provide a remediation plan for the selected security finding, including steps, priority, and affected components.', includeInputs: ['selected_items'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             })
         },
         transitions: []
     }),
     'vendor-evaluation-matrix': withDefaults({
         id: 'vendor-evaluation-matrix',
-        name: 'Vendor Evaluation Matrix',
-        useCase: 'Compare software or services against weighted criteria and pricing.',
-        selectionSignals: ['vendor comparison', 'evaluation matrix', 'weighted criteria', 'procurement'],
+        name: 'Comparison Matrix',
+        useCase: 'Compare any set of items (frameworks, vendors, technologies, apps, products) side by side.',
+        selectionSignals: ['comparison matrix', 'compare frameworks', 'compare technologies', 'compare vendors', 'compare apps', 'versus'],
         slots: [
             { id: 'stats', kind: 'stats' },
             { id: 'matrix', kind: 'comparison-table', required: true },
@@ -208,7 +213,8 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'compare-vendor': bridgeAction('compare-vendor', 'Compare in detail', 'run_template_followup', {
                 intent: 'primary',
-                visibility: { requiresSelection: 'single' }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Compare the selected option in depth: strengths, weaknesses, pricing, and a recommendation relative to the other candidates.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             }),
             'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
         },
@@ -248,23 +254,14 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         selectionSignals: ['job listings', 'job postings', 'job search', 'career opportunities', 'open positions'],
         slots: [
             { id: 'stats', kind: 'stats' },
-            { id: 'pipeline', kind: 'split', required: true }
+            { id: 'listings', kind: 'card-grid', required: true }
         ],
-        allowedUpdateOps: ['set_header', 'upsert_board_cards', 'move_board_card', 'set_detail', 'append_note_lines'],
+        allowedUpdateOps: ['set_header', 'upsert_cards', 'remove_items', 'append_note_lines'],
         actions: {
-            'move-job-stage': bridgeAction('move-job-stage', 'Update stage', 'move_template_card_stage', {
+            'find-more-jobs': bridgeAction('find-more-jobs', 'Find more', 'run_template_followup', {
                 intent: 'primary',
-                visibility: {
-                    requiresSelection: 'single'
-                }
-            }),
-            'run-interview-prep': bridgeAction('run-interview-prep', 'Interview prep', 'generate_interview_prep', {
-                intent: 'primary',
-                visibility: {
-                    requiresSelection: 'single'
-                }
-            }),
-            'append-template-note': bridgeAction('append-template-note', 'Add note', 'append_template_note')
+                prompt: { promptTemplate: 'Find additional job listings matching the current search criteria and add them to the grid.', includeInputs: ['original_prompt'], allowedMutations: ['raw_data', 'normalized_data'], outboundRequestsAllowed: true, expectedOutput: 'recipe_data_update', timeoutMs: 90_000, retryable: true }
+            })
         },
         transitions: []
     }),
@@ -280,15 +277,13 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'flesh-out-idea': bridgeAction('flesh-out-idea', 'Flesh out', 'expand_template_idea', {
                 intent: 'primary',
-                visibility: {
-                    requiresSelection: 'single'
-                }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Expand the selected content idea into a full brief with goals, audience, format, key messages, and a draft outline.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: ['raw_data', 'normalized_data'], outboundRequestsAllowed: false, expectedOutput: 'recipe_data_update', timeoutMs: 60_000, retryable: true }
             }),
             'write-campaign-email': bridgeAction('write-campaign-email', 'Write email', 'generate_campaign_email', {
                 intent: 'primary',
-                visibility: {
-                    requiresSelection: 'single'
-                }
+                visibility: { requiresSelection: 'single' },
+                prompt: { promptTemplate: 'Write a complete campaign email for the selected idea: subject line, body copy, and a clear CTA.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
             })
         },
         transitions: []
@@ -306,9 +301,7 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         actions: {
             'save-place': bridgeAction('save-place', 'Save place', 'save_template_place', {
                 intent: 'primary',
-                visibility: {
-                    requiresSelection: 'single'
-                }
+                visibility: { requiresSelection: 'single' }
             }),
             'switch-to-event-planner': bridgeAction('switch-to-event-planner', 'Convert to event plan', 'switch_template', {
                 intent: 'primary',
@@ -345,6 +338,84 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         transitions: []
     })
 };
+let diskRecipeCache = null;
+function coerceRuntimeFromDisk(raw, manifestId) {
+    try {
+        const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : manifestId;
+        const selectionSignals = Array.isArray(raw.selectionSignals) ? raw.selectionSignals.filter((value) => typeof value === 'string') : [];
+        const slots = Array.isArray(raw.slots) ? raw.slots.filter((slot) => typeof slot.id === 'string' && typeof slot.kind === 'string') : [];
+        const allowedUpdateOps = Array.isArray(raw.allowedUpdateOps) ? raw.allowedUpdateOps.filter((op) => typeof op === 'string') : [];
+        const actions = raw.actions && typeof raw.actions === 'object' ? raw.actions : {};
+        const transitions = Array.isArray(raw.transitions) ? raw.transitions : [];
+        if (selectionSignals.length === 0 || slots.length === 0) {
+            return null;
+        }
+        return {
+            id,
+            name: typeof raw.name === 'string' ? raw.name : manifestId,
+            useCase: typeof raw.useCase === 'string' ? raw.useCase : '',
+            enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
+            selectionSignals,
+            slots: slots,
+            allowedUpdateOps,
+            actions: {
+                ...DEFAULT_TEMPLATE_ACTIONS,
+                ...actions
+            },
+            transitions
+        };
+    }
+    catch {
+        return null;
+    }
+}
+async function loadDiskRecipes() {
+    const cache = new Map();
+    try {
+        const { discoverRecipeFolders, getBuiltinRecipesPath, getUserRecipesPath, loadRecipeFromDisk } = await import('./recipe-file-loader');
+        const { default: fs } = await import('node:fs');
+        const { default: path } = await import('node:path');
+        const roots = [getBuiltinRecipesPath(), getUserRecipesPath()];
+        const manifests = discoverRecipeFolders(roots);
+        for (const manifest of manifests) {
+            for (const rootPath of roots) {
+                const folderPath = path.join(rootPath, manifest.id);
+                if (!fs.existsSync(folderPath))
+                    continue;
+                const loaded = loadRecipeFromDisk(folderPath);
+                if (!loaded?.runtime)
+                    continue;
+                const definition = coerceRuntimeFromDisk(loaded.runtime, manifest.id);
+                if (definition) {
+                    cache.set(definition.id, definition);
+                    break;
+                }
+            }
+        }
+    }
+    catch {
+        // If disk loading fails, leave cache empty and rely on the TS registry.
+    }
+    return cache;
+}
+export async function refreshDiskRecipeRegistry() {
+    diskRecipeCache = await loadDiskRecipes();
+}
 export function getRecipeTemplateRuntimeDefinition(templateId) {
+    const fromDisk = diskRecipeCache?.get(templateId);
+    if (fromDisk)
+        return fromDisk;
     return WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY[templateId] ?? null;
+}
+export function listAvailableRecipeTemplateDefinitions() {
+    const merged = new Map();
+    for (const def of Object.values(WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY)) {
+        merged.set(def.id, def);
+    }
+    if (diskRecipeCache) {
+        for (const [id, def] of diskRecipeCache) {
+            merged.set(id, def); // disk overrides TS
+        }
+    }
+    return Array.from(merged.values());
 }

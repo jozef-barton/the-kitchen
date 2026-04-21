@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+function assertValidVersion(version) {
+    if (!VERSION_PATTERN.test(version)) {
+        throw new Error(`Invalid version "${version}": expected major.minor.patch (digits only).`);
+    }
+}
 function versionsDir(folderPath) {
     return path.join(folderPath, 'versions');
 }
@@ -16,6 +22,7 @@ export function listVersions(folderPath) {
     });
 }
 export function getVersion(folderPath, version) {
+    assertValidVersion(version);
     const fp = path.join(versionsDir(folderPath), `v${version}.json`);
     if (!fs.existsSync(fp))
         return null;
@@ -38,6 +45,7 @@ export function saveVersion(folderPath, summary, data) {
     return newVersion;
 }
 export function rollbackToVersion(folderPath, version) {
+    assertValidVersion(version);
     const v = getVersion(folderPath, version);
     if (!v)
         return null;

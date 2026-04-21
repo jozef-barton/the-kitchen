@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AuditEventsResponseSchema, ApiErrorSchema, ApplyRecipeEntryActionRequestSchema, ChatMessageSchema, ExecuteRecipeActionRequestSchema, RECIPE_REFRESH_USER_MESSAGE, ConnectProviderRequestSchema, CreateRecipeRequestSchema, DeleteSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSkillRequestSchema, JobsFreshnessSchema, JobsResponseSchema, ModelProviderResponseSchema, OpenRecipeChatResponseSchema, RenameSessionRequestSchema, SessionDeletionResponseSchema, SessionMessagesResponseSchema, SessionsResponseSchema, RecipeDeletionResponseSchema, RecipeActionSpecSchema, RecipeAnalysisSchema, RecipeAssistantContextSchema, RecipeIntentSchema, RecipeMetadataSchema, RecipeEntryActionResponseSchema, RecipeFallbackStateSchema, RecipeNormalizedDataSchema, RecipeRawDataSchema, RecipeResponseSchema, RecipeSummarySchema, RecipesResponseSchema, RecipeStatusSchema, RecipeContentFormatSchema, RecipeTabSchema, RecipeUiStateSchema, RecipeUserPromptArtifactSchema, RecipeTemplateFillSchema, RecipeTemplateStateSchema, RecipeModelSchema, RecipePatchSchema, SettingsResponseSchema, SkillDeletionResponseSchema, SkillsResponseSchema, TelemetryResponseSchema, ToolExecutionPrepareRequestSchema, ToolHistoryResponseSchema, ToolsResponseSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema } from '@hermes-recipes/protocol';
 import { getRecipeContentFormat, getRecipeContentEntries, getRecipeContentTab, normalizeRecipeTabs, replaceRecipeContentEntries, removeRecipeContentEntries, normalizeRecipeUiState } from '@hermes-recipes/protocol';
-import { HERMES_EXPECTED_VERSION, HermesCliStructuredActionError, classifyStructuredRecipeIntent, resolveHermesChatTimeoutMs } from '../hermes-cli/client';
+import { HERMES_EXPECTED_VERSION, HermesCliStructuredActionError, classifyStructuredRecipeIntent, classifyRecipeMutationIntent, resolveHermesChatTimeoutMs } from '../hermes-cli/client';
 import { bridgeReviewedShellToolId, runReviewedToolExecution } from '../reviewed-tools';
 import { buildRuntimeActivityFromMessage, normalizePersistedSessionMessages } from '../transcript-runtime';
 import { buildRecipeAppletBaseArtifacts } from './recipes/home-recipe-compiler';
@@ -19,7 +19,8 @@ import { synthesizeRecipeAppletManifest } from './recipes/recipe-applet-manifest
 import { collectRecipeAppletNodeKinds } from './recipes/recipe-applet-render-tree';
 import { analyzeRecipeAppletModule } from './recipes/recipe-applet-static-validation';
 import { verifyRecipeApplet } from './recipes/recipe-applet-verifier';
-import { getRecipeTemplateRuntimeDefinition } from './recipes/recipe-template-registry';
+import { getRecipeTemplateRuntimeDefinition, listAvailableRecipeTemplateDefinitions } from './recipes/recipe-template-registry';
+import { parsePartialJsonObject } from './recipes/structured-json-recovery';
 export class BridgeError extends Error {
     statusCode;
     code;
@@ -472,12 +473,98 @@ function extractRecipeOperations(markdown) {
 export const __recipeParsingForTests = {
     extractRecipeOperations
 };
+// Maps classifier labels (from classifyStructuredRecipeIntent) to their target template IDs.
+// Labels are kept in sync with each template's selectionSignals so selection is predictable.
+// This static map is the fallback: we also scan every loaded recipe's selectionSignals at runtime
+// so user/builtin recipes on disk participate in selection without touching this code.
+const INTENT_LABEL_TO_TEMPLATE_ID = {
+    'inbox triage': 'inbox-triage-board',
+    'security review': 'security-review-board',
+    'job search': 'job-search-pipeline',
+    'flight comparison': 'flight-comparison',
+    'travel planner': 'travel-itinerary-planner',
+    'event planner': 'event-planner',
+    'campaign planner': 'content-campaign-planner',
+    'price comparison': 'price-comparison-grid',
+    'restaurant shortlist': 'restaurant-finder',
+    'hotel shortlist': 'hotel-shortlist',
+    'nearby places': 'local-discovery-comparison',
+    'research notebook': 'research-notebook',
+    'comparison matrix': 'vendor-evaluation-matrix',
+    'shopping results': 'shopping-shortlist',
+    'step by step': 'step-by-step-instructions'
+};
+/**
+ * Converts a RecipeMutationIntent (UI change request) into a StructuredRecipeIntent that can be
+ * used to drive the rest of the enrichment pipeline.  The label is chosen to match an existing
+ * recipe selection signal so the optimistic ghost and selection LLM both converge on the right
+ * template.
+ */
+function synthesizeIntentFromMutation(mutation, _currentTemplateId) {
+    // Prefer the mutation's own template hint when available.
+    const targetLabel = mutation.targetTemplateHint
+        ? Object.entries({
+            'inbox-triage-board': 'inbox triage',
+            'security-review-board': 'security review',
+            'job-search-pipeline': 'job search',
+            'flight-comparison': 'flight comparison',
+            'travel-itinerary-planner': 'travel planner',
+            'event-planner': 'event planner',
+            'content-campaign-planner': 'campaign planner',
+            'price-comparison-grid': 'price comparison',
+            'restaurant-finder': 'restaurant shortlist',
+            'hotel-shortlist': 'hotel shortlist',
+            'local-discovery-comparison': 'nearby places',
+            'research-notebook': 'research notebook',
+            'vendor-evaluation-matrix': 'comparison matrix',
+            'shopping-shortlist': 'shopping results',
+            'step-by-step-instructions': 'step by step'
+        }).find(([id]) => id === mutation.targetTemplateHint)?.[1] ?? 'shopping results'
+        : mutation.kind === 'change_layout' && mutation.wantsKanban
+            ? 'job search'
+            : mutation.kind === 'change_visual' || mutation.wantsCards
+                ? 'shopping results'
+                : mutation.wantsTable
+                    ? 'comparison matrix'
+                    : mutation.wantsTimeline
+                        ? 'travel planner'
+                        : 'shopping results';
+    const preferredContentFormat = mutation.wantsTable ? 'table' :
+        mutation.wantsCards || mutation.wantsImages ? 'card' :
+            'card';
+    return {
+        category: 'results',
+        preferredContentFormat,
+        label: targetLabel
+    };
+}
+function resolveTemplateIdForIntentLabel(label) {
+    const direct = INTENT_LABEL_TO_TEMPLATE_ID[label];
+    if (direct)
+        return direct;
+    // Scan every loaded recipe's selectionSignals for a case-insensitive match on the label or any
+    // individual word. Disk-loaded recipes (builtin-recipes/* or ~/.hermes/recipes/*) become
+    // discoverable without editing this file.
+    const normalizedLabel = label.toLowerCase();
+    const definitions = listAvailableRecipeTemplateDefinitions();
+    for (const definition of definitions) {
+        if (!definition.enabled && definition.enabled !== undefined)
+            continue;
+        for (const signal of definition.selectionSignals) {
+            if (signal.toLowerCase() === normalizedLabel) {
+                return definition.id;
+            }
+        }
+    }
+    return null;
+}
 export class HermesBridge {
     options;
     now;
     recipeRoot;
     recipeEnrichmentQueues = new Map();
     pendingRecipeEnrichmentRecipes = new Set();
+    runtimeReadyCache = new Map();
     constructor(options) {
         this.options = options;
         this.now = options.now ?? (() => new Date().toISOString());
@@ -1474,10 +1561,13 @@ export class HermesBridge {
         const formValues = Object.entries(input.formValues)
             .filter(([, value]) => value !== null && String(value).trim().length > 0)
             .map(([key, value]) => `${key}: ${String(value).trim()}`);
+        const taskInstruction = context.action.prompt?.promptTemplate
+            ? context.action.prompt.promptTemplate
+            : `Perform the requested action: ${context.action.label}`;
         return [
             `Update the attached Home recipe using the approved "${context.templateState.templateId}" template flow.`,
             `Recipe title: ${recipe.title}`,
-            `Requested action: ${context.action.label}`,
+            `Task: ${taskInstruction}`,
             selectedItems.length > 0
                 ? `Selected items:\n${selectedItems
                     .map((item) => `- ${item.title}${item.subtitle ? ` — ${item.subtitle}` : ''}${item.footer ? ` (${item.footer})` : ''}`)
@@ -3033,7 +3123,7 @@ export class HermesBridge {
             sections: this.flattenRecipeTemplateSections(input.state.sections)
         });
     }
-    async emitRecipeBuildProgress(build, onEvent, messageOverride) {
+    async emitRecipeBuildProgress(build, onEvent, messageOverride, partialTemplateState) {
         const message = messageOverride ?? build.progressMessage ?? 'Building recipe…';
         await onEvent({
             type: 'progress',
@@ -3044,7 +3134,8 @@ export class HermesBridge {
             type: 'recipe_build_progress',
             recipeId: build.recipeId,
             build,
-            recipe: this.options.database.getRecipe(build.recipeId)
+            recipe: this.options.database.getRecipe(build.recipeId),
+            partialTemplateState: partialTemplateState ?? null
         });
     }
     async advanceRecipeBuild(build, requestPreview, onEvent, update) {
@@ -3092,7 +3183,7 @@ export class HermesBridge {
                 timestamp
             });
         }
-        await this.emitRecipeBuildProgress(nextBuild, onEvent, update.progressMessage);
+        await this.emitRecipeBuildProgress(nextBuild, onEvent, update.progressMessage, update.partialTemplateState ?? null);
         return nextBuild;
     }
     calculateElapsedMs(startedAt, endedAt) {
@@ -3759,8 +3850,13 @@ Retry rules:
         }
         return 'chat';
     }
-    shouldAttemptRecipeAppletUpgrade(requestMode, structuredRecipeIntent, isRetryBuild) {
+    shouldAttemptRecipeAppletUpgrade(requestMode, structuredRecipeIntent, isRetryBuild, mutationIntent) {
         if (isRetryBuild || requestMode === 'recipe_refresh' || requestMode === 'recipe_action') {
+            return true;
+        }
+        // A mutation intent (user asking to change how the current recipe looks) always triggers
+        // enrichment so the template can be switched/updated, even when there's no fresh data intent.
+        if (mutationIntent) {
             return true;
         }
         return Boolean(structuredRecipeIntent &&
@@ -4566,7 +4662,25 @@ ${this.serializeStructuredContext(createRecipeDslRepairExcerpt(input.errors), 6_
     }
     buildRecipeTemplateSelectionPrompt(input) {
         const assistantMarkdown = this.resolveRecipeTemplateAssistantMarkdown(input.context);
-        return `Bridge execution note: Select the approved recipe template for Hermes Home enrichment.
+        const mutationBlock = input.mutationIntent
+            ? `\n\nCRITICAL — USER REQUESTED A RECIPE MUTATION (do not ignore):
+The user explicitly asked to change how their current recipe looks or is structured.
+Mutation kind: ${input.mutationIntent.kind}
+Visual preferences: ${[
+                input.mutationIntent.wantsImages && 'images/photos',
+                input.mutationIntent.wantsCards && 'cards/tiles',
+                input.mutationIntent.wantsCharts && 'charts',
+                input.mutationIntent.wantsTable && 'table/matrix',
+                input.mutationIntent.wantsKanban && 'kanban board',
+                input.mutationIntent.wantsTimeline && 'timeline',
+                input.mutationIntent.wantsFewerItems && 'fewer items',
+                input.mutationIntent.wantsMoreItems && 'more items'
+            ].filter(Boolean).join(', ') || 'none specified'}
+Suggested template: ${input.mutationIntent.targetTemplateHint ?? 'let the selection LLM decide based on preferences'}
+Mutation summary: "${input.mutationIntent.mutationSummary}"
+Action: You MUST select a template that satisfies these preferences. Use mode=switch if changing templates, mode=update if keeping the same template but changing structure.`
+            : '';
+        return `Bridge execution note: Select the approved recipe template for Hermes Home enrichment.${mutationBlock}
 This is an artifact-only post-processing step. The Hermes task is already complete.
 Return only one JSON object and nothing else.
 
@@ -4848,7 +4962,7 @@ Fix instructions:
             recommendedTimeoutMs: recommended
         };
     }
-    async requestRecipeTemplateStage(profile, requestId, prompt, stage, settings) {
+    async requestRecipeTemplateStage(profile, requestId, prompt, stage, settings, onAssistantSnapshot) {
         const timeoutPolicy = this.describeRecipeTemplateStageTimeout(settings, stage);
         const startedAt = this.now();
         try {
@@ -4857,7 +4971,8 @@ Fix instructions:
                 prompt,
                 stage,
                 requestId,
-                timeoutMs: timeoutPolicy.configuredTimeoutMs
+                timeoutMs: timeoutPolicy.configuredTimeoutMs,
+                onAssistantSnapshot: onAssistantSnapshot ?? undefined
             });
             const endedAt = this.now();
             return {
@@ -5392,7 +5507,29 @@ Emit one corrected TSX module now.`;
             actions: [...actionSpec.actions, retryAction]
         });
     }
-    async continueRecipeTemplateEnrichment(profile, session, currentRecipe, requestId, requestPreview, settings, onEvent, context, pipeline, build, generationTrace) {
+    tryDeterministicTemplateSelection(predictedTemplateId, mutationIntent, currentTemplate) {
+        // Only bypass LLM when we have a confident label→template mapping,
+        // no mutation intent (which might want a different template),
+        // and no existing template that differs (which might need a switch decision).
+        if (!predictedTemplateId ||
+            mutationIntent ||
+            (currentTemplate && currentTemplate.templateId !== predictedTemplateId)) {
+            return null;
+        }
+        // Confirm the template actually exists in the registry before bypassing LLM.
+        const templateDef = getRecipeTemplateRuntimeDefinition(predictedTemplateId);
+        if (!templateDef)
+            return null;
+        return {
+            kind: 'recipe_template_selection',
+            schemaVersion: 'recipe_template_selection/v2',
+            templateId: predictedTemplateId,
+            mode: 'fill',
+            reason: 'Template selected deterministically from structured intent classification.',
+            confidence: 1
+        };
+    }
+    async continueRecipeTemplateEnrichment(profile, session, currentRecipe, requestId, requestPreview, settings, onEvent, context, pipeline, build, generationTrace, mutationIntent) {
         if (this.isRecipeEnrichmentSuperseded(currentRecipe.id, requestId)) {
             await this.markRecipeEnrichmentSuperseded({
                 profile,
@@ -5419,151 +5556,187 @@ Emit one corrected TSX module now.`;
         });
         currentRecipe = this.persistRecipePipeline(requestId, nextPipeline, currentRecipe) ?? currentRecipe;
         const currentTemplate = context.currentTemplate;
+        // Win #3: emit an optimistic ghost shell immediately using the predicted template from the
+        // intent label — gives the frontend a skeleton to render before the selection LLM call completes.
+        const predictedTemplateId = resolveTemplateIdForIntentLabel(context.intent.label);
+        const optimisticGhostState = predictedTemplateId
+            ? createRecipeTemplateGhostState({
+                templateId: predictedTemplateId,
+                currentState: currentTemplate ?? null,
+                transitionReason: null,
+                updatedAt: this.now(),
+                phase: 'selected',
+                failureCategory: null,
+                errorMessage: null,
+                failureScope: 'all'
+            }).state
+            : null;
         build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
             phase: 'template_selecting',
-            progressMessage: 'Selecting the recipe template…'
+            progressMessage: 'Selecting the recipe template…',
+            partialTemplateState: optimisticGhostState
         });
-        const selectionTimeoutPolicy = this.describeRecipeTemplateStageTimeout(settings, 'select');
-        const selectionOutcome = await this.runRecipeGenerationStageWithRetries({
-            build,
-            trace: generationTrace,
-            stage: 'template_selection',
-            phase: 'template_selecting',
-            currentTemplateId: currentTemplate?.templateId ?? null,
-            executeAttempt: async (_attemptNumber, priorFailureDetail) => {
-                const selectionResponse = await this.requestRecipeTemplateStage(profile, requestId, this.applyRecipeStageRetryPrompt(this.buildRecipeTemplateSelectionPrompt({
-                    context,
-                    currentRecipe
-                }), priorFailureDetail), 'select', settings);
-                const extractedSelection = extractRecipeTemplateSelectionArtifact(selectionResponse.assistantMarkdown);
-                const normalizedSelection = extractedSelection.rawValue !== null
-                    ? normalizeRecipeTemplateSelection(extractedSelection.rawValue)
-                    : {
-                        selection: null,
-                        errors: extractedSelection.errors,
-                        warnings: extractedSelection.warnings,
-                        repairs: {
-                            droppedKeys: [],
-                            aliasMappings: [],
-                            defaultedFields: [],
-                            normalizedValues: []
-                        }
-                    };
-                const selectionErrors = normalizedSelection.selection
-                    ? validateRecipeTemplateSelection(normalizedSelection.selection)
-                    : [];
-                const allErrors = [...extractedSelection.errors, ...normalizedSelection.errors, ...selectionErrors];
-                const isValid = normalizedSelection.selection && normalizedSelection.errors.length === 0 && selectionErrors.length === 0;
-                // Same-session correction: if invalid but we have a sessionId and no request-level error, try correction
-                let correctionResult = null;
-                let finalValue = isValid ? normalizedSelection.selection : null;
-                if (!isValid &&
-                    selectionResponse.runtimeSessionId &&
-                    !selectionResponse.errorDetail &&
-                    !selectionResponse.failureReason) {
-                    const invalidJson = this.buildRecipeStageInvalidJson({
-                        assistantMarkdown: selectionResponse.assistantMarkdown,
-                        rawValue: extractedSelection.rawValue
-                    });
-                    const correction = await this.attemptSameSessionCorrection({
-                        profile,
-                        requestId,
-                        sessionId: selectionResponse.runtimeSessionId,
-                        stage: 'select',
-                        templateId: normalizedSelection.selection?.templateId ?? 'research-notebook',
-                        invalidJson,
-                        validationErrors: allErrors.length > 0 ? allErrors : ['Template selection did not match required schema.'],
-                        contractPacket: createRecipeTemplateSelectionPacket(),
-                        settings,
-                        build,
-                        extractAndValidate: (markdown) => {
-                            const extracted = extractRecipeTemplateSelectionArtifact(markdown);
-                            const normalized = extracted.rawValue !== null
-                                ? normalizeRecipeTemplateSelection(extracted.rawValue)
-                                : { selection: null, errors: extracted.errors, warnings: [], repairs: { droppedKeys: [], aliasMappings: [], defaultedFields: [], normalizedValues: [] } };
-                            const validationErrors = normalized.selection
-                                ? validateRecipeTemplateSelection(normalized.selection)
-                                : [];
-                            const valid = normalized.selection && normalized.errors.length === 0 && validationErrors.length === 0;
-                            return {
-                                value: valid ? normalized.selection : null,
-                                errors: [...extracted.errors, ...normalized.errors, ...validationErrors],
-                                invalidJson: extracted.rawValue ? JSON.stringify(extracted.rawValue) : null
-                            };
-                        }
-                    });
-                    correctionResult = correction;
-                    if (correction.correctionFixed && correction.value) {
-                        finalValue = correction.value;
-                    }
-                }
-                const detail = (selectionResponse.errorDetail ??
-                    (finalValue ? '' : [...allErrors, ...(correctionResult?.correctionErrors ?? [])].join('; '))) || 'Template selection returned no valid JSON artifact.';
-                return {
-                    value: finalValue,
-                    assistantMarkdown: selectionResponse.assistantMarkdown,
-                    detail,
-                    startedAt: selectionResponse.startedAt,
-                    endedAt: selectionResponse.endedAt,
-                    elapsedMs: selectionResponse.elapsedMs,
-                    configuredTimeoutMs: selectionResponse.configuredTimeoutMs,
-                    recommendedTimeoutMs: selectionResponse.recommendedTimeoutMs,
-                    failureReason: selectionResponse.failureReason,
-                    failureKind: finalValue
-                        ? null
-                        : selectionResponse.errorDetail
-                            ? this.mapRecipeRequestFailureKind(detail)
-                            : extractedSelection.failureKind
-                                ? this.mapRecipeStructuredFailureKind(extractedSelection.failureKind, detail)
-                                : 'validation_failed',
-                    retryable: true,
-                    autoRecoveryAttempted: extractedSelection.parserDiagnostics.recoveryAttempted,
-                    autoRecoverySucceeded: extractedSelection.parserDiagnostics.recoverySucceeded,
-                    templateId: finalValue?.templateId ?? normalizedSelection.selection?.templateId ?? null,
-                    currentTemplateId: currentTemplate?.templateId ?? null,
-                    parserDiagnostics: extractedSelection.parserDiagnostics,
-                    normalizationSummary: normalizedSelection.repairs,
-                    sameSessionCorrections: correctionResult?.correctionTurns ?? 0,
-                    sameSessionCorrectionErrors: correctionResult?.correctionErrors ?? [],
-                    sameSessionCorrectionFixed: correctionResult?.correctionFixed ?? false,
-                    sameSessionSessionId: selectionResponse.runtimeSessionId
-                };
-            }
-        });
-        if (!selectionOutcome.ok) {
-            const failure = this.classifyRecipeTemplateFailure({
-                kind: 'selection',
-                detail: selectionOutcome.detail,
-                settings,
-                configuredTimeoutMsOverride: selectionOutcome.observation.configuredTimeoutMs ?? selectionTimeoutPolicy.configuredTimeoutMs,
-                recommendedTimeoutMsOverride: selectionOutcome.observation.recommendedTimeoutMs ?? selectionTimeoutPolicy.recommendedTimeoutMs,
-                failureReason: selectionOutcome.failureReason
-            });
-            return this.finalizeRecipeAppletBuildFailure({
-                profile,
-                session,
-                currentRecipe,
+        const deterministicSelection = this.tryDeterministicTemplateSelection(predictedTemplateId, mutationIntent, currentTemplate);
+        let selection;
+        if (deterministicSelection) {
+            selection = deterministicSelection;
+            this.persistRecipeBuildArtifact(build, selection, this.now());
+            this.recordTelemetry({
+                profileId: profile.id,
+                sessionId: session.id,
                 requestId,
-                requestPreview,
-                build,
-                pipeline: nextPipeline,
-                onEvent,
-                failure,
-                failureEvent: {
-                    code: 'RECIPE_TEMPLATE_SELECTION_FAILED',
-                    message: 'Recipe template selection failed.'
-                },
-                detail: selectionOutcome.detail,
-                pipelineEventMessage: `Recipe generation failed for "${currentRecipe.title}" because Hermes did not select a valid approved template.`,
-                recipeGenerationTrace: generationTrace
+                severity: 'info',
+                category: 'recipes',
+                code: 'RECIPE_TEMPLATE_SELECTION_DETERMINISTIC',
+                message: 'Template selected deterministically; skipped LLM selection stage.',
+                detail: `Intent label "${context.intent.label}" mapped deterministically to template "${deterministicSelection.templateId}".`,
+                payload: { templateId: deterministicSelection.templateId, intentLabel: context.intent.label }
             });
         }
-        const selection = selectionOutcome.value;
+        else {
+            const selectionTimeoutPolicy = this.describeRecipeTemplateStageTimeout(settings, 'select');
+            const selectionOutcome = await this.runRecipeGenerationStageWithRetries({
+                build,
+                trace: generationTrace,
+                stage: 'template_selection',
+                phase: 'template_selecting',
+                currentTemplateId: currentTemplate?.templateId ?? null,
+                executeAttempt: async (_attemptNumber, priorFailureDetail) => {
+                    const selectionResponse = await this.requestRecipeTemplateStage(profile, requestId, this.applyRecipeStageRetryPrompt(this.buildRecipeTemplateSelectionPrompt({
+                        context,
+                        currentRecipe,
+                        mutationIntent
+                    }), priorFailureDetail), 'select', settings);
+                    const extractedSelection = extractRecipeTemplateSelectionArtifact(selectionResponse.assistantMarkdown);
+                    const normalizedSelection = extractedSelection.rawValue !== null
+                        ? normalizeRecipeTemplateSelection(extractedSelection.rawValue)
+                        : {
+                            selection: null,
+                            errors: extractedSelection.errors,
+                            warnings: extractedSelection.warnings,
+                            repairs: {
+                                droppedKeys: [],
+                                aliasMappings: [],
+                                defaultedFields: [],
+                                normalizedValues: []
+                            }
+                        };
+                    const selectionErrors = normalizedSelection.selection
+                        ? validateRecipeTemplateSelection(normalizedSelection.selection)
+                        : [];
+                    const allErrors = [...extractedSelection.errors, ...normalizedSelection.errors, ...selectionErrors];
+                    const isValid = normalizedSelection.selection && normalizedSelection.errors.length === 0 && selectionErrors.length === 0;
+                    // Same-session correction: if invalid but we have a sessionId and no request-level error, try correction
+                    let correctionResult = null;
+                    let finalValue = isValid ? normalizedSelection.selection : null;
+                    if (!isValid &&
+                        selectionResponse.runtimeSessionId &&
+                        !selectionResponse.errorDetail &&
+                        !selectionResponse.failureReason) {
+                        const invalidJson = this.buildRecipeStageInvalidJson({
+                            assistantMarkdown: selectionResponse.assistantMarkdown,
+                            rawValue: extractedSelection.rawValue
+                        });
+                        const correction = await this.attemptSameSessionCorrection({
+                            profile,
+                            requestId,
+                            sessionId: selectionResponse.runtimeSessionId,
+                            stage: 'select',
+                            templateId: normalizedSelection.selection?.templateId ?? 'research-notebook',
+                            invalidJson,
+                            validationErrors: allErrors.length > 0 ? allErrors : ['Template selection did not match required schema.'],
+                            contractPacket: createRecipeTemplateSelectionPacket(),
+                            settings,
+                            build,
+                            extractAndValidate: (markdown) => {
+                                const extracted = extractRecipeTemplateSelectionArtifact(markdown);
+                                const normalized = extracted.rawValue !== null
+                                    ? normalizeRecipeTemplateSelection(extracted.rawValue)
+                                    : { selection: null, errors: extracted.errors, warnings: [], repairs: { droppedKeys: [], aliasMappings: [], defaultedFields: [], normalizedValues: [] } };
+                                const validationErrors = normalized.selection
+                                    ? validateRecipeTemplateSelection(normalized.selection)
+                                    : [];
+                                const valid = normalized.selection && normalized.errors.length === 0 && validationErrors.length === 0;
+                                return {
+                                    value: valid ? normalized.selection : null,
+                                    errors: [...extracted.errors, ...normalized.errors, ...validationErrors],
+                                    invalidJson: extracted.rawValue ? JSON.stringify(extracted.rawValue) : null
+                                };
+                            }
+                        });
+                        correctionResult = correction;
+                        if (correction.correctionFixed && correction.value) {
+                            finalValue = correction.value;
+                        }
+                    }
+                    const detail = (selectionResponse.errorDetail ??
+                        (finalValue ? '' : [...allErrors, ...(correctionResult?.correctionErrors ?? [])].join('; '))) || 'Template selection returned no valid JSON artifact.';
+                    return {
+                        value: finalValue,
+                        assistantMarkdown: selectionResponse.assistantMarkdown,
+                        detail,
+                        startedAt: selectionResponse.startedAt,
+                        endedAt: selectionResponse.endedAt,
+                        elapsedMs: selectionResponse.elapsedMs,
+                        configuredTimeoutMs: selectionResponse.configuredTimeoutMs,
+                        recommendedTimeoutMs: selectionResponse.recommendedTimeoutMs,
+                        failureReason: selectionResponse.failureReason,
+                        failureKind: finalValue
+                            ? null
+                            : selectionResponse.errorDetail
+                                ? this.mapRecipeRequestFailureKind(detail)
+                                : extractedSelection.failureKind
+                                    ? this.mapRecipeStructuredFailureKind(extractedSelection.failureKind, detail)
+                                    : 'validation_failed',
+                        retryable: true,
+                        autoRecoveryAttempted: extractedSelection.parserDiagnostics.recoveryAttempted,
+                        autoRecoverySucceeded: extractedSelection.parserDiagnostics.recoverySucceeded,
+                        templateId: finalValue?.templateId ?? normalizedSelection.selection?.templateId ?? null,
+                        currentTemplateId: currentTemplate?.templateId ?? null,
+                        parserDiagnostics: extractedSelection.parserDiagnostics,
+                        normalizationSummary: normalizedSelection.repairs,
+                        sameSessionCorrections: correctionResult?.correctionTurns ?? 0,
+                        sameSessionCorrectionErrors: correctionResult?.correctionErrors ?? [],
+                        sameSessionCorrectionFixed: correctionResult?.correctionFixed ?? false,
+                        sameSessionSessionId: selectionResponse.runtimeSessionId
+                    };
+                }
+            });
+            if (!selectionOutcome.ok) {
+                const failure = this.classifyRecipeTemplateFailure({
+                    kind: 'selection',
+                    detail: selectionOutcome.detail,
+                    settings,
+                    configuredTimeoutMsOverride: selectionOutcome.observation.configuredTimeoutMs ?? selectionTimeoutPolicy.configuredTimeoutMs,
+                    recommendedTimeoutMsOverride: selectionOutcome.observation.recommendedTimeoutMs ?? selectionTimeoutPolicy.recommendedTimeoutMs,
+                    failureReason: selectionOutcome.failureReason
+                });
+                return this.finalizeRecipeAppletBuildFailure({
+                    profile,
+                    session,
+                    currentRecipe,
+                    requestId,
+                    requestPreview,
+                    build,
+                    pipeline: nextPipeline,
+                    onEvent,
+                    failure,
+                    failureEvent: {
+                        code: 'RECIPE_TEMPLATE_SELECTION_FAILED',
+                        message: 'Recipe template selection failed.'
+                    },
+                    detail: selectionOutcome.detail,
+                    pipelineEventMessage: `Recipe generation failed for "${currentRecipe.title}" because Hermes did not select a valid approved template.`,
+                    recipeGenerationTrace: generationTrace
+                });
+            }
+            selection = selectionOutcome.value;
+            this.persistRecipeBuildArtifact(build, selection, this.now());
+        }
         const normalizedMode = this.resolveRecipeTemplateSelectionMode(selection, currentTemplate);
         const transitionDefinition = currentTemplate && currentTemplate.templateId !== selection.templateId
             ? getRecipeTemplateRuntimeDefinition(currentTemplate.templateId)?.transitions.find((transition) => transition.targetTemplateId === selection.templateId) ?? null
             : null;
-        this.persistRecipeBuildArtifact(build, selection, this.now());
         if (normalizedMode === 'switch' && currentTemplate && !transitionDefinition) {
             const switchDetail = `Template transition ${currentTemplate.templateId} -> ${selection.templateId} is not supported.`;
             const failure = this.classifyRecipeTemplateFailure({
@@ -5646,15 +5819,53 @@ Emit one corrected TSX module now.`;
         let nextTemplateState = null;
         let nextActionSpec = null;
         let compiledTemplate = null;
+        // Phase 4: abort enrichment between stages if a newer request superseded this one.
+        if (this.isRecipeEnrichmentSuperseded(currentRecipe.id, requestId)) {
+            const supersededBuild = (await this.markRecipeEnrichmentSuperseded({ profile, session, requestId, requestPreview, recipeId: currentRecipe.id, build }), this.options.database.getRecipeBuild(build.id) ?? build);
+            this.recordRecipeGenerationSummary(supersededBuild, generationTrace);
+            return { recipe: currentRecipe, pipeline: nextPipeline, build: supersededBuild };
+        }
+        // Win #2: confirmed ghost state (correct template ID) sent immediately after selection
         build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
             phase: 'template_text_generating',
             progressMessage: normalizedMode === 'switch'
                 ? 'Generating the staged template text for the template switch…'
-                : 'Generating the staged template text and labels…'
+                : 'Generating the staged template text and labels…',
+            partialTemplateState: latestTemplatePreviewState
         });
         let latestTextFailure = {
             invalidJson: '{}',
             validationErrors: ['The staged template text artifact was invalid.']
+        };
+        // Streaming callback for the text stage: emit partial template states as the LLM writes JSON.
+        // Throttled to once per 400ms to avoid flooding the SSE stream.
+        let lastPartialEmitAt = 0;
+        const PARTIAL_EMIT_INTERVAL_MS = 400;
+        const emitPartialTextState = async (markdown) => {
+            const now = Date.now();
+            if (now - lastPartialEmitAt < PARTIAL_EMIT_INTERVAL_MS)
+                return;
+            lastPartialEmitAt = now;
+            try {
+                const partial = parsePartialJsonObject(markdown);
+                if (!partial)
+                    return;
+                const partialNorm = normalizeRecipeTemplateText({
+                    templateId: selection.templateId,
+                    rawValue: partial,
+                    assistantSummary: context.summary?.subtitle ?? context.assistantContext.summary ?? null
+                });
+                if (!partialNorm.text)
+                    return;
+                const partialFill = createRecipeTemplateFillFromText(partialNorm.text);
+                const partialState = persistTemplatePreviewState('template_text_generation', 'text', partialFill);
+                if (partialState) {
+                    await this.emitRecipeBuildProgress(build, onEvent, 'Building recipe…', partialState);
+                }
+            }
+            catch {
+                // Ignore partial parse errors — they are expected for mid-stream JSON chunks.
+            }
         };
         const textOutcome = await this.runRecipeGenerationStageWithRetries({
             build,
@@ -5668,7 +5879,7 @@ Emit one corrected TSX module now.`;
                     context,
                     currentRecipe,
                     selection
-                }), priorFailureDetail), 'text', settings);
+                }), priorFailureDetail), 'text', settings, emitPartialTextState);
                 const extractedText = extractRecipeTemplateTextArtifact(textResponse.assistantMarkdown);
                 const normalizedText = extractedText.rawValue !== null
                     ? normalizeRecipeTemplateText({
@@ -5966,11 +6177,19 @@ Emit one corrected TSX module now.`;
         this.persistRecipeBuildArtifact(build, stagedTextArtifact, this.now());
         latestTemplatePreviewState =
             persistTemplatePreviewState('template_text_generation', 'text', createRecipeTemplateFillFromText(stagedTextArtifact)) ?? latestTemplatePreviewState;
+        // Phase 4: check supersession before starting the hydration stage.
+        if (this.isRecipeEnrichmentSuperseded(currentRecipe.id, requestId)) {
+            const supersededBuild = (await this.markRecipeEnrichmentSuperseded({ profile, session, requestId, requestPreview, recipeId: currentRecipe.id, build }), this.options.database.getRecipeBuild(build.id) ?? build);
+            this.recordRecipeGenerationSummary(supersededBuild, generationTrace);
+            return { recipe: currentRecipe, pipeline: nextPipeline, build: supersededBuild };
+        }
+        // Win #1: text-labeled shell sent — user sees correct section structure before content fills in
         build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
             phase: 'template_hydrating',
             progressMessage: normalizedMode === 'switch'
                 ? 'Hydrating the selected template with concrete content for the switch…'
-                : 'Hydrating the selected template with concrete content…'
+                : 'Hydrating the selected template with concrete content…',
+            partialTemplateState: latestTemplatePreviewState
         });
         let latestHydrationFailure = {
             invalidJson: '{}',
@@ -6226,9 +6445,18 @@ Emit one corrected TSX module now.`;
         this.persistRecipeBuildArtifact(build, hydrationArtifact, this.now());
         latestTemplatePreviewState =
             persistTemplatePreviewState('template_hydration', 'hydrating', assembledFill) ?? latestTemplatePreviewState;
+        // Phase 4: check supersession before starting the actions stage.
+        if (this.isRecipeEnrichmentSuperseded(currentRecipe.id, requestId)) {
+            const supersededBuild = (await this.markRecipeEnrichmentSuperseded({ profile, session, requestId, requestPreview, recipeId: currentRecipe.id, build }), this.options.database.getRecipeBuild(build.id) ?? build);
+            this.recordRecipeGenerationSummary(supersededBuild, generationTrace);
+            return { recipe: currentRecipe, pipeline: nextPipeline, build: supersededBuild };
+        }
+        // Win #4: hydrated content streamed to frontend before action-button stage runs —
+        // user sees all card/row data immediately rather than waiting for the full pipeline.
         build = await this.advanceRecipeBuild(build, requestPreview, onEvent, {
             phase: 'template_actions_generating',
-            progressMessage: 'Generating the staged template actions and buttons…'
+            progressMessage: 'Generating the staged template actions and buttons…',
+            partialTemplateState: latestTemplatePreviewState
         });
         latestTemplatePreviewState =
             persistTemplatePreviewState('template_actions_generation', 'actions', assembledFill) ?? latestTemplatePreviewState;
@@ -7677,7 +7905,7 @@ Emit one corrected TSX module now.`;
             buildPhase: nextBuild.phase,
             asyncEnrichment: true
         });
-        await this.continueRecipeTemplateEnrichment(input.profile, input.session, this.options.database.getRecipe(updatedRecipe.id) ?? updatedRecipe, input.requestId, input.requestPreview, input.settings, onEvent, context, pipeline, nextBuild, generationTrace);
+        await this.continueRecipeTemplateEnrichment(input.profile, input.session, this.options.database.getRecipe(updatedRecipe.id) ?? updatedRecipe, input.requestId, input.requestPreview, input.settings, onEvent, context, pipeline, nextBuild, generationTrace, input.mutationIntent ?? null);
     }
     async runQueuedRecipeAppletEnrichmentFromArtifacts(input, onEvent = async () => undefined) {
         const currentRecipe = this.options.database.getRecipe(input.recipeId);
@@ -8539,23 +8767,36 @@ Emit one corrected TSX module now.`;
         void createdRecipeIds;
         return null;
     }
-    classifyRequiredStructuredRecipeIntent(content, hasRecipeContext) {
+    classifyRequiredStructuredRecipeIntent(content, hasRecipeContext, attachedTemplateId) {
         const structuredIntent = classifyStructuredRecipeIntent(content, hasRecipeContext);
         if (structuredIntent) {
-            return structuredIntent;
+            return { intent: structuredIntent, mutationIntent: null };
         }
         if (/\b(create|build|make)\b.*\b(recipe|recipe|table|card|cards|markdown|note|board|tracker)\b/i.test(content)) {
             return {
-                category: 'results',
-                preferredContentFormat: /\btable\b/i.test(content)
-                    ? 'table'
-                    : /\b(markdown|note|notes)\b/i.test(content)
-                        ? 'markdown'
-                        : 'card',
-                label: 'recipe request'
+                intent: {
+                    category: 'results',
+                    preferredContentFormat: /\btable\b/i.test(content)
+                        ? 'table'
+                        : /\b(markdown|note|notes)\b/i.test(content)
+                            ? 'markdown'
+                            : 'card',
+                    label: 'recipe request'
+                },
+                mutationIntent: null
             };
         }
-        return null;
+        // When a recipe is already rendered, check for mutation intent (user asking to change how it looks).
+        if (hasRecipeContext && attachedTemplateId) {
+            const mutationIntent = classifyRecipeMutationIntent(content, attachedTemplateId);
+            if (mutationIntent) {
+                // Synthesize a StructuredRecipeIntent from the mutation intent so the rest of the pipeline
+                // (shouldAttemptRecipeAppletUpgrade, optimistic ghost, selection prompt) works correctly.
+                const synthesizedIntent = synthesizeIntentFromMutation(mutationIntent, attachedTemplateId);
+                return { intent: synthesizedIntent, mutationIntent };
+            }
+        }
+        return { intent: null, mutationIntent: null };
     }
     async emitRecipeEvent(event, onEvent, recipe) {
         await onEvent({
@@ -9272,52 +9513,21 @@ Emit one corrected TSX module now.`;
             throw new BridgeError(404, 'RECIPE_ENTRY_NOT_FOUND', 'The requested recipe entries were not found.');
         }
         const removedEntryIds = [];
-        const deletedSourceEntryIds = [];
         if (parsedInput.action === 'delete_source') {
-            const profile = await this.ensureProfile(parsedInput.profileId);
-            const gmailMessageTargets = targetEntries
-                .filter((entry) => entry.source?.integration === 'google-workspace' && entry.source.kind === 'gmail_message')
-                .map((entry) => ({
-                entryId: entry.id,
-                resourceId: entry.source.resourceId
-            }));
-            if (gmailMessageTargets.length !== targetEntries.length) {
-                throw new BridgeError(400, 'RECIPE_ENTRY_SOURCE_UNSUPPORTED', 'One or more selected entries do not support direct source deletion.');
-            }
-            try {
-                const deletedMessageIds = await this.options.hermesCli.deleteGmailMessages(profile, gmailMessageTargets.map((target) => target.resourceId));
-                deletedSourceEntryIds.push(...gmailMessageTargets.filter((target) => deletedMessageIds.includes(target.resourceId)).map((target) => target.entryId));
-            }
-            catch (error) {
-                const detail = error instanceof Error ? error.message : 'Deleting the selected source items failed.';
-                this.recordTelemetry({
-                    profileId: parsedInput.profileId,
-                    sessionId: currentRecipe.primarySessionId,
-                    requestId: null,
-                    severity: 'error',
-                    category: 'recipes',
-                    code: 'RECIPE_ENTRY_SOURCE_DELETE_FAILED',
-                    message: `Failed to delete source items for recipe ${currentRecipe.id}.`,
-                    detail,
-                    payload: {
-                        entryIds: targetEntryIds,
-                        recipeId: currentRecipe.id,
-                        sourceKinds: targetEntries.map((entry) => entry.source?.kind ?? 'unknown')
-                    }
-                });
-                throw new BridgeError(502, 'RECIPE_ENTRY_SOURCE_DELETE_FAILED', 'Could not delete the selected emails. Check the logs for more information.');
-            }
+            // Direct outbound API calls are not permitted from action handlers.
+            // Source deletion must go through a Hermes prompt action so the agent
+            // can reason about the operation, apply safe guards, and respect auth scopes.
+            throw new BridgeError(400, 'RECIPE_ACTION_OUTBOUND_NOT_ALLOWED', 'Source deletion must be performed through a prompt-based template action, not a direct entry action. Use a run_template_followup action configured with outboundRequestsAllowed: true.');
         }
-        removedEntryIds.push(...(parsedInput.action === 'remove' ? targetEntryIds : deletedSourceEntryIds));
+        // The 'delete_source' branch throws above, so parsedInput.action is narrowed to 'remove' here.
+        removedEntryIds.push(...targetEntryIds);
         const nextTabs = removeRecipeContentEntries(currentRecipe, removedEntryIds);
         const updatedRecipe = this.options.database.updateRecipe(recipeId, {
             profileId: parsedInput.profileId,
             tabs: nextTabs,
-            lastUpdatedBy: parsedInput.action === 'delete_source' ? 'user' : 'user',
+            lastUpdatedBy: 'user',
             metadata: normalizeRecipeMetadata({
-                changeSummary: parsedInput.action === 'delete_source'
-                    ? `Deleted ${removedEntryIds.length} email ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from the recipe.`
-                    : `Removed ${removedEntryIds.length} ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from the recipe.`
+                changeSummary: `Removed ${removedEntryIds.length} ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from the recipe.`
             }, currentRecipe.metadata)
         });
         if (!updatedRecipe) {
@@ -9329,19 +9539,15 @@ Emit one corrected TSX module now.`;
             requestId: null,
             severity: 'info',
             category: 'recipes',
-            code: parsedInput.action === 'delete_source' ? 'RECIPE_ENTRY_SOURCE_DELETED' : 'RECIPE_ENTRY_REMOVED',
-            message: parsedInput.action === 'delete_source'
-                ? `Deleted ${removedEntryIds.length} email ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from recipe ${currentRecipe.id}.`
-                : `Removed ${removedEntryIds.length} ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from recipe ${currentRecipe.id}.`,
+            code: 'RECIPE_ENTRY_REMOVED',
+            message: `Removed ${removedEntryIds.length} ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from recipe ${currentRecipe.id}.`,
             detail: currentRecipe.title,
             payload: {
                 recipeId: currentRecipe.id,
                 entryIds: removedEntryIds
             }
         });
-        this.createRecipeEvent(updatedRecipe, 'updated', parsedInput.action === 'delete_source'
-            ? `Deleted ${removedEntryIds.length} email ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from "${updatedRecipe.title}".`
-            : `Removed ${removedEntryIds.length} ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from "${updatedRecipe.title}".`, 'user', updatedRecipe.primarySessionId, {
+        this.createRecipeEvent(updatedRecipe, 'updated', `Removed ${removedEntryIds.length} ${removedEntryIds.length === 1 ? 'entry' : 'entries'} from "${updatedRecipe.title}".`, 'user', updatedRecipe.primarySessionId, {
             contentFormat: getRecipeContentFormat(updatedRecipe),
             changeSummary: updatedRecipe.metadata.changeSummary
         });
@@ -9349,7 +9555,7 @@ Emit one corrected TSX module now.`;
             profileId: parsedInput.profileId,
             action: parsedInput.action,
             removedEntryIds,
-            deletedSourceEntryIds,
+            deletedSourceEntryIds: [],
             recipe: this.ensureRecipe(parsedInput.profileId, updatedRecipe.id),
             events: this.options.database.listRecipeEvents(parsedInput.profileId, {
                 limit: 50,
@@ -9404,11 +9610,19 @@ Emit one corrected TSX module now.`;
         });
     }
     async ensureRuntimeReady(profileId) {
+        const cached = this.runtimeReadyCache.get(profileId);
+        if (cached && Date.now() < cached.expiresAtMs) {
+            return cached.readiness;
+        }
         const runtimeState = await this.getModelProviderState(profileId, null);
         if (!runtimeState.runtimeReadiness.ready) {
             throw new BridgeError(409, 'RUNTIME_CONFIG_REQUIRED', runtimeState.runtimeReadiness.message);
         }
+        this.runtimeReadyCache.set(profileId, { readiness: runtimeState.runtimeReadiness, expiresAtMs: Date.now() + 30_000 });
         return runtimeState.runtimeReadiness;
+    }
+    invalidateRuntimeReadyCache(profileId) {
+        this.runtimeReadyCache.delete(profileId);
     }
     async getModelProviderState(profileId, inspectedProviderId) {
         const profile = await this.ensureProfile(profileId);
@@ -9465,6 +9679,7 @@ Emit one corrected TSX module now.`;
         try {
             const config = await this.options.hermesCli.updateRuntimeModelConfig(profile, parsedInput);
             this.options.database.upsertRuntimeModelConfig(config);
+            this.invalidateRuntimeReadyCache(profile.id);
             return this.getModelProviderState(profile.id, parsedInput.provider ?? config.provider);
         }
         catch (error) {
@@ -9491,6 +9706,7 @@ Emit one corrected TSX module now.`;
         const profile = await this.ensureProfile(parsedInput.profileId);
         try {
             const runtimeState = await this.options.hermesCli.connectProvider(profile, parsedInput);
+            this.invalidateRuntimeReadyCache(profile.id);
             this.persistRuntimeProviderState(profile.id, runtimeState);
             this.options.database.appendAuditEvent({
                 id: `audit-${randomUUID()}`,
@@ -9533,6 +9749,7 @@ Emit one corrected TSX module now.`;
         const profile = await this.ensureProfile(input.profileId);
         try {
             const runtimeState = await this.options.hermesCli.beginProviderAuth(profile, input.provider);
+            this.invalidateRuntimeReadyCache(profile.id);
             this.persistRuntimeProviderState(profile.id, runtimeState);
             return this.buildModelProviderResponseFromRuntimeState(runtimeState, {
                 status: 'connected',
@@ -9716,7 +9933,10 @@ Emit one corrected TSX module now.`;
         const structuredIntentPrompt = requestMode === 'recipe_refresh'
             ? (refreshContext?.intentPrompt ?? input.intentContent ?? input.transcriptContent)
             : (input.intentContent ?? input.transcriptContent);
-        const structuredRecipeIntent = this.classifyRequiredStructuredRecipeIntent(structuredIntentPrompt, Boolean(activeRecipe));
+        const attachedTemplateId = activeRecipe?.dynamic?.recipeTemplate?.templateId ?? null;
+        const intentClassification = this.classifyRequiredStructuredRecipeIntent(structuredIntentPrompt, Boolean(activeRecipe), attachedTemplateId);
+        const structuredRecipeIntent = intentClassification.intent;
+        const mutationIntent = intentClassification.mutationIntent;
         const settings = this.options.database.getSettings();
         const transcriptContent = input.transcriptContent.trim();
         const hermesContent = (input.hermesContent ?? transcriptContent).trim();
@@ -9796,6 +10016,72 @@ Emit one corrected TSX module now.`;
                 createdAt: this.now()
             });
         }
+        // Phase 3 quick win: emit an early optimistic ghost as soon as intent is known — before the
+        // chat LLM even starts.  This gives the frontend a skeleton within ~50ms of the user hitting
+        // send, rather than waiting for the full chat → baseline → queue → enrichment pipeline.
+        //
+        // Conditions: structured intent must resolve to a known template, a recipe must already exist
+        // (we're updating), and we must not be in refresh/action mode (those have their own flows).
+        const earlyGhostTemplateId = structuredRecipeIntent && requestMode === 'chat' && activeRecipe
+            ? resolveTemplateIdForIntentLabel(structuredRecipeIntent.label)
+            : null;
+        if (earlyGhostTemplateId && activeRecipe) {
+            const earlyGhostState = createRecipeTemplateGhostState({
+                templateId: earlyGhostTemplateId,
+                currentState: activeRecipe.dynamic?.recipeTemplate ?? null,
+                transitionReason: null,
+                updatedAt: this.now(),
+                phase: 'selected',
+                failureCategory: null,
+                errorMessage: null,
+                failureScope: 'all'
+            }).state;
+            if (earlyGhostState) {
+                await onEvent({
+                    type: 'recipe_build_progress',
+                    recipeId: activeRecipe.id,
+                    build: {
+                        id: `early-ghost-${requestId}`,
+                        recipeId: activeRecipe.id,
+                        profileId: profile.id,
+                        sessionId: session.id,
+                        buildVersion: 0,
+                        buildKind: 'template_enrichment',
+                        triggerKind: 'chat',
+                        triggerRequestId: requestId,
+                        triggerActionId: null,
+                        phase: 'template_selecting',
+                        progressMessage: 'Preparing recipe template…',
+                        retryCount: 0,
+                        startedAt: this.now(),
+                        updatedAt: this.now(),
+                        completedAt: null,
+                        errorCode: null,
+                        errorMessage: null,
+                        errorDetail: null,
+                        failureCategory: null,
+                        failureStage: null,
+                        userFacingMessage: null,
+                        retryable: true,
+                        configuredTimeoutMs: null
+                    },
+                    recipe: activeRecipe,
+                    partialTemplateState: earlyGhostState
+                });
+                this.recordTelemetry({
+                    profileId: profile.id,
+                    sessionId: session.id,
+                    requestId,
+                    severity: 'info',
+                    category: 'recipes',
+                    code: 'RECIPE_EARLY_GHOST_EMITTED',
+                    message: 'Emitted early optimistic ghost state before chat LLM started.',
+                    detail: `Predicted template: ${earlyGhostTemplateId}`,
+                    payload: { templateId: earlyGhostTemplateId, recipeId: activeRecipe.id },
+                    createdAt: this.now()
+                });
+            }
+        }
         try {
             const chatResult = await this.options.hermesCli.streamChat({
                 profile,
@@ -9860,224 +10146,11 @@ Emit one corrected TSX module now.`;
             const conversationalAssistantMarkdown = this.sanitizeAssistantMarkdownForFallback(cleanedLegacyRecipeMarkdown || chatResult.assistantMarkdown).trim() ||
                 cleanedLegacyRecipeMarkdown ||
                 chatResult.assistantMarkdown.trim();
-            recipePipeline = updateRecipePipelineSegment(recipePipeline, 'task', 'baseline_updating', {
-                status: 'ready',
-                stage: 'task_ready',
-                message: 'Hermes completed the task.',
-                retryable: false,
-                updatedAt: this.now()
-            });
-            recipePipeline = updateRecipePipelineSegment(recipePipeline, 'baseline', 'baseline_updating', {
-                status: 'running',
-                stage: 'baseline_updating',
-                message: 'Updating the Home recipe baseline.',
-                retryable: true,
-                updatedAt: this.now()
-            });
-            activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
-            let recipeResult;
-            try {
-                recipeResult = await this.createOrUpdateHomeBaselineRecipe(profile.id, refreshedSession, currentHomeRecipeId, requestId, requestPreview, requestMode, conversationalAssistantMarkdown, structuredRecipeIntent, recipePipeline, onEvent);
-            }
-            catch (baselineError) {
-                const baselineFailure = this.classifyBaselineFailure(baselineError instanceof Error ? baselineError.message : 'The Home recipe baseline could not be updated.');
-                const baselineFailedAt = this.now();
-                recipePipeline = updateRecipePipelineSegment(recipePipeline, 'baseline', 'baseline_failed', {
-                    status: 'failed',
-                    stage: 'baseline_failed',
-                    failureCategory: baselineFailure.category,
-                    message: baselineFailure.userFacingMessage,
-                    diagnostic: baselineFailure.diagnostic,
-                    retryable: baselineFailure.retryable,
-                    updatedAt: baselineFailedAt
-                });
-                recipePipeline = updateRecipePipelineSegment(recipePipeline, 'applet', 'baseline_failed', {
-                    status: 'skipped',
-                    message: 'Applet enrichment was skipped because the Home recipe baseline was not ready.',
-                    retryable: false,
-                    updatedAt: baselineFailedAt
-                });
-                activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
-                this.recordTelemetry({
-                    profileId: profile.id,
-                    sessionId: refreshedSession.id,
-                    requestId,
-                    severity: 'error',
-                    category: 'recipes',
-                    code: 'HOME_WORKRECIPE_BASELINE_FAILED',
-                    message: 'The Home recipe baseline failed after Hermes completed the task.',
-                    detail: baselineFailure.diagnostic,
-                    payload: {
-                        recipeId: activeRecipe?.id ?? null,
-                        failureCategory: baselineFailure.category,
-                        failureStage: baselineFailure.failureStage,
-                        retryable: baselineFailure.retryable
-                    },
-                    createdAt: baselineFailedAt
-                });
-                const assistantMessage = this.options.database.appendMessage(ChatMessageSchema.parse({
-                    id: `message-${randomUUID()}`,
-                    sessionId: refreshedSession.id,
-                    role: 'assistant',
-                    content: conversationalAssistantMarkdown,
-                    createdAt: baselineFailedAt,
-                    requestId,
-                    visibility: 'transcript',
-                    kind: 'conversation'
-                }));
-                const baselineFailureNotice = this.options.database.appendMessage(ChatMessageSchema.parse({
-                    id: `message-${randomUUID()}`,
-                    sessionId: refreshedSession.id,
-                    role: 'system',
-                    content: baselineFailure.userFacingMessage,
-                    createdAt: this.now(),
-                    requestId,
-                    status: 'error',
-                    visibility: 'transcript',
-                    kind: 'notice'
-                }));
-                this.options.database.markSessionMessagesSynced(refreshedSession.id, baselineFailureNotice.createdAt);
-                this.appendPersistedRuntimeActivity(profile.id, refreshedSession.id, requestId, requestPreview, {
-                    kind: 'warning',
-                    state: 'failed',
-                    label: 'Home recipe',
-                    detail: baselineFailure.userFacingMessage,
-                    requestId,
-                    timestamp: baselineFailureNotice.createdAt
-                });
-                this.finalizePersistedRuntimeRequest(profile.id, refreshedSession.id, requestId, requestPreview, 'completed', baselineFailureNotice.createdAt);
-                this.recordTelemetry({
-                    profileId: profile.id,
-                    sessionId: refreshedSession.id,
-                    requestId,
-                    severity: 'info',
-                    category: 'runtime',
-                    code: 'CHAT_REQUEST_COMPLETED',
-                    message: `Completed Hermes request ${requestId}.`,
-                    detail: 'Hermes returned the assistant answer, but the Home recipe baseline failed to update.',
-                    payload: {
-                        recipeId: activeRecipe?.id ?? null,
-                        recipeOperations: ['assistant answer delivered', 'baseline failed'],
-                        triggerActionId: input.triggerActionId ?? null
-                    },
-                    createdAt: baselineFailureNotice.createdAt
-                });
-                await onEvent({
-                    type: 'message',
-                    message: assistantMessage
-                });
-                await onEvent({
-                    type: 'message',
-                    message: baselineFailureNotice
-                });
-                await onEvent({
-                    type: 'complete',
-                    session: this.options.database.getSession(refreshedSession.id) ?? refreshedSession,
-                    assistantMessage
-                });
-                return;
-            }
-            if (recipeResult.activeRecipeId) {
-                activeRecipe = this.options.database.getRecipe(recipeResult.activeRecipeId);
-            }
-            recipePipeline = updateRecipePipelineSegment(recipePipeline, 'baseline', 'baseline_ready', {
-                status: 'ready',
-                stage: 'baseline_ready',
-                message: 'The Home recipe baseline is ready.',
-                retryable: false,
-                updatedAt: this.now()
-            });
-            activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
-            if (activeRecipe) {
-                await this.emitRecipePipelineStateEvent(activeRecipe, refreshedSession.id, onEvent, `Hermes finalized the Home recipe baseline for "${activeRecipe.title}".`, {
-                    contentFormat: 'markdown'
-                });
-            }
-            const recipeSummaries = [...recipeResult.summaries];
-            let queuedRecipeEnrichmentJob = null;
-            if (activeRecipe &&
-                this.shouldAttemptRecipeAppletUpgrade(requestMode, structuredRecipeIntent, isRetryBuild)) {
-                const queuedAppletBuild = await this.queueRecipeAppletBuild({
-                    profile,
-                    session: refreshedSession,
-                    currentRecipe: activeRecipe,
-                    requestId,
-                    requestPreview,
-                    requestMode,
-                    settings,
-                    pipeline: recipePipeline,
-                    onEvent,
-                    triggerActionId: input.triggerActionId ?? null,
-                    triggerKindOverride: input.triggerKindOverride ?? null,
-                    progressMessage: 'Queued recipe enrichment…',
-                    pipelineMessage: 'Recipe generation is queued and filling an approved template in the background.',
-                    pipelineEventMessage: `Hermes queued background recipe generation for "${activeRecipe.title}" after the Home baseline was ready.`,
-                    telemetryCode: 'RECIPE_TEMPLATE_ENRICHMENT_QUEUED',
-                    telemetryMessage: 'Queued async template-constrained recipe generation after the baseline Home recipe completed.',
-                    telemetryDetail: 'The user-facing request will complete now; the recipe template continues in the background.',
-                    buildKind: 'template_enrichment',
-                    renderMode: 'dynamic_v1'
-                });
-                activeRecipe = queuedAppletBuild.recipe;
-                recipePipeline = queuedAppletBuild.pipeline;
-                queuedRecipeEnrichmentJob = {
-                    kind: 'request',
-                    profile,
-                    session: refreshedSession,
-                    recipeId: activeRecipe.id,
-                    requestId,
-                    requestPreview,
-                    requestMode,
-                    settings,
-                    buildId: queuedAppletBuild.build.id,
-                    structuredIntentPrompt,
-                    conversationalAssistantMarkdown,
-                    structuredRecipeIntent,
-                    refreshContext,
-                    triggerActionId: input.triggerActionId ?? null,
-                    triggerKindOverride: input.triggerKindOverride ?? null
-                };
-                recipeSummaries.push(`queued background recipe enrichment for "${activeRecipe.title}"`);
-            }
-            else {
-                recipePipeline = updateRecipePipelineSegment(recipePipeline, 'applet', 'baseline_ready', {
-                    status: 'skipped',
-                    message: 'No richer recipe enrichment was required for this response.',
-                    retryable: false,
-                    updatedAt: this.now()
-                });
-                activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
-                if (activeRecipe) {
-                    await this.emitRecipePipelineStateEvent(activeRecipe, refreshedSession.id, onEvent, `Hermes kept the Home recipe baseline for "${activeRecipe.title}" without richer recipe enrichment.`, {
-                        enrichmentStatus: 'skipped'
-                    });
-                }
-            }
-            if (activeRecipe?.id) {
-                this.options.database.setActiveRecipe(profile.id, activeRecipe.id);
-            }
-            if (isRetryBuild &&
-                activeRecipe?.id) {
-                this.recordTelemetry({
-                    profileId: profile.id,
-                    sessionId: refreshedSession.id,
-                    requestId,
-                    severity: 'info',
-                    category: 'recipes',
-                    code: 'RECIPE_RETRY_BUILD_COMPLETED',
-                    message: 'Retry build completed successfully.',
-                    detail: recipeSummaries.join(', ') || 'Hermes updated the attached Home recipe.',
-                    payload: {
-                        recipeId: activeRecipe.id,
-                        triggerActionId: input.triggerActionId ?? null
-                    }
-                });
-            }
             const assistantMessage = this.options.database.appendMessage(ChatMessageSchema.parse({
                 id: `message-${randomUUID()}`,
                 sessionId: refreshedSession.id,
                 role: 'assistant',
-                content: conversationalAssistantMarkdown || recipeResult.assistantMarkdown,
+                content: conversationalAssistantMarkdown,
                 createdAt: this.now(),
                 requestId,
                 visibility: 'transcript',
@@ -10101,10 +10174,10 @@ Emit one corrected TSX module now.`;
                 category: 'runtime',
                 code: 'CHAT_REQUEST_COMPLETED',
                 message: `Completed Hermes request ${requestId}.`,
-                detail: recipeSummaries.length > 0 ? recipeSummaries.join(', ') : 'Hermes returned a final assistant response.',
+                detail: 'Hermes returned the assistant answer; recipe pipeline continuing.',
                 payload: {
-                    recipeId: recipeResult.activeRecipeId ?? activeRecipe?.id ?? null,
-                    recipeOperations: recipeSummaries,
+                    recipeId: activeRecipe?.id ?? null,
+                    recipeOperations: [],
                     triggerActionId: input.triggerActionId ?? null
                 },
                 createdAt: assistantMessage.createdAt
@@ -10114,8 +10187,204 @@ Emit one corrected TSX module now.`;
                 session: this.options.database.getSession(refreshedSession.id) ?? refreshedSession,
                 assistantMessage
             });
-            if (queuedRecipeEnrichmentJob) {
-                this.enqueueRecipeAppletEnrichmentJob(queuedRecipeEnrichmentJob);
+            // Recipe pipeline continues in the background of the same open SSE stream.
+            // Errors here are swallowed gracefully — the client has already received `complete`.
+            try {
+                recipePipeline = updateRecipePipelineSegment(recipePipeline, 'task', 'baseline_updating', {
+                    status: 'ready',
+                    stage: 'task_ready',
+                    message: 'Hermes completed the task.',
+                    retryable: false,
+                    updatedAt: this.now()
+                });
+                recipePipeline = updateRecipePipelineSegment(recipePipeline, 'baseline', 'baseline_updating', {
+                    status: 'running',
+                    stage: 'baseline_updating',
+                    message: 'Updating the Home recipe baseline.',
+                    retryable: true,
+                    updatedAt: this.now()
+                });
+                activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
+                let recipeResult;
+                try {
+                    recipeResult = await this.createOrUpdateHomeBaselineRecipe(profile.id, refreshedSession, currentHomeRecipeId, requestId, requestPreview, requestMode, conversationalAssistantMarkdown, structuredRecipeIntent, recipePipeline, onEvent);
+                }
+                catch (baselineError) {
+                    const baselineFailure = this.classifyBaselineFailure(baselineError instanceof Error ? baselineError.message : 'The Home recipe baseline could not be updated.');
+                    const baselineFailedAt = this.now();
+                    recipePipeline = updateRecipePipelineSegment(recipePipeline, 'baseline', 'baseline_failed', {
+                        status: 'failed',
+                        stage: 'baseline_failed',
+                        failureCategory: baselineFailure.category,
+                        message: baselineFailure.userFacingMessage,
+                        diagnostic: baselineFailure.diagnostic,
+                        retryable: baselineFailure.retryable,
+                        updatedAt: baselineFailedAt
+                    });
+                    recipePipeline = updateRecipePipelineSegment(recipePipeline, 'applet', 'baseline_failed', {
+                        status: 'skipped',
+                        message: 'Applet enrichment was skipped because the Home recipe baseline was not ready.',
+                        retryable: false,
+                        updatedAt: baselineFailedAt
+                    });
+                    activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
+                    this.recordTelemetry({
+                        profileId: profile.id,
+                        sessionId: refreshedSession.id,
+                        requestId,
+                        severity: 'error',
+                        category: 'recipes',
+                        code: 'HOME_WORKRECIPE_BASELINE_FAILED',
+                        message: 'The Home recipe baseline failed after Hermes completed the task.',
+                        detail: baselineFailure.diagnostic,
+                        payload: {
+                            recipeId: activeRecipe?.id ?? null,
+                            failureCategory: baselineFailure.category,
+                            failureStage: baselineFailure.failureStage,
+                            retryable: baselineFailure.retryable
+                        },
+                        createdAt: baselineFailedAt
+                    });
+                    const baselineFailureNotice = this.options.database.appendMessage(ChatMessageSchema.parse({
+                        id: `message-${randomUUID()}`,
+                        sessionId: refreshedSession.id,
+                        role: 'system',
+                        content: baselineFailure.userFacingMessage,
+                        createdAt: this.now(),
+                        requestId,
+                        status: 'error',
+                        visibility: 'transcript',
+                        kind: 'notice'
+                    }));
+                    // complete has already been sent; only emit the error state via recipe_event
+                    if (activeRecipe) {
+                        await this.emitRecipePipelineStateEvent(activeRecipe, refreshedSession.id, onEvent, baselineFailure.userFacingMessage, {
+                            failureCategory: baselineFailure.category
+                        });
+                    }
+                    await onEvent({
+                        type: 'message',
+                        message: baselineFailureNotice
+                    });
+                    return;
+                }
+                if (recipeResult.activeRecipeId) {
+                    activeRecipe = this.options.database.getRecipe(recipeResult.activeRecipeId);
+                }
+                recipePipeline = updateRecipePipelineSegment(recipePipeline, 'baseline', 'baseline_ready', {
+                    status: 'ready',
+                    stage: 'baseline_ready',
+                    message: 'The Home recipe baseline is ready.',
+                    retryable: false,
+                    updatedAt: this.now()
+                });
+                activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
+                if (activeRecipe) {
+                    await this.emitRecipePipelineStateEvent(activeRecipe, refreshedSession.id, onEvent, `Hermes finalized the Home recipe baseline for "${activeRecipe.title}".`, {
+                        contentFormat: 'markdown'
+                    });
+                }
+                const recipeSummaries = [...recipeResult.summaries];
+                let queuedRecipeEnrichmentJob = null;
+                if (activeRecipe &&
+                    this.shouldAttemptRecipeAppletUpgrade(requestMode, structuredRecipeIntent, isRetryBuild, mutationIntent)) {
+                    const queuedAppletBuild = await this.queueRecipeAppletBuild({
+                        profile,
+                        session: refreshedSession,
+                        currentRecipe: activeRecipe,
+                        requestId,
+                        requestPreview,
+                        requestMode,
+                        settings,
+                        pipeline: recipePipeline,
+                        onEvent,
+                        triggerActionId: input.triggerActionId ?? null,
+                        triggerKindOverride: input.triggerKindOverride ?? null,
+                        progressMessage: 'Queued recipe enrichment…',
+                        pipelineMessage: 'Recipe generation is queued and filling an approved template in the background.',
+                        pipelineEventMessage: `Hermes queued background recipe generation for "${activeRecipe.title}" after the Home baseline was ready.`,
+                        telemetryCode: 'RECIPE_TEMPLATE_ENRICHMENT_QUEUED',
+                        telemetryMessage: 'Queued async template-constrained recipe generation after the baseline Home recipe completed.',
+                        telemetryDetail: 'The user-facing request will complete now; the recipe template continues in the background.',
+                        buildKind: 'template_enrichment',
+                        renderMode: 'dynamic_v1'
+                    });
+                    activeRecipe = queuedAppletBuild.recipe;
+                    recipePipeline = queuedAppletBuild.pipeline;
+                    queuedRecipeEnrichmentJob = {
+                        kind: 'request',
+                        profile,
+                        session: refreshedSession,
+                        recipeId: activeRecipe.id,
+                        requestId,
+                        requestPreview,
+                        requestMode,
+                        settings,
+                        buildId: queuedAppletBuild.build.id,
+                        structuredIntentPrompt,
+                        conversationalAssistantMarkdown,
+                        structuredRecipeIntent,
+                        mutationIntent: mutationIntent ?? null,
+                        refreshContext,
+                        triggerActionId: input.triggerActionId ?? null,
+                        triggerKindOverride: input.triggerKindOverride ?? null
+                    };
+                    recipeSummaries.push(`queued background recipe enrichment for "${activeRecipe.title}"`);
+                }
+                else {
+                    recipePipeline = updateRecipePipelineSegment(recipePipeline, 'applet', 'baseline_ready', {
+                        status: 'skipped',
+                        message: 'No richer recipe enrichment was required for this response.',
+                        retryable: false,
+                        updatedAt: this.now()
+                    });
+                    activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
+                    if (activeRecipe) {
+                        await this.emitRecipePipelineStateEvent(activeRecipe, refreshedSession.id, onEvent, `Hermes kept the Home recipe baseline for "${activeRecipe.title}" without richer recipe enrichment.`, {
+                            enrichmentStatus: 'skipped'
+                        });
+                    }
+                }
+                if (activeRecipe?.id) {
+                    this.options.database.setActiveRecipe(profile.id, activeRecipe.id);
+                }
+                if (isRetryBuild &&
+                    activeRecipe?.id) {
+                    this.recordTelemetry({
+                        profileId: profile.id,
+                        sessionId: refreshedSession.id,
+                        requestId,
+                        severity: 'info',
+                        category: 'recipes',
+                        code: 'RECIPE_RETRY_BUILD_COMPLETED',
+                        message: 'Retry build completed successfully.',
+                        detail: recipeSummaries.join(', ') || 'Hermes updated the attached Home recipe.',
+                        payload: {
+                            recipeId: activeRecipe.id,
+                            triggerActionId: input.triggerActionId ?? null
+                        }
+                    });
+                }
+                if (queuedRecipeEnrichmentJob) {
+                    this.enqueueRecipeAppletEnrichmentJob(queuedRecipeEnrichmentJob);
+                }
+            }
+            catch (recipePipelineError) {
+                // Swallow background recipe pipeline errors — complete has already been delivered to the client.
+                this.recordTelemetry({
+                    profileId: profile.id,
+                    sessionId: refreshedSession.id,
+                    requestId,
+                    severity: 'error',
+                    category: 'recipes',
+                    code: 'HOME_WORKRECIPE_BASELINE_FAILED',
+                    message: 'The post-complete recipe pipeline encountered an unexpected error.',
+                    detail: recipePipelineError instanceof Error ? recipePipelineError.message : 'Unknown recipe pipeline error.',
+                    payload: {
+                        recipeId: activeRecipe?.id ?? null,
+                        triggerActionId: input.triggerActionId ?? null
+                    }
+                });
             }
         }
         catch (error) {
@@ -10477,6 +10746,9 @@ Emit one corrected TSX module now.`;
                 case 'expand_template_idea':
                 case 'generate_campaign_email':
                 case 'run_template_followup': {
+                    if (!context.action.prompt) {
+                        throw new BridgeError(400, 'RECIPE_ACTION_PROMPT_MISSING', `Template action "${context.action.id}" invokes Hermes but has no associated prompt definition. Add a prompt.promptTemplate to the action in the template registry.`);
+                    }
                     const transcriptContent = this.buildTemplateActionTranscriptContent(context.action, selectedItems);
                     const hermesContent = this.buildPromptBoundTemplateActionContent(recipe, context, parsedInput, selectedItems);
                     await this.streamHermesRequest({

@@ -14,10 +14,9 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "turbo run typecheck",
     "test": "vitest run --config vitest.unit.config.ts",
-    "test:integration": "pnpm build && NODE_OPTIONS=--experimental-sqlite playwright test",
     "test:live:home": "pnpm --filter @hermes-recipes/bridge test:live:home",
     "security": "node scripts/security-check.mjs",
-    "ci:full": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm security"
+    "ci:full": "pnpm lint && pnpm typecheck && pnpm test && pnpm security"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

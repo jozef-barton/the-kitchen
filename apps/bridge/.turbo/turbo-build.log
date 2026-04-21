@@ -1,4 +1,4 @@
 
-> @hermes-recipes/bridge@0.2.0 build /Users/jozefbarton/dev/hermes-boots-codex/apps/bridge
+> @hermes-recipes/bridge@0.2.0 build /Users/jozefbarton/dev/the-kitchen/apps/bridge
 > tsc -p tsconfig.json
 

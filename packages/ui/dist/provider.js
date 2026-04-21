@@ -5,7 +5,10 @@ import { hermesThemeStorageKey } from './theme';
 const hermesHomeSystem = createSystem(defaultConfig, {
     globalCss: {
         html: {
-            fontSize: '14.5px'
+            fontSize: '15px'
+        },
+        body: {
+            lineHeight: '1.5'
         }
     },
     theme: {
@@ -13,8 +16,8 @@ const hermesHomeSystem = createSystem(defaultConfig, {
             radii: {
                 md: { value: '0.375rem' },
                 lg: { value: '0.5rem' },
-                xl: { value: '0.625rem' },
-                '2xl': { value: '0.75rem' }
+                xl: { value: '0.5rem' },
+                '2xl': { value: '0.5rem' }
             }
         }
     }

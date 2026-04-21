@@ -762,10 +762,34 @@ function extractAssistantBody(output, options = {}) {
         keepRecipeFence: true
     });
 }
+function extractUrlFromLabel(label) {
+    const urlMatch = label.match(/https?:\/\/[^\s,)>]+/u);
+    if (urlMatch)
+        return urlMatch[0];
+    const hostMatch = label.match(/(?:^|\s)((?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/\S*)?/iu);
+    if (hostMatch?.[1] && hostMatch[1].includes('.'))
+        return hostMatch[1];
+    return undefined;
+}
 function parseChatActivity(line, timestamp, requestId = null) {
     const trimmed = line.trim();
     if (!trimmed) {
         return null;
+    }
+    // Surface thinking blocks as ephemeral activities instead of silently discarding them.
+    if (trimmed.startsWith('[thinking]')) {
+        const thinkingText = trimmed.slice('[thinking]'.length).trim();
+        if (!thinkingText)
+            return null;
+        const snippet = thinkingText.length > 120 ? `${thinkingText.slice(0, 120)}…` : thinkingText;
+        return {
+            kind: 'thinking',
+            state: 'updated',
+            label: snippet,
+            detail: thinkingText,
+            requestId,
+            timestamp
+        };
     }
     if (trimmed.includes('Initializing agent')) {
         return {
@@ -779,14 +803,21 @@ function parseChatActivity(line, timestamp, requestId = null) {
     }
     const preparingMatch = trimmed.match(/^┊\s+(?<icon>📚|💻|📞|📖|🐍)\s+preparing\s+(?<label>.+?)…$/u);
     if (preparingMatch?.groups?.label) {
+        const prepLabel = preparingMatch.groups.label.trim();
+        const prepUrl = extractUrlFromLabel(prepLabel);
+        const isWebFetch = Boolean(prepUrl) || /\b(fetch|web_fetch|http_get|browse|visit)\b/iu.test(prepLabel);
+        const kind = preparingMatch.groups.icon === '📚'
+            ? 'skill'
+            : preparingMatch.groups.icon === '💻'
+                ? 'command'
+                : isWebFetch
+                    ? 'website'
+                    : 'tool';
         return {
-            kind: preparingMatch.groups.icon === '📚'
-                ? 'skill'
-                : preparingMatch.groups.icon === '💻'
-                    ? 'command'
-                    : 'tool',
+            kind,
             state: 'started',
-            label: preparingMatch.groups.label.trim(),
+            label: isWebFetch ? (prepUrl ? `Fetching ${prepUrl}` : prepLabel) : prepLabel,
+            url: prepUrl,
             requestId,
             timestamp
         };
@@ -799,11 +830,15 @@ function parseChatActivity(line, timestamp, requestId = null) {
             : toolActivityMatch.groups.verb === 'exec'
                 ? 'execute_code'
                 : rawLabel;
+        const failed = Boolean(toolActivityMatch.groups.exitCode && toolActivityMatch.groups.exitCode !== '0');
+        const url = extractUrlFromLabel(rawLabel);
+        const isWebFetch = Boolean(url) || /\b(fetch|web_fetch|http_get|browse|visit)\b/iu.test(toolLabel);
         return {
-            kind: 'tool',
-            state: toolActivityMatch.groups.exitCode && toolActivityMatch.groups.exitCode !== '0' ? 'failed' : 'completed',
-            label: toolLabel,
+            kind: isWebFetch ? 'website' : 'tool',
+            state: failed ? 'failed' : 'completed',
+            label: isWebFetch ? (url ? `Fetching ${url}` : toolLabel) : toolLabel,
             detail: rawLabel,
+            url,
             requestId,
             timestamp
         };
@@ -941,6 +976,19 @@ function progressMessageForActivity(activity) {
     }
     if (activity.kind === 'warning') {
         return activity.detail ?? activity.label;
+    }
+    if (activity.kind === 'thinking') {
+        const snippet = activity.label.length > 60 ? `${activity.label.slice(0, 60)}…` : activity.label;
+        return `Thinking: ${snippet}`;
+    }
+    if (activity.kind === 'website') {
+        const host = activity.url ? (() => { try {
+            return new URL(activity.url.startsWith('http') ? activity.url : `https://${activity.url}`).hostname;
+        }
+        catch {
+            return activity.url;
+        } })() : activity.label;
+        return activity.state === 'started' ? `Visiting ${host}…` : `Visited ${host}.`;
     }
     return null;
 }
@@ -1135,19 +1183,108 @@ function isLocalSearchIntent(content) {
     return /\b(restaurant|restaurants|coffee|cafe|cafes|bar|bars|brunch|breakfast|lunch|dinner|food|hotel|hotels|nearby|near me|around me)\b/i.test(content);
 }
 export function classifyStructuredRecipeIntent(content, hasRecipeContext = false) {
-    if (isLocalSearchIntent(content) ||
-        /\b(lodging|lodgings|stay|stays|places?|venues?|coffee shops?|cafes?|restaurants?)\b/i.test(content)) {
+    // --- Domain-specific templates — checked first so generic keywords can't hijack them ---
+    // Inbox triage / email cleanup  →  inbox-triage-board
+    if (/\b(inbox triage|inbox triaging|inbox cleanup|email triage|triage my emails?|triage.*inbox|unread email|bulk archive|sender cleanup|clean up.*inbox|manage my inbox|email cleanup)\b/i.test(content) ||
+        (isEmailIntent(content) && /\b(triaging?|clean up|cleanup|organize|sort|archive|manage|filter)\b/i.test(content))) {
+        return {
+            category: 'results',
+            preferredContentFormat: 'card',
+            label: 'inbox triage'
+        };
+    }
+    // Security review / audit  →  security-review-board
+    if (/\b(security review|security audit|threat findings?|audit board|severity triage|vulnerability scan|penetration test|pentest|CVE|OWASP|threat model)\b/i.test(content)) {
+        return {
+            category: 'plan',
+            preferredContentFormat: 'table',
+            label: 'security review'
+        };
+    }
+    // Job search / career pipeline  →  job-search-pipeline
+    if (/\b(job search|job listings?|job postings?|career opportunities|open positions?|job hunt|job pipeline|find.*jobs?|apply.*jobs?|hiring pipeline)\b/i.test(content)) {
+        return {
+            category: 'results',
+            preferredContentFormat: 'card',
+            label: 'job search'
+        };
+    }
+    // Flight comparison  →  flight-comparison
+    if (/\b(flight comparison|compare flights?|airline options?|compare itineraries|outbound.*return|round.?trip.*flights?)\b/i.test(content) ||
+        (/\b(flights?|airlines?)\b/i.test(content) && /\b(compare|book|options?|itinerary|search|find)\b/i.test(content))) {
+        return {
+            category: 'places',
+            preferredContentFormat: 'table',
+            label: 'flight comparison'
+        };
+    }
+    // Travel itinerary / trip planning  →  travel-itinerary-planner  (before generic plan)
+    if (/\b(trip itinerary|travel itinerary|travel planner|travel plan|itinerary for.*trip|plan.*trip|trip plan|packing list|bookings? and packing|trip notes|travel notes)\b/i.test(content)) {
         return {
             category: 'places',
             preferredContentFormat: 'card',
-            label: 'nearby shortlist'
+            label: 'travel planner'
         };
     }
+    // Event planning  →  event-planner  (before generic plan)
+    if (/\b(event planner|plan.*event|event checklist|venue and guests|plan.*party|plan.*wedding|plan.*birthday|plan.*conference|plan.*dinner party|host.*event|plan.*celebration)\b/i.test(content)) {
+        return {
+            category: 'plan',
+            preferredContentFormat: 'card',
+            label: 'event planner'
+        };
+    }
+    // Content / campaign planning  →  content-campaign-planner
+    if (/\b(campaign planner|content plan|content calendar|campaign ideas?|marketing plan|newsletter plan|content ideas?|drafts? and schedule|social media plan|launch campaign)\b/i.test(content)) {
+        return {
+            category: 'plan',
+            preferredContentFormat: 'card',
+            label: 'campaign planner'
+        };
+    }
+    // Price comparison (specific shopping intent)  →  price-comparison-grid
+    if (/\b(price comparison|compare prices?|cheapest|best price|merchant grid|same product|best deal)\b/i.test(content)) {
+        return {
+            category: 'shopping',
+            preferredContentFormat: 'table',
+            label: 'price comparison'
+        };
+    }
+    // --- Local discovery templates — specific before generic ---
+    // Restaurant finder  →  restaurant-finder
+    if (/\b(restaurants? nearby|restaurants? near|dinner options?|places to eat|restaurant shortlist|find.*restaurants?)\b/i.test(content) ||
+        (/\b(restaurants?|brunch|dinner)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content))) {
+        return {
+            category: 'places',
+            preferredContentFormat: 'card',
+            label: 'restaurant shortlist'
+        };
+    }
+    // Hotel shortlist  →  hotel-shortlist
+    if (/\b(hotel shortlist|where to stay|compare hotels?|lodging options?|hotels? near|hotels? in)\b/i.test(content) ||
+        (/\b(hotels?|lodging|accommodation)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content))) {
+        return {
+            category: 'places',
+            preferredContentFormat: 'card',
+            label: 'hotel shortlist'
+        };
+    }
+    // General local discovery  →  local-discovery-comparison
+    if (isLocalSearchIntent(content) ||
+        /\b(lodging|lodgings?|stay|stays|places? nearby|venues?|coffee shops?|cafes?|service providers?|venue shortlist)\b/i.test(content)) {
+        return {
+            category: 'places',
+            preferredContentFormat: 'card',
+            label: 'nearby places'
+        };
+    }
+    // --- Planning templates ---
+    // Project / action plan — no dedicated template; maps to research-notebook
     if (/\b(project plan|action plan|roadmap|timeline|milestones?|launch plan|implementation plan|rollout plan)\b/i.test(content)) {
         return {
             category: 'plan',
             preferredContentFormat: 'table',
-            label: 'project plan'
+            label: 'research notebook'
         };
     }
     if (/\b(engineering objective|engineering plan|technical plan|repo plan|refactor plan)\b/i.test(content) ||
@@ -1166,11 +1303,13 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
             label: 'research notebook'
         };
     }
-    if (/\b(how to|step by step|tutorial|guide|walkthrough|set up|install|configure|deploy)\b/i.test(content)) {
+    // Step-by-step instructions  →  step-by-step-instructions
+    // "guide" excluded — too generic and causes false positives across domain-specific templates
+    if (/\b(how to|step by step|step-by-step|tutorial|walkthrough|set up|install|configure|deploy|getting started|quick start)\b/i.test(content)) {
         return {
             category: 'plan',
             preferredContentFormat: 'table',
-            label: 'step-by-step guide'
+            label: 'step by step'
         };
     }
     if (/\b(recommend|suggestion|advice|what should I|which should I|best approach|best practice)\b/i.test(content)) {
@@ -1180,6 +1319,7 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
             label: 'research notebook'
         };
     }
+    // Finance (no dedicated template; will fall through to generic in template selection)
     if (/\b(finance|financial|budget|budgets|expenses?|cost breakdown|line items?|portfolio|holdings|allocations?)\b/i.test(content)) {
         return {
             category: 'finance',
@@ -1187,20 +1327,46 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
             label: 'financial breakdown'
         };
     }
-    if (/\b(compare|comparison|vs\\.?|options|shortlist|candidates|shopping|buy|buying|products?|purchase|purchasing)\b/i.test(content)) {
+    // --- Comparison / shopping templates ---
+    // Technology / vendor comparison matrix  →  vendor-evaluation-matrix  (before generic comparison)
+    if (/\b(compare|comparison|vs\.?|versus)\b/i.test(content) &&
+        /\b(frameworks?|vendors?|technologies|tools?|libraries?|services?|platforms?|apps?)\b/i.test(content)) {
+        return {
+            category: 'shopping',
+            preferredContentFormat: 'table',
+            label: 'comparison matrix'
+        };
+    }
+    // Generic shopping / comparison  →  shopping-shortlist
+    if (/\b(compare|comparison|vs\.?|options|shortlist|candidates|shopping|buy|buying|products?|purchase|purchasing)\b/i.test(content)) {
         return {
             category: 'shopping',
             preferredContentFormat: 'card',
-            label: 'comparison shortlist'
+            label: 'shopping results'
         };
     }
+    // Natural-language product browsing — no explicit shopping verb but clear product intent.
+    // Requires a product category noun AND at least one soft framing word to avoid false positives
+    // (e.g. "some gym shorts I normally wear" or "headphones for running under $100").
+    if (/\b(shorts?|shirt|shirts|pants|jeans|jacket|jackets|shoes|sneakers|boots|dress|dresses|hoodie|hoodies|sweater|leggings|activewear|sportswear|gym\s+\w+|workout\s+\w+|running\s+\w+)\b/i.test(content) ||
+        /\b(headphones?|earbuds?|laptop|laptops?|monitor|keyboard|mouse|tablet|phone|speaker|camera|smartwatch|charger)\b/i.test(content) ||
+        /\b(backpack|bag|bags|wallet|purse|sunglasses|jewelry|supplement|protein|vitamins?)\b/i.test(content)) {
+        if (/\b(some|for\s+(?:me|my|the|gym|running|work|summer|winter|training)|I\s+(?:wear|use|like|need|want|normally|usually)|normally\s+wear|usually\s+wear|looking\s+for|gift\s+for|under\s+\$?\d|around\s+\$?\d)\b/i.test(content)) {
+            return {
+                category: 'shopping',
+                preferredContentFormat: 'card',
+                label: 'shopping results'
+            };
+        }
+    }
+    // Research notebook  →  research-notebook
     if (/\b(research|sources?|papers?|studies?|summary|summaries|tradeoffs?|pros and cons|claims?|notes?|notebook|follow-?ups?)\b/i.test(content) &&
         (isDiscoveryIntent(content) ||
             /\b(create|build|make|organize|gather|track|capture)\b.*\b(research|notes?|notebook|sources?|claims?|follow-?ups?)\b/i.test(content))) {
         return {
             category: 'research',
             preferredContentFormat: 'markdown',
-            label: 'research summary'
+            label: 'research notebook'
         };
     }
     if (isDiscoveryIntent(content) &&
@@ -1212,6 +1378,82 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     return null;
+}
+/**
+ * Detects when a user is asking to mutate an already-rendered recipe — changing its layout,
+ * visual style, or content structure — rather than making a new query.
+ *
+ * Only fires when `attachedTemplateId` is non-null (recipe is open). Returns null for fresh
+ * recipe requests or plain conversational messages so enrichment is not triggered spuriously.
+ */
+export function classifyRecipeMutationIntent(content, attachedTemplateId) {
+    const text = content.trim().toLowerCase();
+    if (text.length < 5)
+        return null;
+    // High-confidence layout/switch verbs: these must be combined with a UI keyword to avoid
+    // false positives on messages like "I'd like to change my approach".
+    const layoutVerbPattern = /\b(redo|redesign|change.*look|make it|convert it|switch to|show as|render as|reshape|display as|turn.*into|use a|let'?s use|try a|can you make|could you make)\b/i;
+    const switchPattern = /\b(different recipe|other recipe|another recipe|wrong recipe|new recipe|replace.*recipe|change.*recipe)\b/i;
+    const wantsImages = /\b(pictures?|images?|photos?|thumbnails?|logos?|visuals?|more visual|photo[s ]|imagery)\b/i.test(content);
+    const wantsCards = /\b(cards?|tiles?|tiled|card[- ]grid|card[- ]view|gallery)\b/i.test(content);
+    const wantsCharts = /\b(charts?|graphs?|bar chart|line chart|pie chart|pie graph|visualization|visualize)\b/i.test(content);
+    const wantsTable = /\b(table|matrix|side[- ]by[- ]side|comparison table|tabular)\b/i.test(content);
+    const wantsKanban = /\b(kanban|board|stages?|pipeline|columns?\s+with\s+cards?)\b/i.test(content);
+    const wantsTimeline = /\b(timeline|chronological|time[- ]ordered|sequence)\b/i.test(content);
+    const wantsFewerItems = /\b(fewer|less|top\s+\d+|only\s+(show|the top)|trim|cut down|focus on|just\s+(the top|show))\b/i.test(content);
+    const wantsMoreItems = /\bmore\b.{0,30}\b(options?|results?|items?|cards?|choices?)\b/i.test(content);
+    const hasVisualKeyword = wantsImages || wantsCards || wantsCharts || wantsTable || wantsKanban || wantsTimeline;
+    const hasCountKeyword = wantsFewerItems || wantsMoreItems;
+    const hasLayoutVerb = layoutVerbPattern.test(content);
+    const isExplicitSwitch = switchPattern.test(content);
+    // Need at least one positive signal to avoid false positives.
+    if (!hasVisualKeyword && !hasCountKeyword && !hasLayoutVerb && !isExplicitSwitch)
+        return null;
+    // Without an existing template, only fire on strong visual signals (images or cards) to
+    // avoid treating plain conversational recipe mentions as mutation requests.
+    if (!attachedTemplateId && !wantsImages && !wantsCards && !wantsCharts)
+        return null;
+    // Reject plain-chat follow-ups that mention these words without mutation intent.
+    // E.g., "can you show me more about the first card?" — single-item about-query, not layout mutation.
+    const isFollowUpQuery = !hasLayoutVerb && !isExplicitSwitch && !hasVisualKeyword && hasCountKeyword;
+    if (isFollowUpQuery && /\b(about|for|of|on|regarding)\b/i.test(content))
+        return null;
+    // Derive the most likely target template hint from the signal combination.
+    const targetTemplateHint = isExplicitSwitch ? undefined :
+        wantsCharts ? 'vendor-evaluation-matrix' :
+            (wantsCards && wantsImages) ? 'shopping-shortlist' :
+                wantsTable ? 'vendor-evaluation-matrix' :
+                    wantsTimeline ? 'travel-itinerary-planner' :
+                        wantsCards ? 'shopping-shortlist' :
+                            undefined;
+    const kind = isExplicitSwitch ? 'switch_recipe' :
+        (wantsImages || wantsCharts) ? 'change_visual' :
+            (wantsCards || wantsTable || wantsKanban || wantsTimeline) ? 'change_layout' :
+                (wantsFewerItems || wantsMoreItems) ? 'refine_existing' :
+                    hasLayoutVerb ? 'change_layout' : 'refine_existing';
+    const hintParts = [
+        wantsImages && 'images',
+        wantsCards && 'cards',
+        wantsCharts && 'charts',
+        wantsTable && 'table',
+        wantsKanban && 'kanban',
+        wantsTimeline && 'timeline',
+        wantsFewerItems && 'fewer items',
+        wantsMoreItems && 'more items'
+    ].filter(Boolean).join(', ');
+    return {
+        kind,
+        wantsImages,
+        wantsCards,
+        wantsCharts,
+        wantsTable,
+        wantsKanban,
+        wantsTimeline,
+        wantsFewerItems,
+        wantsMoreItems,
+        targetTemplateHint,
+        mutationSummary: `User is asking to mutate the current recipe layout/appearance. Kind: ${kind}. Hints: ${hintParts || 'none'}. Current template: ${attachedTemplateId}.${targetTemplateHint ? ` Suggested new template: ${targetTemplateHint}.` : ''}`
+    };
 }
 function isRecipeWorkflowIntent(content, hasRecipeContext = false) {
     if (hasRecipeContext) {
@@ -1352,8 +1594,40 @@ Do not fall back to himalaya unless the user explicitly asks for it.
 Do not include raw tool output, CLI diagnostics, JSON blobs, scripts, approvals, or turn-limit traces in the final answer.
 Return only the final assistant answer.`;
     }
+    // Detect when the user wants to reformat or repopulate an existing recipe visually —
+    // e.g. "make it look like cards with pictures" or "show as a gallery". These requests
+    // need real data extraction from the session, not a narrow one-liner acknowledgment.
+    const isVisualRepopulation = Boolean(spaceContext) &&
+        /\b(pictures?|images?|photos?|cards?|tiles?|gallery|visuals?|show as|render as|display as|more like|look like)\b/i.test(intentContent);
     if (isRecipeWorkflowIntent(intentContent, Boolean(spaceContext))) {
-        return `${content}
+        // When a data-type structured intent is detected alongside a recipe workflow keyword
+        // (e.g. "render them using the shopping results recipe"), the user wants real data
+        // populated into the new format — not a narrow administrative update. Fall through
+        // to the data-type routing below so structuredRecipeInstruction drives the response.
+        if (structuredRecipeIntent) {
+            // intentional fall-through — handled by the general path below
+        }
+        else if (isVisualRepopulation) {
+            // Visual format change on an existing recipe (e.g. "make it look like cards with
+            // pictures"). Tell Hermes to extract and repopulate real data, not just confirm.
+            const repopulateHint = `The user is asking to change how the current recipe looks.
+The existing recipe content is shown above in the Data snapshot.
+Re-populate the recipe seed with the actual data from the current recipe and conversation — do not just confirm a format change.
+Extract the real items (products, listings, results, etc.) from the existing content and include them as meaningful rawData in the recipe seed.
+Prefer card content with images/photos where available.
+Provide a short confirmation describing what was updated, but ensure the recipe seed contains the extracted real data.`;
+            return `${content}
+
+${activeProfileInstruction}
+${recipeInstruction}
+${refreshInstruction}
+${structuredRecipeInstruction}
+${repopulateHint}
+Do not include raw tool output, CLI diagnostics, JSON blobs, scripts, or command traces in the final answer.
+Return only the final assistant answer.`;
+        }
+        else {
+            return `${content}
 
 ${activeProfileInstruction}
 ${recipeInstruction}
@@ -1366,6 +1640,7 @@ Bias toward a single structured operation and a short confirmation.
 Avoid terminal commands, scripts, code execution, or repeated tool exploration unless the user explicitly asked for outside research.
 Do not include raw tool output, CLI diagnostics, JSON blobs, scripts, or command traces in the final answer.
 Return only the final assistant answer.`;
+        }
     }
     if (isLocalSearchIntent(intentContent)) {
         return `${content}
@@ -1373,10 +1648,8 @@ Return only the final assistant answer.`;
 ${activeProfileInstruction}
 ${recipeInstruction}
 ${refreshInstruction}
-${structuredRecipeInstruction}
 If this request involves nearby places, restaurants, or local businesses, keep the search scoped to the exact location the user named.
 Prefer one concise nearby-search pass and a short verified shortlist over long setup narration.
-If this request naturally produces a shortlist, create or update the local attached Recipe in the same response with that shortlist.
 Do not inspect the local repository or recipe for nearby-search requests.
 Do not use read_file, open, cat, ls, execute_code, python, shell, or repeated exploratory tool loops unless the user explicitly asked for code or local file analysis.
 If you need prices or rates, inspect only the smallest number of candidate listings needed to produce a useful shortlist, then stop.
@@ -1390,7 +1663,6 @@ Return only the final assistant answer.`;
 ${activeProfileInstruction}
 ${recipeInstruction}
 ${refreshInstruction}
-${structuredRecipeInstruction}
 Keep discovery requests focused and concise.
 Prefer a useful shortlist or direct answer over long setup narration.
 Do not include raw tool output, CLI startup banners, JSON blobs, scripts, or command traces in the final answer.
@@ -1401,7 +1673,6 @@ Return only the final assistant answer.`;
 ${activeProfileInstruction}
 ${recipeInstruction}
 ${refreshInstruction}
-${structuredRecipeInstruction}
 ${isSimpleRecipeWorkflowIntent(intentContent, Boolean(spaceContext)) ? 'Treat this as a single-step recipe action when possible. Do not expand into a longer autonomous workflow.' : ''}
 Return only the final assistant answer.
   Do not include CLI startup banners, tool inventories, tool output, scripts, JSON blobs, or turn-limit summaries in the final answer.`;
@@ -1698,6 +1969,12 @@ export class HermesCli {
     async renameSession(profile, session, title, signal) {
         const env = buildProfileEnvironment(profile);
         const sessionId = session.runtimeSessionId ?? session.id;
+        // Guard against argument injection: reject titles that would be interpreted as CLI flags.
+        // execFile does not use a shell, so no shell-injection, but Hermes CLI itself may parse
+        // an argument starting with "-" as a flag.
+        if (title.startsWith('-')) {
+            throw new Error('Session title must not start with "-".');
+        }
         const result = await this.run(['sessions', 'rename', sessionId, title], env, signal);
         if (result.exitCode !== 0) {
             throw new Error(result.stderr.trim() || `Failed to rename Hermes session ${sessionId}.`);
@@ -1817,7 +2094,7 @@ export class HermesCli {
         }
     }
     parseDumpProviders(dumpOutput, profileId, activeProvider, now) {
-        const apiKeysMatch = dumpOutput.match(/^api_keys:\n((?:  .+\n)*)/m);
+        const apiKeysMatch = dumpOutput.match(/^api_keys:\n((?: {2}.+\n)*)/m);
         const providers = [];
         // Non-LLM tool/service keys to exclude
         const NON_MODEL_PROVIDERS = new Set([
@@ -2006,7 +2283,7 @@ export class HermesCli {
         let reasoningEffort;
         let toolUseEnforcement;
         // Parse config_overrides section from dump for max_turns, reasoning_effort, etc.
-        const overridesMatch = dumpOutput.match(/^config_overrides:\n((?:  .+\n)*)/m);
+        const overridesMatch = dumpOutput.match(/^config_overrides:\n((?: {2}.+\n)*)/m);
         if (overridesMatch?.[1]) {
             const lines = overridesMatch[1].split('\n').filter(Boolean);
             for (const line of lines) {

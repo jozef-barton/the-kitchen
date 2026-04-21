@@ -13,7 +13,21 @@ function readJsonFile(filePath) {
     }
 }
 export function getBuiltinRecipesPath() {
-    return path.resolve(import.meta.dirname, '../../builtin-recipes');
+    // From apps/bridge/src/services/recipes/, the builtin-recipes folder lives at apps/bridge/builtin-recipes/
+    // (three directory levels up). Try the three-level path first (works from compiled src/), then fall back
+    // to a couple of alternates so the bridge still resolves it when running from a TS loader or from dist.
+    const candidates = [
+        path.resolve(import.meta.dirname, '../../../builtin-recipes'),
+        path.resolve(import.meta.dirname, '../../builtin-recipes'),
+        path.resolve(import.meta.dirname, '../../../../builtin-recipes')
+    ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    // Default to the expected location even if missing, so callers get a stable path to report.
+    return candidates[0];
 }
 export function getUserRecipesPath() {
     return path.join(os.homedir(), '.hermes', 'recipes');

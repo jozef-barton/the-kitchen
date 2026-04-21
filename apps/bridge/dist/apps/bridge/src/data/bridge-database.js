@@ -3177,6 +3177,26 @@ export class BridgeDatabase {
             .run(parsedEvent.id, parsedEvent.profileId ?? null, parsedEvent.sessionId ?? null, parsedEvent.requestId ?? null, parsedEvent.severity, parsedEvent.category, parsedEvent.code, parsedEvent.message, parsedEvent.detail ?? null, JSON.stringify(parsedEvent.payload), parsedEvent.createdAt);
         return parsedEvent;
     }
+    batchAppendTelemetryEvents(events) {
+        if (events.length === 0)
+            return;
+        const parsed = events.map((e) => TelemetryEventSchema.parse(e));
+        const insert = this.database.prepare(`INSERT OR IGNORE INTO telemetry_events (
+        id, profile_id, session_id, request_id, severity, category, code,
+        message, detail, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        this.database.exec('BEGIN');
+        try {
+            for (const r of parsed) {
+                insert.run(r.id, r.profileId ?? null, r.sessionId ?? null, r.requestId ?? null, r.severity, r.category, r.code, r.message, r.detail ?? null, JSON.stringify(r.payload), r.createdAt);
+            }
+            this.database.exec('COMMIT');
+        }
+        catch (err) {
+            this.database.exec('ROLLBACK');
+            throw err;
+        }
+    }
     listTelemetryEvents(options = {}) {
         const limit = Math.max(1, Math.min(500, Math.trunc(options.limit ?? 100)));
         const clauses = [];

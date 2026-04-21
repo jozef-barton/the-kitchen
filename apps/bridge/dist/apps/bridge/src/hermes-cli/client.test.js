@@ -102,7 +102,7 @@ describe('HermesCli', () => {
         expect(classifyStructuredRecipeIntent('Create a recovered markdown recipe with research notes.', false)).toEqual({
             category: 'research',
             preferredContentFormat: 'markdown',
-            label: 'research summary'
+            label: 'research notebook'
         });
     });
     it('classifies research-notebook planning requests as plan intents so template enrichment can run', () => {
@@ -116,9 +116,9 @@ describe('HermesCli', () => {
         expect(classifyStructuredRecipeIntent('Design an architecture for a vendor-tracking app', false))
             .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'research notebook' });
     });
-    it('classifies how-to requests as step-by-step guide intents', () => {
+    it('classifies how-to requests as step-by-step intents', () => {
         expect(classifyStructuredRecipeIntent('How to deploy a Next.js app to Vercel', false))
-            .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'step-by-step guide' });
+            .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'step by step' });
     });
     it('classifies recommendation requests as research notebook intents', () => {
         expect(classifyStructuredRecipeIntent('What should I use for state management in React?', false))
@@ -687,6 +687,39 @@ describe('HermesCli', () => {
         expect(serializedArgs).toContain('Do not inspect the local repository or recipe for nearby-search requests');
         expect(serializedArgs).toContain('Do not use read_file, open, cat, ls, execute_code, python, shell');
         expect(serializedArgs).toContain('Do not include raw tool output');
+        // Phase 1: recipe-creation instructions must NOT be in the main-chat prompt for local search
+        expect(serializedArgs).not.toContain('Create exactly one attached Recipe');
+        expect(serializedArgs).not.toContain('create exactly one attached recipe');
+        expect(serializedArgs).not.toContain('naturally produces a shortlist, create or update the local attached Recipe');
+    });
+    it('omits recipe-creation instructions from discovery and general structured-intent prompts (Phase 1 slim prompt)', async () => {
+        const prompts = [
+            { content: 'Find me the best Bluetooth speakers under $100.', label: 'discovery' },
+            { content: 'Compare three project management tools.', label: 'discovery' },
+            { content: 'Top 5 hotels in Cleveland OH.', label: 'local search (hotels)' },
+            { content: 'What are some good laptop recommendations?', label: 'general structured intent' }
+        ];
+        for (const { content, label } of prompts) {
+            const streamCalls = [];
+            const runner = {
+                async run() { return { stdout: '', stderr: '', exitCode: 0 }; },
+                async stream(args) {
+                    streamCalls.push({ args });
+                    return { stdout: `Answer for ${content}\nsession_id: s-1\n`, stderr: '', exitCode: 0 };
+                }
+            };
+            const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+            await cli.streamChat({
+                profile: { id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true },
+                content,
+                timeoutMs: 60_000,
+                maxTurns: 1,
+                unrestrictedAccessEnabled: false
+            });
+            const serialized = streamCalls[0]?.args.join(' ') ?? '';
+            expect(serialized, `[${label}] must not contain recipe-creation instruction`).not.toContain('Create exactly one attached Recipe');
+            expect(serialized, `[${label}] must not contain recipe-creation instruction`).not.toContain('create exactly one attached recipe');
+        }
     });
     it('returns a clearer timeout error for nearby-search intents', async () => {
         const runner = {

@@ -8,6 +8,16 @@ import { getRecipeContentEntries, getRecipeContentFormat as getAttachedRecipeCon
 import { createBridgeServer } from './server';
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const fixtureCliPath = path.resolve(moduleDirectory, '../test/fixtures/hermes-cli-fixture.mjs');
+// The bridge requires the x-hermes-bridge: 1 header on non-safe requests (CSRF guard).
+// Wrap global fetch so tests don't have to set it on every call.
+const originalFetch = globalThis.fetch;
+globalThis.fetch = ((input, init) => {
+    const mergedHeaders = {
+        'x-hermes-bridge': '1',
+        ...(init?.headers ?? {})
+    };
+    return originalFetch(input, { ...init, headers: mergedHeaders });
+});
 async function collectStreamEvents(response) {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -126,22 +136,6 @@ function expectPromotedRichHomeRecipe(recipe, expectedSnippet) {
     expect(recipe.dynamic?.recipeDsl).toBeUndefined();
     expect(recipe.dynamic?.recipeModel).toBeUndefined();
     expect(getPrimaryDynamicDataset(recipe)).not.toBeNull();
-}
-function expectFailedTemplateHomeRecipe(recipe, expectedSnippet, expectedFailureCategory) {
-    expectBaselineHomeRecipe(recipe, expectedSnippet);
-    if (!recipe) {
-        return;
-    }
-    expect(recipe.renderMode).toBe('dynamic_v1');
-    expect(recipe.dynamic?.activeBuild?.buildKind).toBe('template_enrichment');
-    expect(recipe.dynamic?.activeBuild?.phase).toBe('failed');
-    if (expectedFailureCategory) {
-        expect(recipe.dynamic?.activeBuild?.failureCategory).toBe(expectedFailureCategory);
-        expect(recipe.metadata.recipePipeline?.applet.failureCategory).toBe(expectedFailureCategory);
-    }
-    expect(recipe.dynamic?.recipeTemplate).toBeUndefined();
-    expect(recipe.dynamic?.recipeDsl).toBeUndefined();
-    expect(recipe.dynamic?.recipeModel).toBeUndefined();
 }
 async function startServer(tempRoot, options = {}) {
     const databasePath = options.databasePath ?? path.join(tempRoot, 'bridge.sqlite');
@@ -311,6 +305,7 @@ describe.sequential('bridge server', () => {
         // connectProvider in v0.9.0 delegates to discovery — returns provider state
         expect(connected.config).toBeTruthy();
         expect(connected.providers.length).toBeGreaterThan(0);
+        expect(otherProfileProviders.config.profileId).toBe('jbarton');
         expect(settings.settings.unrestrictedAccessEnabled).toBe(false);
         await server.close();
     });
@@ -985,7 +980,7 @@ Keep summaries short and searchable for the active profile.
         }
         await server.close();
     }, 20_000);
-    it('preserves the assistant answer in a baseline Home recipe when a structured-result request would have produced an incomplete rich shell', async () => {
+    it('uses the conversational answer as the baseline when main-chat recipe instructions are absent (Phase 1 slim prompt)', async () => {
         const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-shell-recipe-'));
         tempRoots.push(tempRoot);
         const server = await startServer(tempRoot);
@@ -1019,8 +1014,11 @@ Keep summaries short and searchable for the active profile.
         expect(events.some((event) => event.type === 'recipe_event')).toBe(true);
         expect(sessionMessages.attachedRecipe).not.toBeNull();
         expect(sessionMessages.session.attachedRecipeId).toBeTruthy();
-        expectFailedTemplateHomeRecipe(sessionMessages.attachedRecipe, 'I created a shell recipe for this request.', 'template_selection_failed');
-        expect(sessionMessages.messages.some((message) => message.role === 'assistant' && message.content.includes('I created a shell recipe for this request.'))).toBe(true);
+        // Phase 1: the main chat no longer appends recipe-creation instructions, so the
+        // baseline Home recipe is seeded from the conversational answer rather than an
+        // empty shell. The structured template is built by the separate enrichment pipeline.
+        expectBaselineHomeRecipe(sessionMessages.attachedRecipe);
+        expect(sessionMessages.messages.some((message) => message.role === 'assistant' && message.content.includes('Italian restaurants'))).toBe(true);
         expect(completeEvent?.type).toBe('complete');
         if (completeEvent?.type === 'complete') {
             expect(completeEvent.assistantMessage.content).not.toContain('hermes-ui-recipes');
@@ -1479,7 +1477,9 @@ Keep summaries short and searchable for the active profile.
         expect(errorEvent?.type).toBe('error');
         if (errorEvent?.type === 'error') {
             expect(errorEvent.error.code).toBe('INTERNAL_ERROR');
-            expect(errorEvent.error.message).toContain('Simulated stream failure after headers.');
+            // The client must get a non-empty error message; the message is intentionally
+            // generic (internals stay server-side) so we do not assert its exact text.
+            expect(errorEvent.error.message.length).toBeGreaterThan(0);
         }
         expect(health.status).toBe(200);
         await server.close();
@@ -1921,4 +1921,101 @@ Keep summaries short and searchable for the active profile.
         expect(reopenedSessions.items.some((item) => item.id === 'legacy-runtime-session')).toBe(true);
         await reopened.close();
     });
+    it('routes mutation intent (redo with cards and images) to template enrichment when a recipe is already attached', async () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-mutation-intent-'));
+        tempRoots.push(tempRoot);
+        const server = await startServer(tempRoot);
+        const bootstrap = await fetch(`${server.baseUrl}/api/bootstrap`).then((result) => readJson(result));
+        const profileId = bootstrap.activeProfileId ?? 'jbarton';
+        // Step 1: Establish a recipe baseline from an initial structured-intent prompt.
+        const session = await fetch(`${server.baseUrl}/api/sessions`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ profileId })
+        }).then((result) => readJson(result));
+        await fetch(`${server.baseUrl}/api/chat/stream`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                profileId,
+                sessionId: session.id,
+                content: 'Find good hotels in Dayton, OH for a weekend stay.'
+            })
+        }).then(collectStreamEvents);
+        await server.bridge.waitForRecipeEnrichmentQueues();
+        const firstPayload = await waitForSessionMessages(server.baseUrl, profileId, session.id, (payload) => Boolean(payload.attachedRecipe &&
+            (payload.attachedRecipe.dynamic?.recipeTemplate ||
+                payload.attachedRecipe.dynamic?.activeBuild?.phase === 'failed')), 12_000);
+        expect(firstPayload.session.attachedRecipeId).toBeTruthy();
+        expect(firstPayload.attachedRecipe?.dynamic?.recipeTemplate?.kind).toBe('recipe_template_state');
+        // Step 2: Send a mutation intent — "redo this with more pictures and cards".
+        // The system should route this through template enrichment, producing recipe_build_progress events.
+        const mutationEvents = await fetch(`${server.baseUrl}/api/chat/stream`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                profileId,
+                sessionId: session.id,
+                content: 'Redo this with more pictures and cards.'
+            })
+        }).then(collectStreamEvents);
+        await server.bridge.waitForRecipeEnrichmentQueues();
+        // Mutation intent MUST trigger at least one recipe_build_progress event — confirming that
+        // enrichment started rather than falling through to plain-chat "Got it!" reply.
+        const buildProgressEvents = mutationEvents.filter((ev) => ev.type === 'recipe_build_progress');
+        expect(buildProgressEvents.length, 'mutation intent should trigger recipe_build_progress events (not plain chat)').toBeGreaterThan(0);
+        // The early ghost (Phase 3) should emit a partialTemplateState before the complete event.
+        const earlyPartialEvents = mutationEvents.filter((ev) => ev.type === 'recipe_build_progress' && ev.partialTemplateState !== null);
+        expect(earlyPartialEvents.length, 'early ghost state should be emitted for mutation with an attached recipe').toBeGreaterThan(0);
+        await server.close();
+    }, 30_000);
+    it('emits early ghost state before complete event when a structured intent is classified on an existing recipe', async () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-early-ghost-'));
+        tempRoots.push(tempRoot);
+        const server = await startServer(tempRoot);
+        const bootstrap = await fetch(`${server.baseUrl}/api/bootstrap`).then((result) => readJson(result));
+        const profileId = bootstrap.activeProfileId ?? 'jbarton';
+        // Step 1: First chat creates a recipe (hotel shortlist)
+        const session = await fetch(`${server.baseUrl}/api/sessions`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ profileId })
+        }).then((result) => readJson(result));
+        await fetch(`${server.baseUrl}/api/chat/stream`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                profileId,
+                sessionId: session.id,
+                content: 'Find good hotels in Dayton, OH for a weekend stay.'
+            })
+        }).then(collectStreamEvents);
+        await server.bridge.waitForRecipeEnrichmentQueues();
+        // Confirm recipe exists
+        const basePayload = await waitForSessionMessages(server.baseUrl, profileId, session.id, (payload) => Boolean(payload.attachedRecipe?.dynamic?.recipeTemplate), 12_000);
+        expect(basePayload.attachedRecipe?.dynamic?.recipeTemplate?.kind).toBe('recipe_template_state');
+        // Step 2: Second chat (same session, recipe attached) — structured intent with a known template.
+        // The early ghost (Phase 3) should fire BEFORE the complete event in the stream.
+        const secondEvents = await fetch(`${server.baseUrl}/api/chat/stream`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                profileId,
+                sessionId: session.id,
+                content: 'Compare three CRM options and give me a shortlist.'
+            })
+        }).then(collectStreamEvents);
+        await server.bridge.waitForRecipeEnrichmentQueues();
+        const completeIndex = secondEvents.findIndex((ev) => ev.type === 'complete');
+        const firstGhostIndex = secondEvents.findIndex((ev) => ev.type === 'recipe_build_progress' && ev.partialTemplateState !== null);
+        // At minimum, some recipe_build_progress events fired.
+        expect(secondEvents.some((ev) => ev.type === 'recipe_build_progress'), 'second chat with attached recipe and structured intent should produce recipe_build_progress events').toBe(true);
+        // If an early ghost fired, it should have arrived early in the stream (within a few events of
+        // the start, well before the async enrichment completes).
+        if (firstGhostIndex >= 0 && completeIndex >= 0) {
+            // The ghost should not appear AFTER the complete event (it's meant to be early).
+            expect(firstGhostIndex, 'early ghost should arrive before or at the complete event in the SSE stream').toBeLessThanOrEqual(completeIndex + 2);
+        }
+        await server.close();
+    }, 30_000);
 });

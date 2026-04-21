@@ -1,13 +1,20 @@
 import http from 'node:http';
 import path from 'node:path';
-import { ApplyRecipeEntryActionRequestSchema, BeginProviderAuthRequestSchema, ChatStreamRequestSchema, ConnectProviderRequestSchema, CreateRecipeRequestSchema, CreateSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSessionRequestSchema, DeleteSkillRequestSchema, ExecuteRecipeActionRequestSchema, OpenRecipeChatRequestSchema, PollProviderAuthRequestSchema, RenameSessionRequestSchema, SelectProfileRequestSchema, SelectSessionRequestSchema, ToolExecutionResolveRequestSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema, RecipeManifestSchema } from '@hermes-recipes/protocol';
+import { ApplyRecipeEntryActionRequestSchema, BeginProviderAuthRequestSchema, ChatStreamRequestSchema, ConnectProviderRequestSchema, CreateRecipeRequestSchema, CreateSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSessionRequestSchema, DeleteSkillRequestSchema, ExecuteRecipeActionRequestSchema, OpenRecipeChatRequestSchema, PollProviderAuthRequestSchema, RenameSessionRequestSchema, ResolveImagesRequestSchema, SelectProfileRequestSchema, SelectSessionRequestSchema, ToolExecutionResolveRequestSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema, RecipeManifestSchema } from '@hermes-recipes/protocol';
+import { createUnsplashSourceResolver, resolveImagesInParallel } from '../services/images/image-resolver';
+import { refreshDiskRecipeRegistry } from '../services/recipes/recipe-template-registry';
+const defaultImageResolver = createUnsplashSourceResolver();
+// Prime the disk recipe registry on startup so user recipes and builtin recipe JSON files participate
+// in template-definition lookups without waiting for the first request.
+void refreshDiskRecipeRegistry();
 import { HermesBridge, BridgeError } from '../services/hermes-bridge-service';
 import { BridgeDatabase } from '../data/bridge-database';
 import { HermesCli } from '../hermes-cli/client';
 import { migrateLegacySnapshotIfNeeded } from '../legacy-snapshot';
 import { resolveLegacySnapshotCandidates } from '../paths';
 import { evaluateLocalOriginPolicy } from './origin-policy';
-import { readJsonBody } from './request-body';
+import { validateRecipeId, resolveWithinRoot, validateVersion, PathValidationError } from './path-validation';
+import { readJsonBody, PayloadTooLargeError } from './request-body';
 import { sendJson, sendSseHeaders, writeSseEvent } from './response';
 import { serveStaticAsset } from './static-assets';
 import { buildRecipeBuilderSystemPrompt } from '../services/recipes/recipe-builder-prompt';
@@ -21,12 +28,37 @@ function toApiErrorPayload(error) {
             }
         };
     }
-    const message = error instanceof Error ? error.message : 'Unexpected bridge error.';
+    if (error instanceof PathValidationError) {
+        return {
+            statusCode: 400,
+            error: {
+                code: 'INVALID_REQUEST',
+                message: error.message
+            }
+        };
+    }
+    if (error instanceof PayloadTooLargeError) {
+        return {
+            statusCode: 413,
+            error: {
+                code: 'PAYLOAD_TOO_LARGE',
+                message: error.message
+            }
+        };
+    }
+    // Log the raw error server-side for diagnosis but do not leak internals (paths, SQL errors,
+    // stack traces) to the client.
+    if (error instanceof Error) {
+        console.error('[bridge] Unhandled error:', error);
+    }
+    else {
+        console.error('[bridge] Unhandled non-error thrown:', error);
+    }
     return {
         statusCode: 500,
         error: {
             code: 'INTERNAL_ERROR',
-            message
+            message: 'An unexpected error occurred. See the bridge logs for details.'
         }
     };
 }
@@ -136,7 +168,7 @@ export function createBridgeServer(options) {
         if (request.method === 'OPTIONS') {
             response.writeHead(204, {
                 'access-control-allow-origin': originDecision.allowOrigin ?? request.headers.origin ?? '',
-                'access-control-allow-headers': 'content-type',
+                'access-control-allow-headers': 'content-type, x-hermes-bridge',
                 'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
                 vary: 'Origin'
             });
@@ -162,6 +194,12 @@ export function createBridgeServer(options) {
             if (request.method === 'POST' && pathname === '/api/sessions') {
                 const payload = CreateSessionRequestSchema.parse(await readJsonBody(request));
                 sendJson(response, 201, await bridge.createSession(payload), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'POST' && pathname === '/api/images/resolve') {
+                const payload = ResolveImagesRequestSchema.parse(await readJsonBody(request));
+                const results = await resolveImagesInParallel(defaultImageResolver, payload.queries);
+                sendJson(response, 200, { results }, originDecision.allowOrigin);
                 return;
             }
             if (request.method === 'GET' && pathname === '/api/recipes/templates') {
@@ -210,12 +248,10 @@ export function createBridgeServer(options) {
                 return;
             }
             if (request.method === 'DELETE' && /^\/api\/recipes\/user\/[^/]+$/.test(pathname)) {
-                const recipeId = decodeURIComponent(pathname.split('/')[4] ?? '');
-                if (!recipeId)
-                    throw new BridgeError(400, 'INVALID_REQUEST', 'recipeId is required.');
+                const recipeId = validateRecipeId(decodeURIComponent(pathname.split('/')[4] ?? ''));
                 const { getUserRecipesPath } = await import('../services/recipes/recipe-file-loader');
                 const fs = await import('node:fs');
-                const folderPath = path.join(getUserRecipesPath(), recipeId);
+                const folderPath = resolveWithinRoot(getUserRecipesPath(), recipeId);
                 if (fs.existsSync(folderPath)) {
                     fs.rmSync(folderPath, { recursive: true, force: true });
                 }
@@ -223,12 +259,10 @@ export function createBridgeServer(options) {
                 return;
             }
             if (request.method === 'GET' && /^\/api\/recipes\/user\/[^/]+$/.test(pathname)) {
-                const recipeId = decodeURIComponent(pathname.split('/')[4] ?? '');
-                if (!recipeId)
-                    throw new BridgeError(400, 'INVALID_REQUEST', 'recipeId is required.');
+                const recipeId = validateRecipeId(decodeURIComponent(pathname.split('/')[4] ?? ''));
                 const { getUserRecipesPath, loadRecipeFromDisk } = await import('../services/recipes/recipe-file-loader');
                 const { listVersions } = await import('../services/recipes/recipe-version-manager');
-                const folderPath = path.join(getUserRecipesPath(), recipeId);
+                const folderPath = resolveWithinRoot(getUserRecipesPath(), recipeId);
                 const loaded = loadRecipeFromDisk(folderPath);
                 if (!loaded)
                     throw new BridgeError(404, 'NOT_FOUND', `Recipe ${recipeId} not found.`);
@@ -243,20 +277,16 @@ export function createBridgeServer(options) {
                 return;
             }
             if (request.method === 'GET' && /^\/api\/recipes\/user\/[^/]+\/versions$/.test(pathname)) {
-                const recipeId = decodeURIComponent(pathname.split('/')[4] ?? '');
-                if (!recipeId)
-                    throw new BridgeError(400, 'INVALID_REQUEST', 'recipeId is required.');
+                const recipeId = validateRecipeId(decodeURIComponent(pathname.split('/')[4] ?? ''));
                 const { getUserRecipesPath } = await import('../services/recipes/recipe-file-loader');
                 const { listVersions } = await import('../services/recipes/recipe-version-manager');
-                const folderPath = path.join(getUserRecipesPath(), recipeId);
+                const folderPath = resolveWithinRoot(getUserRecipesPath(), recipeId);
                 const versions = listVersions(folderPath);
                 sendJson(response, 200, { versions }, originDecision.allowOrigin);
                 return;
             }
             if (request.method === 'POST' && /^\/api\/recipes\/user\/[^/]+\/save$/.test(pathname)) {
-                const recipeId = decodeURIComponent(pathname.split('/')[4] ?? '');
-                if (!recipeId)
-                    throw new BridgeError(400, 'INVALID_REQUEST', 'recipeId is required.');
+                const recipeId = validateRecipeId(decodeURIComponent(pathname.split('/')[4] ?? ''));
                 const body = await readJsonBody(request);
                 const { manifest, runtime, spec = null, fixture = null } = body;
                 const summary = body.summary ?? '';
@@ -268,7 +298,7 @@ export function createBridgeServer(options) {
                 const { getUserRecipesPath } = await import('../services/recipes/recipe-file-loader');
                 const { saveVersion, listVersions } = await import('../services/recipes/recipe-version-manager');
                 const fs = await import('node:fs');
-                const folderPath = path.join(getUserRecipesPath(), recipeId);
+                const folderPath = resolveWithinRoot(getUserRecipesPath(), recipeId);
                 fs.mkdirSync(folderPath, { recursive: true });
                 fs.writeFileSync(path.join(folderPath, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
                 fs.writeFileSync(path.join(folderPath, 'runtime.json'), JSON.stringify(runtime, null, 2), 'utf8');
@@ -283,6 +313,8 @@ export function createBridgeServer(options) {
                     fixture: fixture ?? null
                 });
                 const versions = listVersions(folderPath);
+                // Refresh the disk registry so the saved recipe becomes available for selection immediately.
+                void refreshDiskRecipeRegistry();
                 sendJson(response, 200, {
                     version: newVersion,
                     recipe: { manifest, runtime, spec, fixture, versions }
@@ -290,16 +322,12 @@ export function createBridgeServer(options) {
                 return;
             }
             if (request.method === 'POST' && /^\/api\/recipes\/user\/[^/]+\/rollback$/.test(pathname)) {
-                const recipeId = decodeURIComponent(pathname.split('/')[4] ?? '');
-                if (!recipeId)
-                    throw new BridgeError(400, 'INVALID_REQUEST', 'recipeId is required.');
+                const recipeId = validateRecipeId(decodeURIComponent(pathname.split('/')[4] ?? ''));
                 const body = await readJsonBody(request);
-                const version = body.version;
-                if (!version)
-                    throw new BridgeError(400, 'INVALID_REQUEST', 'version is required.');
+                const version = validateVersion(body.version);
                 const { getUserRecipesPath } = await import('../services/recipes/recipe-file-loader');
                 const { rollbackToVersion, listVersions } = await import('../services/recipes/recipe-version-manager');
-                const folderPath = path.join(getUserRecipesPath(), recipeId);
+                const folderPath = resolveWithinRoot(getUserRecipesPath(), recipeId);
                 const rolled = rollbackToVersion(folderPath, version);
                 if (!rolled)
                     throw new BridgeError(404, 'NOT_FOUND', `Version ${version} not found for recipe ${recipeId}.`);
@@ -620,9 +648,10 @@ export function createBridgeServer(options) {
                         if (!runtime)
                             errors.push('Missing runtime in recipe_definition');
                         if (manifest && runtime) {
-                            const recipeId = body.recipeId ?? manifest.id ?? `user-${Date.now()}`;
+                            const proposedRecipeId = body.recipeId ?? manifest.id ?? `user-${Date.now()}`;
+                            const recipeId = validateRecipeId(proposedRecipeId);
                             const { getUserRecipesPath, saveRecipeToDisk } = await import('../services/recipes/recipe-file-loader');
-                            const folderPath = path.join(getUserRecipesPath(), recipeId);
+                            const folderPath = resolveWithinRoot(getUserRecipesPath(), recipeId);
                             try {
                                 const validManifest = RecipeManifestSchema.parse({ ...manifest, id: recipeId, source: 'user' });
                                 saveRecipeToDisk(folderPath, validManifest, {

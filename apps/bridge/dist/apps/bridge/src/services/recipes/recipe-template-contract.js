@@ -688,46 +688,6 @@ function coerceTimelineItems(value, repairs, path) {
     })
         .filter((item) => Boolean(item));
 }
-function coerceBoardColumns(value, repairs, path) {
-    const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
-    if (!Array.isArray(value) && value !== undefined && value !== null) {
-        registerNormalizedValue(repairs, `${path}:singular -> array`);
-    }
-    return source
-        .map((item, index) => {
-        const record = toRecord(item);
-        const label = preferString(record, ['label', 'title', 'name'], repairs, 'label');
-        if (!label) {
-            return null;
-        }
-        const cards = (Array.isArray(record.cards) ? record.cards : []).map((card, cardIndex) => {
-            const parsed = RecipeTemplateAuthoringBoardCardSchema.safeParse(card);
-            if (parsed.success) {
-                return parsed.data;
-            }
-            const cardRecord = toRecord(card);
-            const title = preferString(cardRecord, ['title', 'label', 'name'], repairs, 'title');
-            if (!title) {
-                return null;
-            }
-            return {
-                id: preferString(cardRecord, ['id', 'itemId'], repairs, 'id'),
-                title,
-                subtitle: preferString(cardRecord, ['subtitle', 'summary'], repairs, 'subtitle'),
-                chips: coerceChips(cardRecord.chips ?? cardRecord.tags, repairs, `${path}[${index}].cards[${cardIndex}].chips`),
-                footer: preferString(cardRecord, ['footer', 'note'], repairs, 'footer'),
-                links: coerceLinks(cardRecord.links ?? cardRecord.actions, repairs, `${path}[${index}].cards[${cardIndex}].links`)
-            };
-        });
-        return {
-            id: preferString(record, ['id', 'columnId', 'key'], repairs, 'id') ?? `column-${index + 1}`,
-            label,
-            tone: asTone(record.tone),
-            cards: cards.filter((card) => Boolean(card))
-        };
-    })
-        .filter((item) => item !== null);
-}
 function coerceChecklistItems(value, repairs, path) {
     const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
     if (!Array.isArray(value) && value !== undefined && value !== null) {
@@ -771,6 +731,7 @@ function unwrapTemplateDataRecord(templateId, rawData, repairs, path) {
                 };
             case 'shopping-shortlist':
             case 'hotel-shortlist':
+            case 'job-search-pipeline':
                 registerAlias(repairs, `${path}.data`, `${path}.cards`);
                 return {
                     ...record,
@@ -921,8 +882,8 @@ function normalizeTemplateFillData(templateId, rawData, repairs) {
                 eyebrow: preferString(record, ['eyebrow', 'kicker'], repairs, 'eyebrow'),
                 heroChips: coerceChips(record.heroChips ?? record.badges, repairs, 'data.heroChips'),
                 stats: coerceStats(record.stats, repairs, 'data.stats'),
-                columns: coerceBoardColumns(record.columns ?? record.stages, repairs, 'data.columns'),
-                detail: coerceDetail(record.detail ?? record.selectedOpportunity ?? record.interviewPrep, repairs, 'data.detail')
+                cards: coerceCards(record.cards ?? record.jobs ?? record.listings, repairs, 'data.cards'),
+                noteLines: coerceNoteLines(record.noteLines ?? record.notes, repairs, 'data.noteLines')
             };
         case 'event-planner':
             return {
@@ -1107,15 +1068,6 @@ function clearTimelineLinks(items) {
         links: []
     }));
 }
-function clearBoardLinks(columns) {
-    return columns.map((column) => ({
-        ...column,
-        cards: column.cards.map((card) => ({
-            ...card,
-            links: []
-        }))
-    }));
-}
 function clearDetailLinks(detail) {
     return {
         ...detail,
@@ -1211,8 +1163,7 @@ function stripTemplateActionLinks(fill) {
                 ...fill,
                 data: {
                     ...fill.data,
-                    columns: clearBoardLinks(fill.data.columns),
-                    detail: clearDetailLinks(fill.data.detail)
+                    cards: clearCardLinks(fill.data.cards)
                 }
             });
         case 'event-planner':
@@ -1304,19 +1255,6 @@ function collectLinkedTimelineItems(items) {
         id: item.id ?? item.title,
         links: item.links
     }));
-}
-function collectLinkedBoardColumns(columns) {
-    return columns
-        .map((column) => ({
-        id: column.id,
-        cards: column.cards
-            .filter((card) => card.links.length > 0)
-            .map((card) => ({
-            id: card.id ?? card.title,
-            links: card.links
-        }))
-    }))
-        .filter((column) => column.cards.length > 0);
 }
 function collectLinkedDetail(detail) {
     if (!detail) {
@@ -1451,8 +1389,7 @@ export function createRecipeTemplateActionsArtifact(fill) {
                 schemaVersion: 'recipe_template_actions/v1',
                 templateId: fill.templateId,
                 data: {
-                    columns: collectLinkedBoardColumns(fill.data.columns),
-                    detail: collectLinkedDetail(fill.data.detail)
+                    cards: collectLinkedCards(fill.data.cards)
                 },
                 metadata: {}
             });
@@ -1526,23 +1463,6 @@ function mergeTimelineLinks(items, overlays = []) {
         ...item,
         links: overlayMap.get(item.id ?? item.title) ?? item.links
     }));
-}
-function mergeBoardLinks(columns, overlays = []) {
-    const columnMap = new Map(overlays.map((overlay) => [overlay.id, overlay]));
-    return columns.map((column) => {
-        const columnOverlay = columnMap.get(column.id ?? column.label);
-        if (!columnOverlay) {
-            return column;
-        }
-        const cardMap = new Map((columnOverlay.cards ?? []).map((card) => [card.id, card.links]));
-        return {
-            ...column,
-            cards: column.cards.map((card) => ({
-                ...card,
-                links: cardMap.get(card.id ?? card.title) ?? card.links
-            }))
-        };
-    });
 }
 function mergeDetailLinks(detail, overlay) {
     if (!overlay) {
@@ -1659,8 +1579,7 @@ export function assembleRecipeTemplateFill(input) {
                 ...baseFill,
                 data: {
                     ...baseFill.data,
-                    columns: mergeBoardLinks(baseFill.data.columns, actions.data.columns),
-                    detail: mergeDetailLinks(baseFill.data.detail, actions.data.detail)
+                    cards: mergeCardLinks(baseFill.data.cards, actions.data.cards)
                 }
             });
         case 'event-planner':
@@ -1801,6 +1720,8 @@ function defaultSlotIdForTemplateOperation(templateId, op) {
                     return 'shortlist';
                 case 'hotel-shortlist':
                     return 'hotels';
+                case 'job-search-pipeline':
+                    return 'listings';
                 case 'travel-itinerary-planner':
                     return 'bookings';
                 case 'event-planner':
@@ -1846,8 +1767,6 @@ function defaultSlotIdForTemplateOperation(templateId, op) {
                     return 'result-detail';
                 case 'security-review-board':
                     return 'selected-finding';
-                case 'job-search-pipeline':
-                    return 'pipeline-detail';
                 default:
                     return 'detail';
             }
@@ -1862,6 +1781,8 @@ function defaultSlotIdForTemplateOperation(templateId, op) {
                     return 'shortlist';
                 case 'hotel-shortlist':
                     return 'hotels';
+                case 'job-search-pipeline':
+                    return 'listings';
                 case 'travel-itinerary-planner':
                     return 'bookings';
                 case 'event-planner':
@@ -2291,9 +2212,6 @@ function ensureActiveTabId(requested, tabs) {
 function countGroupItems(groups) {
     return groups.reduce((total, group) => total + group.items.length, 0);
 }
-function countBoardCards(columns) {
-    return columns.reduce((total, column) => total + column.cards.length, 0);
-}
 function semanticCompletenessFailure(fill, primaryContentCounts, requiredSignals, humanLabel) {
     const countsSummary = Object.entries(primaryContentCounts)
         .map(([key, value]) => `${key}=${value}`)
@@ -2462,8 +2380,7 @@ export function validateRecipeTemplateSemanticCompleteness(fill) {
         }
         case 'job-search-pipeline': {
             const primaryContentCounts = {
-                columns: fill.data.columns.length,
-                cards: countBoardCards(fill.data.columns)
+                cards: fill.data.cards.length
             };
             return primaryContentCounts.cards > 0
                 ? {
@@ -2472,9 +2389,9 @@ export function validateRecipeTemplateSemanticCompleteness(fill) {
                     primaryContentCounts,
                     requiredSignals: ['cards'],
                     issues: [],
-                    summary: 'Pipeline cards populated.'
+                    summary: 'Job listing cards populated.'
                 }
-                : semanticCompletenessFailure(fill, primaryContentCounts, ['cards'], 'Pipeline');
+                : semanticCompletenessFailure(fill, primaryContentCounts, ['cards'], 'Job listings');
         }
         case 'event-planner': {
             const primaryContentCounts = {
@@ -2554,8 +2471,7 @@ function compileTemplateSections(fill, definition) {
                     rows: toTableRows(definition, data.rows),
                     footerChips: data.scopeTags,
                     footnote: undefined
-                },
-                createNotesSection(definition, 'operator-note', 'Notes', data.noteLines, []),
+                }
             ];
         }
         case 'shopping-shortlist': {
@@ -2567,8 +2483,7 @@ function compileTemplateSections(fill, definition) {
                     title: 'Shortlist',
                     columns: 1,
                     cards: toCardItems(definition, data.cards, [], 'shortlist-card')
-                },
-                createNotesSection(definition, 'notes', 'Shortlist notes', data.noteLines, []),
+                }
             ];
         }
         case 'inbox-triage-board': {
@@ -2612,12 +2527,11 @@ function compileTemplateSections(fill, definition) {
                             groups: toGroups(definition, data.groups, groupActionIds, 'results')
                         }
                     ],
-                    right: compactArray([
+                    right: [
                         createDetailPanelSection(definition, 'result-detail', fill.templateId === 'restaurant-finder' ? 'Selected restaurant' : 'Selected place', normalizeDetailValue(data.detail, fill.templateId === 'restaurant-finder' ? 'Selected restaurant' : 'Selected place', fill.templateId === 'restaurant-finder'
                             ? 'Select a result to review hours, links, and fit.'
-                            : 'Select a result to review website, contact details, and fit.'), detailActionIds),
-                        data.noteLines.length > 0 ? createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note']) : null
-                    ])
+                            : 'Select a result to review website, contact details, and fit.'), detailActionIds)
+                    ]
                 }
             ];
         }
@@ -2676,7 +2590,6 @@ function compileTemplateSections(fill, definition) {
                 { id: 'itinerary', label: 'Itinerary' },
                 { id: 'bookings', label: 'Bookings' },
                 { id: 'packing', label: 'Packing' },
-                { id: 'notes', label: 'Notes' },
                 { id: 'links', label: 'Links' }
             ];
             return [
@@ -2712,7 +2625,6 @@ function compileTemplateSections(fill, definition) {
                                 groups: toChecklistGroups(definition, data.packingItems, [])
                             }
                         ],
-                        notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])],
                         links: [
                             {
                                 slotId: 'links',
@@ -2741,7 +2653,6 @@ function compileTemplateSections(fill, definition) {
             const data = fill.data;
             const tabs = [
                 { id: 'sources', label: 'Sources' },
-                { id: 'notes', label: 'Notes' },
                 { id: 'points', label: 'Extracted points' },
                 { id: 'follow-ups', label: 'Follow-ups' }
             ];
@@ -2761,7 +2672,6 @@ function compileTemplateSections(fill, definition) {
                                 groups: toGroups(definition, data.sources, [], 'research-sources')
                             }
                         ],
-                        notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])],
                         points: [
                             {
                                 slotId: 'extracted-points',
@@ -2819,32 +2729,19 @@ function compileTemplateSections(fill, definition) {
                     rows: toTableRows(definition, data.rows),
                     footerChips: data.footerChips,
                     footnote: data.footnote
-                },
-                createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])
+                }
             ]);
         }
         case 'job-search-pipeline': {
             const data = fill.data;
-            const boardActionIds = ['move-job-stage', 'run-interview-prep'];
-            const detail = normalizeDetailValue(data.detail, 'Selected opportunity', 'Review the role, company, requirements, and interview prep context.');
             return compactArray([
-                data.stats.length > 0 ? createStatsSection('stats', 'Pipeline status', data.stats) : null,
+                data.stats.length > 0 ? createStatsSection('stats', 'At a glance', data.stats) : null,
                 {
-                    slotId: 'pipeline',
-                    kind: 'split',
-                    ratio: 'detail-list',
-                    left: [
-                        {
-                            slotId: 'pipeline-board',
-                            kind: 'kanban',
-                            title: 'Applications by stage',
-                            columns: toBoardColumns(definition, data.columns, boardActionIds, 'pipeline')
-                        }
-                    ],
-                    right: compactArray([
-                        createDetailPanelSection(definition, 'pipeline-detail', detail.title, detail),
-                        createNotesSection(definition, 'notes', 'Notes', [], ['append-template-note'])
-                    ])
+                    slotId: 'listings',
+                    kind: 'card-grid',
+                    title: 'Job listings',
+                    columns: 2,
+                    cards: toCardItems(definition, data.cards, [], 'job-card')
                 }
             ]);
         }
@@ -2854,8 +2751,7 @@ function compileTemplateSections(fill, definition) {
                 { id: 'venues', label: 'Venues' },
                 { id: 'guests', label: 'Guests' },
                 { id: 'checklist', label: 'Checklist' },
-                { id: 'itinerary', label: 'Itinerary' },
-                { id: 'notes', label: 'Notes' }
+                { id: 'itinerary', label: 'Itinerary' }
             ];
             return [
                 {
@@ -2898,8 +2794,7 @@ function compileTemplateSections(fill, definition) {
                                 title: 'Itinerary',
                                 items: toTimelineItems(definition, data.itineraryItems, [], 'event-itinerary')
                             }
-                        ],
-                        notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])]
+                        ]
                     }
                 }
             ];
@@ -2909,8 +2804,7 @@ function compileTemplateSections(fill, definition) {
             const tabs = [
                 { id: 'ideas', label: 'Ideas' },
                 { id: 'drafts', label: 'Drafts' },
-                { id: 'schedule', label: 'Schedule' },
-                { id: 'notes', label: 'Notes' }
+                { id: 'schedule', label: 'Schedule' }
             ];
             return [
                 {
@@ -2937,8 +2831,7 @@ function compileTemplateSections(fill, definition) {
                                 title: 'Schedule',
                                 items: toTimelineItems(definition, data.scheduleItems, [], 'campaign-schedule')
                             }
-                        ],
-                        notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])]
+                        ]
                     }
                 }
             ];
@@ -2957,9 +2850,8 @@ function compileTemplateSections(fill, definition) {
                         detail: step.detail,
                         checked: false
                     })),
-                    actions: createActionRefs(definition, ['append-template-note'])
-                },
-                createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])
+                    actions: createActionRefs(definition, [])
+                }
             ]);
         }
         default: {
@@ -3206,20 +3098,19 @@ function getTemplateFillGuide(templateId) {
             };
         case 'job-search-pipeline':
             return {
-                allowedDataKeys: ['stats', 'columns', 'detail'],
-                requiredDataKeys: ['columns', 'detail'],
+                allowedDataKeys: ['stats', 'cards', 'noteLines'],
+                requiredDataKeys: ['cards'],
                 validExample: {
                     kind: 'recipe_template_fill',
                     schemaVersion: 'recipe_template_fill/v2',
                     templateId,
                     title: 'Backend job search',
-                    summary: 'Track active applications and interview prep.',
+                    summary: 'Curated job listings with pay ranges and direct apply links.',
                     data: {
-                        columns: [{ id: 'applied', label: 'Applied', cards: [{ id: 'job-1', title: 'Platform Engineer' }] }],
-                        detail: { title: 'Platform Engineer', chips: [], fields: [] }
+                        cards: [{ id: 'job-1', title: 'Platform Engineer', subtitle: 'Stripe', price: '$200k–$240k', chips: [{ label: 'Remote', tone: 'accent' }], actions: [{ kind: 'link', label: 'Apply', href: 'https://stripe.com/jobs', openInNewTab: true }] }]
                     }
                 },
-                commonMistakes: ['Use canonical kanban columns and detail. Do not flatten opportunities into grouped lists or markdown prose.']
+                commonMistakes: ['Every card must have an Apply link action. Do not use kanban columns, board stages, or detail panels for this template.']
             };
         case 'shopping-shortlist':
             return {
@@ -3232,7 +3123,7 @@ function getTemplateFillGuide(templateId) {
                     title: 'Monitor shortlist',
                     summary: 'Curated shortlist of candidate monitors.',
                     data: {
-                        cards: [{ id: 'item-1', title: 'Dell 27" 4K', subtitle: '$299', chips: [{ label: 'Best value', tone: 'accent' }] }],
+                        cards: [{ id: 'item-1', title: 'Dell 27" 4K', subtitle: '$299', imageLabel: 'Dell 27 inch 4K monitor', chips: [{ label: 'Best value', tone: 'accent' }], links: [{ label: 'View product', href: 'https://www.dell.com/monitors/27-4k' }] }],
                         noteLines: ['All prices checked 2026-04-14.']
                     }
                 },
@@ -3249,7 +3140,11 @@ function getTemplateFillGuide(templateId) {
                         whyInvalid: 'Use data.cards directly. Do not nest data.data or rename cards to items.'
                     }
                 ],
-                commonMistakes: ['Use cards as canonical card items. Do not use data.data, items, or shortlistItems.']
+                commonMistakes: [
+                    'Use cards as canonical card items. Do not use data.data, items, or shortlistItems.',
+                    'Always include product/item URLs as links on each card when the source data provides them (e.g. links: [{ label: "View product", href: "https://..." }]).',
+                    'Always include imageLabel on each card to describe the item visually for image lookup (e.g. imageLabel: "Nike Air Force 1 white sneaker").'
+                ]
             };
         case 'inbox-triage-board':
             return {
@@ -3501,7 +3396,7 @@ function getTemplateSemanticRequirements(templateId) {
         case 'security-review-board':
             return ['Populate at least one finding in the severity-grouped results.'];
         case 'job-search-pipeline':
-            return ['Populate at least one card in the primary pipeline columns.'];
+            return ['Populate at least one job listing card with a title, company subtitle, pay price, and an Apply link action.'];
         case 'event-planner':
             return ['Populate at least one venue, guest, checklist item, or itinerary item.'];
         case 'content-campaign-planner':
@@ -3564,16 +3459,6 @@ function summarizeTimeline(items) {
         time: item.time
     }));
 }
-function summarizeBoard(columns) {
-    return columns.map((column) => ({
-        id: column.id ?? column.label,
-        label: column.label,
-        cards: column.cards.map((card) => ({
-            id: card.id ?? card.title,
-            title: card.title
-        }))
-    }));
-}
 function summarizeDetailFields(detail) {
     if (!detail) {
         return [];
@@ -3634,8 +3519,7 @@ function createRecipeTemplateActionsTargetPacket(text) {
             };
         case 'job-search-pipeline':
             return {
-                columns: summarizeBoard(text.data.columns),
-                detailFields: summarizeDetailFields(text.data.detail)
+                cards: summarizeCards(text.data.cards)
             };
         case 'event-planner':
             return {
@@ -4167,8 +4051,8 @@ function createGhostRecipeTemplateFill(templateId, currentState) {
                 data: {
                     heroChips: [],
                     stats: [],
-                    columns: [],
-                    detail: createGhostAuthoringDetail('Selected opportunity', 'Hydrating detail context.')
+                    cards: [],
+                    noteLines: []
                 },
                 metadata: {
                     preview: true
@@ -4220,6 +4104,26 @@ function createGhostRecipeTemplateFill(templateId, currentState) {
                 kind: 'recipe_template_fill',
                 schemaVersion: 'recipe_template_fill/v2',
                 templateId,
+                title,
+                subtitle,
+                summary,
+                data: {
+                    heroChips: [],
+                    prerequisites: [],
+                    steps: [],
+                    noteLines: []
+                },
+                metadata: {
+                    preview: true
+                }
+            });
+        default:
+            // Unknown templateId (custom user recipe): fall back to the step-by-step shape so the preview pipeline
+            // still produces a valid fill. The real rendering path is driven by section kinds regardless.
+            return RecipeTemplateFillSchema.parse({
+                kind: 'recipe_template_fill',
+                schemaVersion: 'recipe_template_fill/v2',
+                templateId: 'step-by-step-instructions',
                 title,
                 subtitle,
                 summary,
@@ -4699,7 +4603,7 @@ function upsertBoardCards(definition, sections, slotId, columnId, cards) {
         if (section.slotId !== slotId || section.kind !== 'kanban') {
             return section;
         }
-        const actionIds = definition.id === 'job-search-pipeline' ? ['move-job-stage', 'run-interview-prep'] : [];
+        const actionIds = [];
         return {
             ...section,
             columns: section.columns.map((column) => (column.id ?? column.label) !== columnId

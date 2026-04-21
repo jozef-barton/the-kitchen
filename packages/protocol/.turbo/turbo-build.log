@@ -1,4 +1,4 @@
 
-> @hermes-recipes/protocol@0.2.0 build /Users/jozefbarton/dev/hermes-boots-codex/packages/protocol
+> @hermes-recipes/protocol@0.2.0 build /Users/jozefbarton/dev/the-kitchen/packages/protocol
 > tsc -p tsconfig.json
 

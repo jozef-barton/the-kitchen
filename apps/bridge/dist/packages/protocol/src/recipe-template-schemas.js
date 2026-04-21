@@ -1,5 +1,8 @@
 import { z } from 'zod';
 const OptionalTextSchema = z.preprocess((value) => (value === null ? undefined : value), z.string().min(1).optional());
+// Legacy list of the 15 builtin template IDs. Preserved for backwards-compat with code that
+// still reasons about the closed set of templates; new recipes (disk-loaded or user-authored)
+// can use any non-empty string as their id.
 export const RECIPE_TEMPLATE_IDS = [
     'price-comparison-grid',
     'shopping-shortlist',
@@ -17,12 +20,33 @@ export const RECIPE_TEMPLATE_IDS = [
     'local-discovery-comparison',
     'step-by-step-instructions'
 ];
-export const RecipeTemplateIdSchema = z.enum(RECIPE_TEMPLATE_IDS);
+export const LegacyRecipeTemplateIdSchema = z.enum(RECIPE_TEMPLATE_IDS);
+// Recipe template ID is any non-empty string. Built-ins use the IDs above; user-authored recipes
+// can use anything unique.
+export const RecipeTemplateIdSchema = z.string().min(1);
 export const RecipeTemplateToneSchema = z.enum(['neutral', 'accent', 'success', 'warning', 'danger']);
 export const RecipeTemplateChipSchema = z
     .object({
     label: z.string().min(1),
     tone: RecipeTemplateToneSchema.default('neutral')
+})
+    .strict();
+export const RecipeTemplateImageBorderRadiusSchema = z.enum(['none', 'sm', 'md', 'lg', 'full']);
+export const RecipeTemplateImageBorderSchema = z.enum(['none', 'subtle', 'strong']);
+export const RecipeTemplateImageAspectSchema = z.enum(['square', 'video', 'portrait', 'natural']);
+export const RecipeTemplateImageFitSchema = z.enum(['cover', 'contain']);
+// src: current resolved URL. May start as null when the bridge is still resolving `query` (async hydration).
+// query: optional search descriptor. When present and src is null, the bridge resolves src via image lookup.
+export const RecipeTemplateImageSchema = z
+    .object({
+    src: z.string().min(1).nullable().default(null),
+    query: OptionalTextSchema,
+    alt: z.string().min(1),
+    caption: OptionalTextSchema,
+    borderRadius: RecipeTemplateImageBorderRadiusSchema.default('md'),
+    border: RecipeTemplateImageBorderSchema.default('none'),
+    aspect: RecipeTemplateImageAspectSchema.default('natural'),
+    fit: RecipeTemplateImageFitSchema.default('cover')
 })
     .strict();
 export const RecipeTemplateActionReferenceSchema = z.discriminatedUnion('kind', [
@@ -83,6 +107,7 @@ export const RecipeTemplateCardItemSchema = z
     subtitle: OptionalTextSchema,
     meta: OptionalTextSchema,
     imageLabel: OptionalTextSchema,
+    image: RecipeTemplateImageSchema.optional(),
     price: OptionalTextSchema,
     chips: z.array(RecipeTemplateChipSchema).default([]),
     bullets: z.array(z.string().min(1)).default([]),
@@ -146,6 +171,7 @@ export const RecipeTemplateTableRowSchema = z
     .object({
     id: z.string().min(1),
     label: z.string().min(1),
+    leadingImage: RecipeTemplateImageSchema.optional(),
     cells: z.array(RecipeTemplateTableCellSchema).default([]),
     actions: z.array(RecipeTemplateActionReferenceSchema).default([])
 })
@@ -307,6 +333,85 @@ export const RecipeTemplateSectionSchema = z.lazy(() => z.discriminatedUnion('ki
             .strict())
             .default([]),
         actions: z.array(RecipeTemplateActionReferenceSchema).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('image'),
+        title: OptionalTextSchema,
+        image: RecipeTemplateImageSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('audio'),
+        title: z.string().min(1),
+        src: z.string().min(1),
+        subtitle: OptionalTextSchema,
+        transcript: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('bar-chart'),
+        title: z.string().min(1),
+        xKey: z.string().min(1),
+        series: z
+            .array(z
+            .object({
+            id: z.string().min(1),
+            label: z.string().min(1),
+            tone: RecipeTemplateToneSchema.optional()
+        })
+            .strict())
+            .default([]),
+        data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))).default([]),
+        orientation: z.enum(['vertical', 'horizontal']).default('vertical'),
+        stacked: z.boolean().default(false),
+        valueFormat: z.enum(['number', 'currency', 'percent']).default('number')
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('line-chart'),
+        title: z.string().min(1),
+        xKey: z.string().min(1),
+        series: z
+            .array(z
+            .object({
+            id: z.string().min(1),
+            label: z.string().min(1),
+            tone: RecipeTemplateToneSchema.optional()
+        })
+            .strict())
+            .default([]),
+        data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))).default([]),
+        smooth: z.boolean().default(false),
+        valueFormat: z.enum(['number', 'currency', 'percent']).default('number')
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('pie-chart'),
+        title: z.string().min(1),
+        data: z
+            .array(z
+            .object({
+            id: z.string().min(1),
+            label: z.string().min(1),
+            value: z.number(),
+            tone: RecipeTemplateToneSchema.optional()
+        })
+            .strict())
+            .default([]),
+        variant: z.enum(['pie', 'donut']).default('donut'),
+        valueFormat: z.enum(['number', 'currency', 'percent']).default('number')
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('time-series'),
+        title: z.string().min(1),
+        xKey: z.string().min(1),
+        series: z
+            .array(z
+            .object({
+            id: z.string().min(1),
+            label: z.string().min(1),
+            tone: RecipeTemplateToneSchema.optional()
+        })
+            .strict())
+            .default([]),
+        data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))).default([]),
+        valueFormat: z.enum(['number', 'currency', 'percent']).default('number')
     }).strict()
 ]));
 export const RecipeTemplateTransitionRecordSchema = z
