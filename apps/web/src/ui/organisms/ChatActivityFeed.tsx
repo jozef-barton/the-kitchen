@@ -115,9 +115,9 @@ export function ChatActivityFeed({
       </Box>
 
       {/* Activity log */}
-      <ScrollArea.Root flex="1" minH={0} variant="hover">
+      <ScrollArea.Root flex="1" minH={0} minW={0} variant="hover">
         <ScrollArea.Viewport data-testid="chat-activity-scroll">
-          <VStack align="stretch" gap="0" px="2" py="1.5">
+          <VStack align="stretch" gap="0" px="2" py="1.5" minW={0}>
             {activities.length === 0 ? (
               <Box px="1" py="2">
                 <Text fontSize="xs" color="var(--text-muted)">

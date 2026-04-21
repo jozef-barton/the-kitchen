@@ -102,19 +102,29 @@ export function ActivityCard({ activity }: { activity: ChatActivity }) {
       bg="transparent"
       px="2.5"
       py="1.5"
+      minW={0}
+      maxW="100%"
+      overflow="hidden"
       _hover={{ bg: 'var(--surface-2)' }}
       transition="background 120ms ease"
       style={inProgress ? {
         animation: 'activityPulse 1.6s ease-in-out infinite'
       } : undefined}
     >
-      <VStack align="stretch" gap="1">
-        <HStack align="start" justify="space-between" gap="2">
+      <VStack align="stretch" gap="1" minW={0}>
+        <HStack align="start" justify="space-between" gap="2" minW={0}>
           <HStack align="center" gap="1.5" minW={0} flex="1">
             <Text as="span" fontSize="sm" lineHeight={1} flexShrink={0}>
               {kindIcon(activity.kind)}
             </Text>
-            <Text fontSize="xs" fontWeight="500" color="var(--text-primary)" lineClamp={2} minW={0}>
+            <Text
+              fontSize="xs"
+              fontWeight="500"
+              color="var(--text-primary)"
+              lineClamp={2}
+              minW={0}
+              wordBreak="break-word"
+            >
               {activity.label}
             </Text>
           </HStack>
@@ -138,7 +148,11 @@ export function ActivityCard({ activity }: { activity: ChatActivity }) {
         {detail ? (
           activity.kind === 'command' && activity.command ? (
             <Code
+              display="block"
               whiteSpace="pre-wrap"
+              wordBreak="break-word"
+              overflowWrap="anywhere"
+              maxW="100%"
               rounded="6px"
               px="1.5"
               py="1"
@@ -149,7 +163,14 @@ export function ActivityCard({ activity }: { activity: ChatActivity }) {
               {detail}
             </Code>
           ) : (
-            <Text fontSize="2xs" color="var(--text-muted)" lineClamp={2} pl="5">
+            <Text
+              fontSize="2xs"
+              color="var(--text-muted)"
+              lineClamp={2}
+              pl="5"
+              minW={0}
+              wordBreak="break-word"
+            >
               {detail}
             </Text>
           )
