@@ -35,7 +35,14 @@
             "Lasts a lifetime with basic care",
             "Great sear for steaks and vegetables"
           ],
-          "actions": []
+          "actions": [
+            {
+              "kind": "link",
+              "label": "View on Amazon",
+              "href": "https://www.amazon.com/dp/B00006JSUA",
+              "openInNewTab": true
+            }
+          ]
         },
         {
           "id": "c2",
@@ -61,7 +68,14 @@
             "Zests citrus, parmesan, nutmeg, ginger",
             "The one tool no home cook regrets owning"
           ],
-          "actions": []
+          "actions": [
+            {
+              "kind": "link",
+              "label": "View on Amazon",
+              "href": "https://www.amazon.com/dp/B00004OCNS",
+              "openInNewTab": true
+            }
+          ]
         },
         {
           "id": "c3",
@@ -87,7 +101,14 @@
             "Switches between grams and ounces",
             "Pull-out display reads under large bowls"
           ],
-          "actions": []
+          "actions": [
+            {
+              "kind": "link",
+              "label": "View on Amazon",
+              "href": "https://www.amazon.com/dp/B079N6GKN3",
+              "openInNewTab": true
+            }
+          ]
         },
         {
           "id": "c4",
@@ -114,11 +135,18 @@
             }
           ],
           "bullets": [
-            "Oven-safe to 500\u00b0F",
+            "Oven-safe to 500°F",
             "Self-basting lid studs",
             "Goes from stovetop to oven to table"
           ],
-          "actions": []
+          "actions": [
+            {
+              "kind": "link",
+              "label": "View on Williams Sonoma",
+              "href": "https://www.williams-sonoma.com/products/staub-round-cocotte/",
+              "openInNewTab": true
+            }
+          ]
         },
         {
           "id": "c5",
@@ -144,7 +172,14 @@
             "Soups, smoothies, sauces",
             "Stainless blade guard protects non-stick pots"
           ],
-          "actions": []
+          "actions": [
+            {
+              "kind": "link",
+              "label": "View on Amazon",
+              "href": "https://www.amazon.com/dp/B00418VFEI",
+              "openInNewTab": true
+            }
+          ]
         },
         {
           "id": "c6",
@@ -170,7 +205,14 @@
             "Covers the four elements of good cooking",
             "Well-illustrated by Wendy MacNaughton"
           ],
-          "actions": []
+          "actions": [
+            {
+              "kind": "link",
+              "label": "View on Amazon",
+              "href": "https://www.amazon.com/dp/0451494835",
+              "openInNewTab": true
+            }
+          ]
         }
       ]
     }

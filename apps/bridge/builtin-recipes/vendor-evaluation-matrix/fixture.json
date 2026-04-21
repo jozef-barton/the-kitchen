@@ -103,7 +103,9 @@
               "emphasis": false
             }
           ],
-          "actions": []
+          "actions": [
+            { "kind": "link", "label": "Open PostHog", "href": "https://posthog.com", "openInNewTab": true }
+          ]
         },
         {
           "id": "amplitude",
@@ -146,7 +148,9 @@
               "tone": "success"
             }
           ],
-          "actions": []
+          "actions": [
+            { "kind": "link", "label": "Open Amplitude", "href": "https://amplitude.com", "openInNewTab": true }
+          ]
         },
         {
           "id": "mixpanel",
@@ -184,7 +188,9 @@
               "emphasis": false
             }
           ],
-          "actions": []
+          "actions": [
+            { "kind": "link", "label": "Open Mixpanel", "href": "https://mixpanel.com", "openInNewTab": true }
+          ]
         },
         {
           "id": "heap",
@@ -224,7 +230,9 @@
               "emphasis": false
             }
           ],
-          "actions": []
+          "actions": [
+            { "kind": "link", "label": "Open Heap", "href": "https://heap.io", "openInNewTab": true }
+          ]
         }
       ],
       "footerChips": [

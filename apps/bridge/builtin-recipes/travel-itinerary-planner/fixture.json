@@ -30,6 +30,24 @@
       "panes": {
         "itinerary": [
           {
+            "slotId": "trip-tabs.itinerary.gyoen-photo",
+            "kind": "image",
+            "title": "Shinjuku Gyoen",
+            "image": { "src": null, "query": "Shinjuku Gyoen cherry blossoms spring Tokyo", "alt": "Shinjuku Gyoen cherry blossoms", "borderRadius": "md", "border": "none", "aspect": "video", "fit": "cover" }
+          },
+          {
+            "slotId": "trip-tabs.itinerary.teamlab-photo",
+            "kind": "image",
+            "title": "teamLab Planets",
+            "image": { "src": null, "query": "teamLab Planets Tokyo digital art water room", "alt": "teamLab Planets exhibit", "borderRadius": "md", "border": "none", "aspect": "video", "fit": "cover" }
+          },
+          {
+            "slotId": "trip-tabs.itinerary.kamakura-photo",
+            "kind": "image",
+            "title": "Kamakura — Great Buddha",
+            "image": { "src": null, "query": "Kamakura Great Buddha Daibutsu Japan", "alt": "Kamakura Great Buddha", "borderRadius": "md", "border": "none", "aspect": "video", "fit": "cover" }
+          },
+          {
             "slotId": "trip-tabs.itinerary.timeline",
             "kind": "timeline",
             "title": "Day-by-day",

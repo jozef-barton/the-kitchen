@@ -12,10 +12,10 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is comparing one or more items across up to four stores, hotels, restaurants, or other places where price is the decisive factor.',
     selectionSignals: ['compare prices', 'which store is cheapest', 'cheapest hotel', 'price across stores', 'price comparison'],
     goodFor: ['Single-item store shopping', 'Hotel price checks', 'Restaurant price checks', 'Any price-first comparison'],
-    supports: ['Up to 4 store columns', 'Per-row item link', 'Sortable price columns', 'Multiple items in title'],
+    supports: ['Up to 4 store columns', 'Per-row item link', 'Sortable price columns', 'Multiple items in title', 'Per-row product thumbnail'],
     preferredLayout: 'comparison-grid',
     supportedTabs: ['Overview'],
-    idealDataShape: ['One row per item being compared', 'Up to four stable store columns', 'A direct item link per row'],
+    idealDataShape: ['One row per item being compared', 'Up to four stable store columns', 'A direct item link per row', 'A product thumbnail for each row via leadingImage'],
     requiredSections: ['Comparison table'],
     optionalSections: [],
     requiredActions: ['Open item link'],
@@ -30,12 +30,14 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       steps: [
         'Use the title to list the items being compared (it is okay to include multiple items).',
         'Create one row per distinct item and one column per store, capped at four stores.',
-        'Include a direct link to the item or listing in every row so the user can jump straight to it.'
+        'Include a direct link to the item or listing in every row so the user can jump straight to it.',
+        'Include a leadingImage on each row pointing to a product photo or merchant thumbnail so users can visually confirm the item before clicking through.'
       ],
       guardrails: [
         'Never exceed four store columns including the item identity column.',
         'Do not add operator notes, quick action bars, or advisory footers — this recipe is price-first only.',
-        'Never render a row without a direct link to the item.'
+        'Never render a row without a direct link to the item.',
+        'Every row should include a leadingImage — an unreadable price grid without product identity fails the core scanning task.'
       ]
     },
     updateRules: {
@@ -155,14 +157,14 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is looking for nearby dining options, cuisine comparisons, or restaurant suggestions in an area.',
     selectionSignals: ['restaurants nearby', 'find dinner', 'best places to eat', 'compare restaurants'],
     goodFor: ['Nearby dining', 'Date-night options', 'Cuisine discovery'],
-    supports: ['List/detail view', 'Hours', 'Menu links', 'Book prompt'],
+    supports: ['List/detail view', 'Hours', 'Menu links', 'Book prompt', 'Restaurant photos', 'Reserve/Call/Directions quick actions'],
     preferredLayout: 'balanced',
     supportedTabs: ['Results', 'Saved', 'Notes'],
     idealDataShape: ['Venue list with cuisine, rating, price, and hours', 'Detail panel with address and links', 'Optional shortlist notes'],
     requiredSections: ['Result list', 'Detail panel'],
     optionalSections: ['Saved tab', 'Neighborhood note', 'Opening-hours highlights'],
     requiredActions: [],
-    optionalActions: [],
+    optionalActions: ['Reserve', 'Call', 'Directions'],
     emptyStateBehavior: 'Show a local-search empty state with a prompt to widen the area or cuisine.',
     loadingStateBehavior: 'Hold list and detail shells so the selected venue context stays anchored while results update.',
     errorStateBehavior: 'Preserve any loaded venues and surface source limitations clearly.',
@@ -175,6 +177,8 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
         'Place the entire split section (ratio: "balanced") inside the Results tab pane — do NOT place it at the top level outside tabs.',
         'Present the top venues as compact rows in a grouped-list on the left side of the split.',
         'On the right side, use a detail-panel with the selected venue fields stacked as plain label + value rows: Hours, Website (as a link), Phone, Cuisine — no filter strip.',
+        'Include a restaurant photo in the detail panel (image section or leadingImage on the selected venue row).',
+        'Populate the detail panel with up to three quick actions — a reserve link (OpenTable/Resy URL when available), tel: phone link, and map directions link.',
         'Do not add a filter-strip section anywhere — omit filters entirely.',
         'Do not render a bottom action bar or any stability note on the selected-venue panel.'
       ],
@@ -182,7 +186,7 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
         'All content must be nested inside tab panes — never place sections at the top level outside the tabs section.',
         'Do not add a filter-strip section.',
         'Do not invent map tiles or arbitrary geospatial UI.',
-        'Keep the selected-venue panel limited to hours, website, phone, and genre rows.',
+        'The selected-venue panel may include hours, website, phone, genre rows, a photo, and up to three quick-action buttons (Reserve, Call, Directions).',
         'Avoid replacing the whole list when only one venue detail changes.'
       ]
     },
@@ -204,10 +208,10 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is deciding between multiple hotels for a destination or trip window.',
     selectionSignals: ['compare hotels', 'shortlist hotels', 'where to stay', 'trip lodging options'],
     goodFor: ['Trip lodging', 'Business travel', 'Weekend getaways'],
-    supports: ['Price', 'Amenities', 'Location notes', 'Booking links', 'Website icon', 'Phone icon'],
+    supports: ['Price', 'Amenities', 'Location notes', 'Booking links', 'Website icon', 'Phone icon', 'Hotel photo per card'],
     preferredLayout: 'travel-compare',
     supportedTabs: [],
-    idealDataShape: ['Hotel cards with nightly price, location, amenities, website link, and phone number'],
+    idealDataShape: ['Hotel cards with nightly price, location, amenities, website link, phone number, and a photo'],
     requiredSections: ['Hotel cards'],
     optionalSections: [],
     requiredActions: ['Open booking link'],
@@ -222,12 +226,14 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       steps: [
         'Use one distinct card per hotel.',
         'Include a website icon with a hyperlinked "Link" and a phone icon with the phone number on every card.',
-        'Highlight the most decision-relevant amenities and neighborhood context directly on the card.'
+        'Highlight the most decision-relevant amenities and neighborhood context directly on the card.',
+        'Include an image on every card — a hotel exterior or primary room photo. Use the card.image field.'
       ],
       guardrails: [
         'Do not render a header bar, recipe tabs, Hotels/Notes tabs, or a "Hotel shortlist" section header.',
         'Do not overload cards with full review dumps.',
-        'Do not reorder the shortlist on every small price refresh.'
+        'Do not reorder the shortlist on every small price refresh.',
+        'Do not ship hotel cards without images — this is a visual-shopping surface.'
       ]
     },
     updateRules: {
@@ -248,7 +254,7 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is evaluating multiple flight itineraries, especially with outbound and return comparisons.',
     selectionSignals: ['compare flights', 'best itinerary', 'outbound return options', 'cheapest flight'],
     goodFor: ['Trip booking', 'Airline comparison', 'Stop-vs-price tradeoffs'],
-    supports: ['Outbound/Return tabs', 'Price and stops', 'Booking link', 'Ask Hermes action'],
+    supports: ['Outbound/Return tabs', 'Price and stops', 'Booking link', 'Ask Hermes action', 'Airline logo per itinerary row'],
     preferredLayout: 'travel-compare',
     supportedTabs: ['Outbound', 'Return'],
     idealDataShape: ['Separate itinerary sets per leg', 'Price, airline, stops, duration, booking link'],
@@ -266,7 +272,8 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       steps: [
         'Use stable itinerary rows with price, stops, duration, and carrier.',
         'Keep outbound and return data in separate tabs.',
-        'Always render Outbound as the active tab on first load.'
+        'Always render Outbound as the active tab on first load.',
+        'Include a small airline logo as leadingImage on each itinerary row so users can scan carriers visually.'
       ],
       guardrails: [
         'Never render a Notes tab on this recipe.',
@@ -292,7 +299,7 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user needs a persistent trip workspace rather than a single search or comparison result.',
     selectionSignals: ['plan my trip', 'itinerary', 'bookings and notes', 'travel checklist'],
     goodFor: ['Multi-day trips', 'Work travel', 'Group planning'],
-    supports: ['Timeline', 'Bookings tab', 'Packing tab'],
+    supports: ['Timeline', 'Bookings tab', 'Packing tab', 'Event imagery on timeline entries'],
     preferredLayout: 'timeline-tabs',
     supportedTabs: ['Itinerary', 'Bookings', 'Packing'],
     idealDataShape: ['Dated itinerary events', 'Booking records', 'Checklist items'],
@@ -310,7 +317,8 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       steps: [
         'Use the itinerary tab for chronological events only.',
         'Move confirmations and reservation details into bookings.',
-        'Keep packing content in the packing tab.'
+        'Keep packing content in the packing tab.',
+        'Attach a photo (destination, venue, or attraction) to each itinerary event when a plausible image exists; omit rather than invent.'
       ],
       guardrails: [
         'Never render a Notes tab or a Links tab on this recipe.',
@@ -379,7 +387,7 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is reviewing threats, audits, vulnerabilities, or security-control gaps.',
     selectionSignals: ['security review', 'threat hunting', 'audit findings', 'vulnerability triage'],
     goodFor: ['Threat review', 'Audit findings', 'Remediation planning'],
-    supports: ['Full-width severity groups', 'Expandable findings', 'Affected Surface', 'Evidence bullets', 'Remediate now action', 'Ignore action'],
+    supports: ['Full-width severity groups', 'Expandable findings', 'Affected Surface', 'Evidence bullets', 'Remediate now action', 'Ignore action', 'CVE / advisory / source-line links per finding'],
     preferredLayout: 'workbench',
     supportedTabs: [],
     idealDataShape: ['Severity-grouped findings', 'Affected surface per finding', 'Evidence bullet list per finding'],
@@ -399,7 +407,9 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
         'Make each finding an expandable row whose collapsed line shows severity color, title, and one-line summary.',
         'When expanded, render an "Affected surface" header followed by a short text description.',
         'Below that render an "Evidence" header with the evidence as a bulleted list.',
-        'Below evidence render two quick action buttons: "Remediate now" (primary) and "Ignore" (neutral).'
+        'Below evidence render two quick action buttons: "Remediate now" (primary) and "Ignore" (neutral).',
+        'When evidence references a CVE, advisory, or source-code location, include the URL as a link in the evidence field.',
+        'Link to advisories and affected source locations where applicable — auditors need to click through from the finding to the artifact.'
       ],
       guardrails: [
         'Do not render a separate right-pane selected-finding panel — details live inside the expanded row.',
@@ -426,14 +436,14 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is comparing multiple candidates — coding frameworks, vendors, technologies, apps, products, services — across a few consistent criteria.',
     selectionSignals: ['compare', 'comparison matrix', 'versus', 'which is better', 'compare frameworks', 'compare vendors', 'compare apps'],
     goodFor: ['Framework comparison', 'Vendor comparison', 'Technology comparison', 'App comparison', 'Product comparison'],
-    supports: ['Up to 5 columns including Name / Item', 'Recommendation pane below the table'],
+    supports: ['Up to 5 columns including Name / Item', 'Recommendation pane below the table', 'Per-row candidate link', 'Optional leading logo per row'],
     preferredLayout: 'matrix',
     supportedTabs: [],
     idealDataShape: ['A Name / Item column plus up to 4 additional comparison columns', 'One row per candidate', 'A concise recommendation below the table'],
     requiredSections: ['Comparison matrix', 'Recommendation pane'],
     optionalSections: [],
-    requiredActions: [],
-    optionalActions: [],
+    requiredActions: ['Open candidate link'],
+    optionalActions: ['Open candidate logo'],
     emptyStateBehavior: 'Explain that the matrix needs items plus criteria before it becomes useful.',
     loadingStateBehavior: 'Keep criteria headers fixed while rows or scoring details load.',
     errorStateBehavior: 'Preserve current criteria and loaded rows; mark missing scoring areas as incomplete.',
@@ -445,12 +455,15 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
         'Always include a Name / Item column as the first column.',
         'Add at most four additional criteria columns.',
         'Normalize language across rows so cells are scannable.',
-        'Follow the table with a single recommendation pane that states the suggested pick and why.'
+        'Follow the table with a single recommendation pane that states the suggested pick and why.',
+        'Every row must include a direct link to the candidate (product page, vendor site, repo, docs) — the matrix is useless without click-through.',
+        'Include a leadingImage (logo) on each row when one exists.'
       ],
       guardrails: [
         'Never exceed 5 total columns including the Name / Item column.',
         'Do not render a top summary pane with stats or badges — the only surface above the recommendation is the table itself.',
-        'Do not reorder rows unexpectedly across refreshes.'
+        'Do not reorder rows unexpectedly across refreshes.',
+        'Never render a candidate row without a way to open its source.'
       ]
     },
     updateRules: {
@@ -509,45 +522,53 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
     name: 'Job Listings',
     category: 'operations',
     useCase: 'Find and compare job postings across companies with salary, location, and role details.',
-    purpose: 'A structured job-listing workspace that surfaces salary ranges, descriptions, and application links for quick comparison.',
+    purpose: 'A card-grid job-listing workspace that surfaces company logos or role photos, pay ranges, and per-card Apply links.',
     primaryUserGoal: 'Discover and compare relevant job postings to decide which roles are worth pursuing.',
     whenHermesShouldChoose:
       'Choose this when the user is searching for job postings, comparing roles, or gathering listings across companies.',
     selectionSignals: ['job listings', 'find jobs', 'job postings', 'open positions', 'apply to jobs'],
-    goodFor: ['Job discovery', 'Browsing openings', 'Applying in batch'],
-    supports: ['Job table', 'Selectable rows', 'Apply to selected', 'Find more'],
-    preferredLayout: 'matrix',
+    goodFor: ['Job discovery', 'Browsing openings', 'Applying quickly per role'],
+    supports: ['Card grid', 'Per-card photo or logo', 'Role title and company', 'Pay range', 'Location chips', 'Per-card Apply link', 'Find more'],
+    preferredLayout: 'card-grid',
     supportedTabs: [],
-    idealDataShape: ['One row per job listing', 'Columns: position, company, estimated pay, link', 'Every row carries a direct link to the posting'],
-    requiredSections: ['Job listings table', 'Selection action bar'],
+    idealDataShape: [
+      'One card per job listing',
+      'Card image (company logo or role-appropriate photo)',
+      'Role title as card title',
+      'Company as subtitle',
+      'Estimated pay as price',
+      'Location or remote chips',
+      'Direct Apply link action on every card'
+    ],
+    requiredSections: ['Card grid'],
     optionalSections: [],
-    requiredActions: ['Apply to selected', 'Find more'],
+    requiredActions: ['Apply (per-card link)', 'Find more'],
     optionalActions: [],
     emptyStateBehavior: 'Show an empty state that invites the user to describe the role and seed the first batch.',
-    loadingStateBehavior: 'Keep the table scaffold in place while rows stream in.',
-    errorStateBehavior: 'Preserve existing rows and mark failed refreshes inline.',
-    smallPaneAdaptationNotes: ['Collapse the estimated-pay column before the company column.', 'Keep Position and Link visible at the smallest widths.'],
-    references: ['LinkedIn jobs tables', 'Indeed listings', 'Wellfound job feed'],
+    loadingStateBehavior: 'Keep the card grid scaffold visible while cards stream in.',
+    errorStateBehavior: 'Preserve existing cards and mark failed refreshes inline.',
+    smallPaneAdaptationNotes: ['Collapse to a single-column grid on narrow panes.', 'Keep image, title, and price visible at the smallest widths.'],
+    references: ['LinkedIn jobs feed', 'Wellfound job cards', 'Lever job boards'],
     populationInstructions: {
-      summary: 'Render a selectable job-listings table with four columns (Position, Company, Estimated Pay, Link). Below the table, render two buttons: "Apply to selected" and "Find more".',
+      summary: 'Render a card grid of job listings. Each card has a photo or logo, role title, company, pay range, location chips, and an Apply link.',
       steps: [
-        'Use one row per job listing.',
-        'Put Position in the first column, Company next, Estimated Pay next, and a hyperlinked Link in the last column.',
-        'Make rows selectable via a leading checkbox.',
-        '"Apply to selected" is enabled only when at least one row is selected and prompts Hermes to apply to those jobs.',
-        '"Find more" asks Hermes to populate the table with additional job listings.'
+        'Use one card per job listing in a single card-grid section.',
+        'Every card must include an image — prefer a company logo; fall back to a role-appropriate photo from unsplash.com.',
+        'Set the card title to the role, subtitle to the company, price to the estimated pay range, and add location or remote chips.',
+        'Every card must have an Apply link action pointing directly to the job posting URL.',
+        'Render a "Find more" action that asks Hermes for additional listings.'
       ],
       guardrails: [
-        'Never render an Application pipeline, kanban board, Notes tab, or Research tab on this recipe.',
-        'Every row must have a link column.',
-        'Do not remove selections when new rows are appended.'
+        'Never render a kanban, pipeline, or table for this recipe — it is a card grid.',
+        'Every card must have a photo or logo — no image, no card.',
+        'Every card must have an Apply link action — a job card without a way to apply is a bug.'
       ]
     },
     updateRules: {
-      patchPrefer: ['Append new rows without replacing existing rows.', 'Patch pay ranges in place.'],
-      replaceTriggers: ['Replace the whole table only when the user redefines the job search entirely.'],
-      persistAcrossUpdates: ['Selected rows', 'Row order'],
-      stableRegions: ['Column order', 'Action bar']
+      patchPrefer: ['Append new cards without replacing existing cards.', 'Patch pay ranges in place.'],
+      replaceTriggers: ['Replace the whole grid only when the user redefines the job search entirely.'],
+      persistAcrossUpdates: ['Card order', 'Existing cards'],
+      stableRegions: ['Card grid', 'Action bar']
     }
   },
   'content-campaign-planner': {
@@ -561,13 +582,13 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       'Choose this when the user is organizing a content plan, campaign calendar, or editorial workflow.',
     selectionSignals: ['content plan', 'campaign planner', 'editorial schedule', 'draft pipeline'],
     goodFor: ['Editorial calendars', 'Launch campaigns', 'Content ops'],
-    supports: ['Workflow tabs', 'Status chips', 'Idea notes', 'Email writing'],
+    supports: ['Workflow tabs', 'Status chips', 'Idea notes', 'Email writing', 'Asset previews', 'Published-URL links'],
     preferredLayout: 'kanban',
     supportedTabs: ['Ideas', 'Drafts', 'Schedule', 'Email'],
     idealDataShape: ['Idea list', 'Draft summaries', 'Scheduled items', 'Email draft context', 'Status chips'],
     requiredSections: ['Tab rail', 'Idea list', 'Draft list', 'Schedule timeline', 'Email write panel'],
     optionalSections: ['Brief note', 'Owner chips', 'Launch reminders'],
-    requiredActions: ['Flesh out idea', 'Add note', 'Write email'],
+    requiredActions: ['Flesh out idea', 'Add note', 'Write email', 'Open published URL'],
     optionalActions: ['Pin campaign', 'Duplicate draft', 'Ask Hermes for another angle'],
     emptyStateBehavior: 'Provide a clean campaign shell with idea, draft, schedule, and email tabs.',
     loadingStateBehavior: 'Keep the workflow tabs and stage layout stable while items populate.',
@@ -579,7 +600,9 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       steps: [
         'Use a flat list (not a kanban board) for ideas.',
         'Keep status transitions explicit.',
-        'Preserve short operator notes on each idea so half-formed concepts can be expanded later.'
+        'Preserve short operator notes on each idea so half-formed concepts can be expanded later.',
+        'For scheduled or published items, include a link action pointing to the published URL (social post, landing page, article).',
+        'Attach a preview image (mockup, social card, hero asset) to drafts and scheduled items when the asset exists.'
       ],
       guardrails: [
         'Never render an "Idea lanes" kanban on this recipe — the Ideas tab is a simple list.',

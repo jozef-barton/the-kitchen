@@ -2,7 +2,7 @@
   "kind": "recipe_template_state",
   "schemaVersion": "recipe_template_state/v1",
   "templateId": "content-campaign-planner",
-  "title": "Hermes v1.0 launch \u2014 2-week campaign",
+  "title": "Hermes v1.0 launch — 2-week campaign",
   "summary": "2-week product launch campaign across blog, X, LinkedIn, and email. 6 content ideas, 4 already drafted. Hero launch day is May 6.",
   "sections": [
     {
@@ -32,8 +32,8 @@
             "cards": [
               {
                 "id": "i-launch-post",
-                "title": "Launch blog post \u2014 'Recipes, not chat'",
-                "subtitle": "Hero piece \u00b7 blog \u00b7 1,500 words",
+                "title": "Launch blog post — 'Recipes, not chat'",
+                "subtitle": "Hero piece · blog · 1,500 words",
                 "price": "May 6",
                 "image": {
                   "src": null,
@@ -64,7 +64,7 @@
               {
                 "id": "i-demo-video",
                 "title": "60-sec demo video",
-                "subtitle": "Social \u00b7 video \u00b7 vertical",
+                "subtitle": "Social · video · vertical",
                 "price": "May 6",
                 "image": {
                   "src": null,
@@ -91,7 +91,7 @@
               {
                 "id": "i-email-blast",
                 "title": "Launch email to waitlist",
-                "subtitle": "Email \u00b7 2,400 subscribers",
+                "subtitle": "Email · 2,400 subscribers",
                 "price": "May 6",
                 "image": {
                   "src": null,
@@ -121,8 +121,8 @@
               },
               {
                 "id": "i-x-thread",
-                "title": "X launch thread \u2014 8 posts",
-                "subtitle": "Social \u00b7 thread \u00b7 with visuals",
+                "title": "X launch thread — 8 posts",
+                "subtitle": "Social · thread · with visuals",
                 "price": "May 6",
                 "image": {
                   "src": null,
@@ -152,8 +152,8 @@
               },
               {
                 "id": "i-tech-deep-dive",
-                "title": "Tech deep dive \u2014 'How the bridge works'",
-                "subtitle": "Blog \u00b7 2,000 words \u00b7 illustrations",
+                "title": "Tech deep dive — 'How the bridge works'",
+                "subtitle": "Blog · 2,000 words · illustrations",
                 "price": "May 12",
                 "image": {
                   "src": null,
@@ -183,8 +183,8 @@
               },
               {
                 "id": "i-customer-story",
-                "title": "Customer story \u00b7 early design partner",
-                "subtitle": "Blog + video \u00b7 case study",
+                "title": "Customer story · early design partner",
+                "subtitle": "Blog + video · case study",
                 "price": "May 15",
                 "image": {
                   "src": null,
@@ -224,8 +224,8 @@
               {
                 "id": "s-preteaser",
                 "title": "Teaser X post",
-                "time": "Mon May 5 \u00b7 9:00 AM PT",
-                "summary": "Single post, no link \u2014 'something shipping tomorrow'.",
+                "time": "Mon May 5 · 9:00 AM PT",
+                "summary": "Single post, no link — 'something shipping tomorrow'.",
                 "chips": [
                   {
                     "label": "X",
@@ -237,7 +237,7 @@
               {
                 "id": "s-blog",
                 "title": "Publish launch blog post",
-                "time": "Tue May 6 \u00b7 8:00 AM PT",
+                "time": "Tue May 6 · 8:00 AM PT",
                 "summary": "Hero piece goes live.",
                 "chips": [
                   {
@@ -249,12 +249,19 @@
                     "tone": "success"
                   }
                 ],
-                "actions": []
+                "actions": [
+                  {
+                    "kind": "link",
+                    "label": "Open published post",
+                    "href": "https://hermes.example.com/blog/recipes-not-chat",
+                    "openInNewTab": true
+                  }
+                ]
               },
               {
                 "id": "s-email",
                 "title": "Send waitlist email",
-                "time": "Tue May 6 \u00b7 8:15 AM PT",
+                "time": "Tue May 6 · 8:15 AM PT",
                 "summary": "15 min after blog, link to the hero post.",
                 "chips": [
                   {
@@ -267,7 +274,7 @@
               {
                 "id": "s-x-thread",
                 "title": "Post X launch thread",
-                "time": "Tue May 6 \u00b7 9:00 AM PT",
+                "time": "Tue May 6 · 9:00 AM PT",
                 "summary": "8-post thread, pin for the day.",
                 "chips": [
                   {
@@ -280,7 +287,7 @@
               {
                 "id": "s-linkedin",
                 "title": "LinkedIn long-form",
-                "time": "Tue May 6 \u00b7 11:00 AM PT",
+                "time": "Tue May 6 · 11:00 AM PT",
                 "summary": "Professional version of the launch post.",
                 "chips": [
                   {
@@ -293,7 +300,7 @@
               {
                 "id": "s-demo-repost",
                 "title": "Demo video repost on X + LI",
-                "time": "Wed May 7 \u00b7 10:00 AM PT",
+                "time": "Wed May 7 · 10:00 AM PT",
                 "summary": "Standalone, no thread.",
                 "chips": [
                   {
@@ -306,7 +313,7 @@
               {
                 "id": "s-tech-post",
                 "title": "Publish tech deep dive",
-                "time": "Mon May 12 \u00b7 8:00 AM PT",
+                "time": "Mon May 12 · 8:00 AM PT",
                 "summary": "Follow-up for the dev audience.",
                 "chips": [
                   {
@@ -319,7 +326,7 @@
               {
                 "id": "s-customer",
                 "title": "Publish customer story",
-                "time": "Thu May 15 \u00b7 8:00 AM PT",
+                "time": "Thu May 15 · 8:00 AM PT",
                 "summary": "Closing wave of the campaign.",
                 "chips": [
                   {

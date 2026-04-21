@@ -75,9 +75,13 @@
             { "label": "Hours tonight", "value": "5:30 PM – 10:00 PM", "chips": [], "bullets": [], "links": [], "fullWidth": false },
             { "label": "Address", "value": "199 Gough St, San Francisco, CA 94102", "chips": [], "bullets": [], "links": [], "fullWidth": true },
             { "label": "Cuisine", "value": "New American · seasonal", "chips": [], "bullets": ["Sardine chip", "Porcini doughnut", "House-made pasta"], "links": [], "fullWidth": true },
-            { "label": "Booking", "value": "Resy — 7pm requires a walk-in list, 8:30pm has availability", "chips": [{ "label": "Walk-in possible", "tone": "warning" }], "bullets": [], "links": [], "fullWidth": true }
+            { "label": "Booking", "value": "Resy — 7pm requires a walk-in list, 8:30pm has availability", "chips": [{ "label": "Walk-in possible", "tone": "warning" }], "bullets": [], "links": [{ "label": "Reserve on Resy", "href": "https://resy.com/cities/san-francisco-ca/rich-table" }], "fullWidth": true }
           ],
-          "actions": [],
+          "actions": [
+            { "kind": "link", "label": "Reserve on Resy", "href": "https://resy.com/cities/san-francisco-ca/rich-table", "openInNewTab": true },
+            { "kind": "link", "label": "Call", "href": "tel:+14155513034", "openInNewTab": false },
+            { "kind": "link", "label": "Directions", "href": "https://maps.google.com/?q=199+Gough+St+San+Francisco+CA+94102", "openInNewTab": true }
+          ],
           "note": "Bar seating is first-come; arrive by 6:30pm for a reasonable wait."
         },
         {

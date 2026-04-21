@@ -54,7 +54,7 @@
               "tone": "warning",
               "items": [
                 { "id": "f-sql-injection", "title": "Possible SQL injection in recipe search", "subtitle": "apps/bridge/src/routes/search.ts line 84 — unparameterized query", "meta": "CVSS 8.2", "chips": [{ "label": "HIGH", "tone": "warning" }], "actions": [] },
-                { "id": "f-axios-ssrf", "title": "axios SSRF — CVE-2024-39338", "subtitle": "axios@1.6.8 in packages/protocol (dep chain)", "meta": "CVE-2024-39338", "chips": [{ "label": "HIGH", "tone": "warning" }, { "label": "SCA", "tone": "neutral" }], "actions": [] }
+                { "id": "f-axios-ssrf", "title": "axios SSRF — CVE-2024-39338", "subtitle": "axios@1.6.8 in packages/protocol (dep chain)", "meta": "CVE-2024-39338", "chips": [{ "label": "HIGH", "tone": "warning" }, { "label": "SCA", "tone": "neutral" }], "actions": [{ "kind": "link", "label": "CVE-2024-39338 advisory", "href": "https://nvd.nist.gov/vuln/detail/CVE-2024-39338", "openInNewTab": true }] }
               ]
             },
             {
@@ -91,8 +91,8 @@
           ],
           "fields": [
             { "label": "CVE", "value": "N/A (internal finding)", "chips": [], "bullets": [], "links": [], "fullWidth": false },
-            { "label": "Affected component", "value": "apps/bridge/config/secrets.json", "chips": [], "bullets": [], "links": [], "fullWidth": false },
-            { "label": "Introduced in", "value": "commit 7a3b9c2 · Apr 18, 2026", "chips": [], "bullets": [], "links": [], "fullWidth": false },
+            { "label": "Affected component", "value": "apps/bridge/config/secrets.json", "chips": [], "bullets": [], "links": [{ "label": "View file in repo", "href": "https://github.com/example/bridge/blob/7a3b9c2/config/secrets.json" }], "fullWidth": false },
+            { "label": "Introduced in", "value": "commit 7a3b9c2 · Apr 18, 2026", "chips": [], "bullets": [], "links": [{ "label": "View commit", "href": "https://github.com/example/bridge/commit/7a3b9c2" }], "fullWidth": false },
             { "label": "CVSS vector", "value": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "chips": [], "bullets": [], "links": [], "fullWidth": true },
             { "label": "Recommendation", "value": "Rotate the JWT signing key, force session invalidation, and remove the secret from git history.", "chips": [{ "label": "Today", "tone": "danger" }], "bullets": [
               "Generate a new 512-bit HMAC key and store in Secrets Manager",
