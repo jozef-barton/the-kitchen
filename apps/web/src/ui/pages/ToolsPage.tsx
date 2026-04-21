@@ -5,6 +5,48 @@ import { EmptyStateCard } from '../molecules/EmptyStateCard';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 import { ToolHistoryPage } from './ToolHistoryPage';
 
+function formatApprovalModel(raw: string): { label: string; slot: string } {
+  const lower = raw.toLowerCase();
+  if (lower.includes('explicit') || lower.includes('user')) {
+    return { label: 'User approval', slot: 'explicit' };
+  }
+  if (lower.includes('managed') || lower.includes('hermes') || lower.includes('auto_approved')) {
+    return { label: 'Managed', slot: 'managed' };
+  }
+  return { label: raw, slot: 'auto' };
+}
+
+function ApprovalBadge({ raw }: { raw: string }) {
+  const { label, slot } = formatApprovalModel(raw);
+  return <span className={`approval-badge approval-badge--${slot}`}>{label}</span>;
+}
+
+function CapabilityChips({ capabilities }: { capabilities: string[] }) {
+  if (capabilities.length === 0) {
+    return <Text fontSize="xs" color="var(--text-muted)">None reported</Text>;
+  }
+  const visible = capabilities.slice(0, 3);
+  const overflow = capabilities.length - 3;
+  return (
+    <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {visible.map((cap) => (
+        <span key={cap} className="skill-chip">{cap}</span>
+      ))}
+      {overflow > 0 ? (
+        <span className="skill-chip-overflow">+{overflow}</span>
+      ) : null}
+    </span>
+  );
+}
+
+function ToolsIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path d="M12 6 9 9l4 4-3 3.5-4-4L4 16 8 20l4-4 3 3-4 4 4 4 4-4 5 5L28 23 19 14l-3 3-4-4 3-3L12 6Z" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
 export function ToolsPage({
   response,
   loading,
@@ -45,31 +87,51 @@ export function ToolsPage({
         css={{
           '--tabs-indicator-bg': 'var(--surface-1)',
           '--tabs-indicator-shadow': 'var(--shadow-xs)',
-          '--tabs-trigger-radius': '8px'
+          '--tabs-trigger-radius': '7px'
         }}
       >
-        <Tabs.List rounded="8px" bg="var(--surface-2)" border="1px solid var(--border-subtle)" p="1" w="fit-content">
-          <Tabs.Trigger value="all">All Tools</Tabs.Trigger>
-          <Tabs.Trigger value="history">Tool History</Tabs.Trigger>
+        <Tabs.List
+          rounded="8px"
+          bg="var(--surface-2)"
+          border="1px solid var(--border-subtle)"
+          p="1"
+          w="fit-content"
+        >
+          <Tabs.Trigger value="all" fontSize="sm">All Tools</Tabs.Trigger>
+          <Tabs.Trigger value="history" fontSize="sm">Tool History</Tabs.Trigger>
           <Tabs.Indicator />
         </Tabs.List>
 
         <Tabs.Content value="all" flex="1" minH={0} pt="4">
           <VStack align="stretch" h="100%" minH={0} gap="4">
-            <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" px="5" py="4" boxShadow="var(--shadow-xs)">
-              <Text fontWeight="750" color="var(--text-primary)">
+            {/* Info card */}
+            <Box
+              rounded="8px"
+              border="1px solid var(--border-subtle)"
+              bg="var(--surface-elevated)"
+              px="4"
+              py="3.5"
+              boxShadow="var(--shadow-xs)"
+            >
+              <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
                 Runtime capability inventory
               </Text>
-              <Text color="var(--text-secondary)">
+              <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineHeight="1.6">
                 Tool History shows what Hermes actually used during chat. Reviewed bridge executions remain tracked there, even though the manual shell runner is no longer exposed in this UI.
               </Text>
             </Box>
 
-            <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" p="4" boxShadow="var(--shadow-sm)">
+            <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
               {!response ? (
-                <EmptyStateCard title={loading ? 'Loading tools' : 'No tools reported'} detail="Reading Hermes and bridge tool capabilities." />
+                <Box p="4">
+                  <EmptyStateCard
+                    icon={<ToolsIcon />}
+                    title={loading ? 'Loading tools…' : 'No tools reported'}
+                    detail="Reading Hermes and bridge tool capabilities."
+                  />
+                </Box>
               ) : (
-                <Table.ScrollArea data-testid="tools-table-scroll" borderWidth="1px" borderColor="var(--border-subtle)" rounded="8px" h="100%">
+                <Table.ScrollArea data-testid="tools-table-scroll" h="100%">
                   <Table.Root size="sm" variant="outline">
                     <Table.Header>
                       <Table.Row>
@@ -85,20 +147,37 @@ export function ToolsPage({
                       {response.items.map((tool) => (
                         <Table.Row key={tool.id}>
                           <Table.Cell>
-                            <Text fontWeight="750" color="var(--text-primary)">
+                            <Text
+                              fontSize="sm"
+                              fontWeight="650"
+                              color="var(--text-primary)"
+                              fontFamily="ui-monospace, monospace"
+                            >
                               {tool.name}
                             </Text>
-                            <Text fontSize="sm" color="var(--text-secondary)">
-                              {tool.description}
-                            </Text>
+                            {tool.description ? (
+                              <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineClamp={2} lineHeight="1.5">
+                                {tool.description}
+                              </Text>
+                            ) : null}
                           </Table.Cell>
-                          <Table.Cell color="var(--text-secondary)">{tool.source}</Table.Cell>
-                          <Table.Cell color="var(--text-secondary)">{tool.capabilities.join(', ') || 'None reported'}</Table.Cell>
+                          <Table.Cell>
+                            <Text fontSize="xs" color="var(--text-secondary)">{tool.source}</Text>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <CapabilityChips capabilities={tool.capabilities} />
+                          </Table.Cell>
                           <Table.Cell>
                             <StatusPill label={tool.status} />
                           </Table.Cell>
-                          <Table.Cell color="var(--text-secondary)">{tool.approvalModel}</Table.Cell>
-                          <Table.Cell color="var(--text-secondary)">{tool.restrictions[0] ?? 'None reported'}</Table.Cell>
+                          <Table.Cell>
+                            <ApprovalBadge raw={tool.approvalModel} />
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Text fontSize="xs" color="var(--text-secondary)">
+                              {tool.restrictions[0] ?? '—'}
+                            </Text>
+                          </Table.Cell>
                         </Table.Row>
                       ))}
                     </Table.Body>

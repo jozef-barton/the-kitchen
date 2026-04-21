@@ -12,6 +12,7 @@ import type {
   HermesCliModelDiscovery,
   Job,
   Profile,
+  RecipeMutationIntent,
   RuntimeModelConfig,
   RuntimeReadiness,
   RuntimeProviderOption,
@@ -22,6 +23,7 @@ import type {
   Tool
 } from '@hermes-recipes/protocol';
 import { HermesCliActionResultSchema, HermesCliModelDiscoverySchema, RECIPE_REFRESH_USER_MESSAGE } from '@hermes-recipes/protocol';
+export type { RecipeMutationIntent };
 import {
   classifyImportedMessageKind,
   classifyImportedMessageVisibility,
@@ -1670,6 +1672,25 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     };
   }
 
+  // Natural-language product browsing — no explicit shopping verb but clear product intent.
+  // Requires a product category noun AND at least one soft framing word to avoid false positives
+  // (e.g. "some gym shorts I normally wear" or "headphones for running under $100").
+  if (
+    /\b(shorts?|shirt|shirts|pants|jeans|jacket|jackets|shoes|sneakers|boots|dress|dresses|hoodie|hoodies|sweater|leggings|activewear|sportswear|gym\s+\w+|workout\s+\w+|running\s+\w+)\b/i.test(content) ||
+    /\b(headphones?|earbuds?|laptop|laptops?|monitor|keyboard|mouse|tablet|phone|speaker|camera|smartwatch|charger)\b/i.test(content) ||
+    /\b(backpack|bag|bags|wallet|purse|sunglasses|jewelry|supplement|protein|vitamins?)\b/i.test(content)
+  ) {
+    if (
+      /\b(some|for\s+(?:me|my|the|gym|running|work|summer|winter|training)|I\s+(?:wear|use|like|need|want|normally|usually)|normally\s+wear|usually\s+wear|looking\s+for|gift\s+for|under\s+\$?\d|around\s+\$?\d)\b/i.test(content)
+    ) {
+      return {
+        category: 'shopping',
+        preferredContentFormat: 'card',
+        label: 'shopping results'
+      };
+    }
+  }
+
   // Research notebook  →  research-notebook
   if (
     /\b(research|sources?|papers?|studies?|summary|summaries|tradeoffs?|pros and cons|claims?|notes?|notebook|follow-?ups?)\b/i.test(content) &&
@@ -1697,6 +1718,95 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
   }
 
   return null;
+}
+
+/**
+ * Detects when a user is asking to mutate an already-rendered recipe — changing its layout,
+ * visual style, or content structure — rather than making a new query.
+ *
+ * Only fires when `attachedTemplateId` is non-null (recipe is open). Returns null for fresh
+ * recipe requests or plain conversational messages so enrichment is not triggered spuriously.
+ */
+export function classifyRecipeMutationIntent(
+  content: string,
+  attachedTemplateId: string | null
+): RecipeMutationIntent | null {
+  const text = content.trim().toLowerCase();
+  if (text.length < 5) return null;
+
+  // High-confidence layout/switch verbs: these must be combined with a UI keyword to avoid
+  // false positives on messages like "I'd like to change my approach".
+  const layoutVerbPattern = /\b(redo|redesign|change.*look|make it|convert it|switch to|show as|render as|reshape|display as|turn.*into|use a|let'?s use|try a|can you make|could you make)\b/i;
+  const switchPattern = /\b(different recipe|other recipe|another recipe|wrong recipe|new recipe|replace.*recipe|change.*recipe)\b/i;
+
+  const wantsImages = /\b(pictures?|images?|photos?|thumbnails?|logos?|visuals?|more visual|photo[s ]|imagery)\b/i.test(content);
+  const wantsCards = /\b(cards?|tiles?|tiled|card[- ]grid|card[- ]view|gallery)\b/i.test(content);
+  const wantsCharts = /\b(charts?|graphs?|bar chart|line chart|pie chart|pie graph|visualization|visualize)\b/i.test(content);
+  const wantsTable = /\b(table|matrix|side[- ]by[- ]side|comparison table|tabular)\b/i.test(content);
+  const wantsKanban = /\b(kanban|board|stages?|pipeline|columns?\s+with\s+cards?)\b/i.test(content);
+  const wantsTimeline = /\b(timeline|chronological|time[- ]ordered|sequence)\b/i.test(content);
+  const wantsFewerItems = /\b(fewer|less|top\s+\d+|only\s+(show|the top)|trim|cut down|focus on|just\s+(the top|show))\b/i.test(content);
+  const wantsMoreItems = /\bmore\b.{0,30}\b(options?|results?|items?|cards?|choices?)\b/i.test(content);
+
+  const hasVisualKeyword = wantsImages || wantsCards || wantsCharts || wantsTable || wantsKanban || wantsTimeline;
+  const hasCountKeyword = wantsFewerItems || wantsMoreItems;
+  const hasLayoutVerb = layoutVerbPattern.test(content);
+  const isExplicitSwitch = switchPattern.test(content);
+
+  // Need at least one positive signal to avoid false positives.
+  if (!hasVisualKeyword && !hasCountKeyword && !hasLayoutVerb && !isExplicitSwitch) return null;
+
+  // Without an existing template, only fire on strong visual signals (images or cards) to
+  // avoid treating plain conversational recipe mentions as mutation requests.
+  if (!attachedTemplateId && !wantsImages && !wantsCards && !wantsCharts) return null;
+
+  // Reject plain-chat follow-ups that mention these words without mutation intent.
+  // E.g., "can you show me more about the first card?" — single-item about-query, not layout mutation.
+  const isFollowUpQuery = !hasLayoutVerb && !isExplicitSwitch && !hasVisualKeyword && hasCountKeyword;
+  if (isFollowUpQuery && /\b(about|for|of|on|regarding)\b/i.test(content)) return null;
+
+  // Derive the most likely target template hint from the signal combination.
+  const targetTemplateHint: string | undefined =
+    isExplicitSwitch ? undefined :
+    wantsKanban ? 'job-search-pipeline' :
+    wantsCharts ? 'vendor-evaluation-matrix' :
+    (wantsCards && wantsImages) ? 'shopping-shortlist' :
+    wantsTable ? 'vendor-evaluation-matrix' :
+    wantsTimeline ? 'travel-itinerary-planner' :
+    wantsCards ? 'shopping-shortlist' :
+    undefined;
+
+  const kind: RecipeMutationIntent['kind'] =
+    isExplicitSwitch ? 'switch_recipe' :
+    (wantsImages || wantsCharts) ? 'change_visual' :
+    (wantsCards || wantsTable || wantsKanban || wantsTimeline) ? 'change_layout' :
+    (wantsFewerItems || wantsMoreItems) ? 'refine_existing' :
+    hasLayoutVerb ? 'change_layout' : 'refine_existing';
+
+  const hintParts = [
+    wantsImages && 'images',
+    wantsCards && 'cards',
+    wantsCharts && 'charts',
+    wantsTable && 'table',
+    wantsKanban && 'kanban',
+    wantsTimeline && 'timeline',
+    wantsFewerItems && 'fewer items',
+    wantsMoreItems && 'more items'
+  ].filter(Boolean).join(', ');
+
+  return {
+    kind,
+    wantsImages,
+    wantsCards,
+    wantsCharts,
+    wantsTable,
+    wantsKanban,
+    wantsTimeline,
+    wantsFewerItems,
+    wantsMoreItems,
+    targetTemplateHint,
+    mutationSummary: `User is asking to mutate the current recipe layout/appearance. Kind: ${kind}. Hints: ${hintParts || 'none'}. Current template: ${attachedTemplateId}.${targetTemplateHint ? ` Suggested new template: ${targetTemplateHint}.` : ''}`
+  };
 }
 
 function isRecipeWorkflowIntent(content: string, hasRecipeContext = false) {
@@ -1891,8 +2001,39 @@ Do not include raw tool output, CLI diagnostics, JSON blobs, scripts, approvals,
 Return only the final assistant answer.`;
   }
 
+  // Detect when the user wants to reformat or repopulate an existing recipe visually —
+  // e.g. "make it look like cards with pictures" or "show as a gallery". These requests
+  // need real data extraction from the session, not a narrow one-liner acknowledgment.
+  const isVisualRepopulation = Boolean(spaceContext) &&
+    /\b(pictures?|images?|photos?|cards?|tiles?|gallery|visuals?|show as|render as|display as|more like|look like)\b/i.test(intentContent);
+
   if (isRecipeWorkflowIntent(intentContent, Boolean(spaceContext))) {
-    return `${content}
+    // When a data-type structured intent is detected alongside a recipe workflow keyword
+    // (e.g. "render them using the shopping results recipe"), the user wants real data
+    // populated into the new format — not a narrow administrative update. Fall through
+    // to the data-type routing below so structuredRecipeInstruction drives the response.
+    if (structuredRecipeIntent) {
+      // intentional fall-through — handled by the general path below
+    } else if (isVisualRepopulation) {
+      // Visual format change on an existing recipe (e.g. "make it look like cards with
+      // pictures"). Tell Hermes to extract and repopulate real data, not just confirm.
+      const repopulateHint = `The user is asking to change how the current recipe looks.
+The existing recipe content is shown above in the Data snapshot.
+Re-populate the recipe seed with the actual data from the current recipe and conversation — do not just confirm a format change.
+Extract the real items (products, listings, results, etc.) from the existing content and include them as meaningful rawData in the recipe seed.
+Prefer card content with images/photos where available.
+Provide a short confirmation describing what was updated, but ensure the recipe seed contains the extracted real data.`;
+      return `${content}
+
+${activeProfileInstruction}
+${recipeInstruction}
+${refreshInstruction}
+${structuredRecipeInstruction}
+${repopulateHint}
+Do not include raw tool output, CLI diagnostics, JSON blobs, scripts, or command traces in the final answer.
+Return only the final assistant answer.`;
+    } else {
+      return `${content}
 
 ${activeProfileInstruction}
 ${recipeInstruction}
@@ -1905,6 +2046,7 @@ Bias toward a single structured operation and a short confirmation.
 Avoid terminal commands, scripts, code execution, or repeated tool exploration unless the user explicitly asked for outside research.
 Do not include raw tool output, CLI diagnostics, JSON blobs, scripts, or command traces in the final answer.
 Return only the final assistant answer.`;
+    }
   }
 
   if (isLocalSearchIntent(intentContent)) {

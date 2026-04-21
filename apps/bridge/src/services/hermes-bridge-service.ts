@@ -154,8 +154,10 @@ import {
   HERMES_EXPECTED_VERSION,
   HermesCliStructuredActionError,
   classifyStructuredRecipeIntent,
+  classifyRecipeMutationIntent,
   resolveHermesChatTimeoutMs,
   type HermesCli,
+  type RecipeMutationIntent,
   type RuntimeProviderDiscoveryResult,
   type StructuredRecipeIntent
 } from '../hermes-cli/client';
@@ -209,8 +211,9 @@ import { collectRecipeAppletNodeKinds } from './recipes/recipe-applet-render-tre
 import { analyzeRecipeAppletModule } from './recipes/recipe-applet-static-validation';
 import type { RecipeAppletRenderContext } from './recipes/recipe-applet-types';
 import { verifyRecipeApplet } from './recipes/recipe-applet-verifier';
-import { getRecipeTemplateRuntimeDefinition } from './recipes/recipe-template-registry';
+import { getRecipeTemplateRuntimeDefinition, listAvailableRecipeTemplateDefinitions } from './recipes/recipe-template-registry';
 import type { StructuredJsonFailureKind } from './recipes/structured-json-recovery';
+import { parsePartialJsonObject } from './recipes/structured-json-recovery';
 
 export class BridgeError extends Error {
   constructor(
@@ -617,6 +620,7 @@ type RecipeAppletEnrichmentJobInput =
       structuredIntentPrompt: string;
       conversationalAssistantMarkdown: string;
       structuredRecipeIntent: StructuredRecipeIntent | null;
+      mutationIntent: RecipeMutationIntent | null;
       refreshContext: RecipeRefreshContext | null;
       triggerActionId?: string | null;
       triggerKindOverride?: RecipeBuildTriggerKind | null;
@@ -1110,6 +1114,8 @@ export const __recipeParsingForTests = {
 
 // Maps classifier labels (from classifyStructuredRecipeIntent) to their target template IDs.
 // Labels are kept in sync with each template's selectionSignals so selection is predictable.
+// This static map is the fallback: we also scan every loaded recipe's selectionSignals at runtime
+// so user/builtin recipes on disk participate in selection without touching this code.
 const INTENT_LABEL_TO_TEMPLATE_ID: Partial<Record<string, RecipeTemplateId>> = {
   'inbox triage': 'inbox-triage-board',
   'security review': 'security-review-board',
@@ -1127,6 +1133,77 @@ const INTENT_LABEL_TO_TEMPLATE_ID: Partial<Record<string, RecipeTemplateId>> = {
   'shopping results': 'shopping-shortlist',
   'step by step': 'step-by-step-instructions'
 };
+
+/**
+ * Converts a RecipeMutationIntent (UI change request) into a StructuredRecipeIntent that can be
+ * used to drive the rest of the enrichment pipeline.  The label is chosen to match an existing
+ * recipe selection signal so the optimistic ghost and selection LLM both converge on the right
+ * template.
+ */
+function synthesizeIntentFromMutation(
+  mutation: RecipeMutationIntent,
+  currentTemplateId: string
+): StructuredRecipeIntent {
+  // Prefer the mutation's own template hint when available.
+  const targetLabel = mutation.targetTemplateHint
+    ? Object.entries({
+        'inbox-triage-board': 'inbox triage',
+        'security-review-board': 'security review',
+        'job-search-pipeline': 'job search',
+        'flight-comparison': 'flight comparison',
+        'travel-itinerary-planner': 'travel planner',
+        'event-planner': 'event planner',
+        'content-campaign-planner': 'campaign planner',
+        'price-comparison-grid': 'price comparison',
+        'restaurant-finder': 'restaurant shortlist',
+        'hotel-shortlist': 'hotel shortlist',
+        'local-discovery-comparison': 'nearby places',
+        'research-notebook': 'research notebook',
+        'vendor-evaluation-matrix': 'comparison matrix',
+        'shopping-shortlist': 'shopping results',
+        'step-by-step-instructions': 'step by step'
+      }).find(([id]) => id === mutation.targetTemplateHint)?.[1] ?? 'shopping results'
+    : mutation.kind === 'change_layout' && mutation.wantsKanban
+      ? 'job search'
+      : mutation.kind === 'change_visual' || mutation.wantsCards
+        ? 'shopping results'
+        : mutation.wantsTable
+          ? 'comparison matrix'
+          : mutation.wantsTimeline
+            ? 'travel planner'
+            : 'shopping results';
+
+  const preferredContentFormat: RecipeContentFormat =
+    mutation.wantsTable ? 'table' :
+    mutation.wantsCards || mutation.wantsImages ? 'card' :
+    'card';
+
+  return {
+    category: 'results',
+    preferredContentFormat,
+    label: targetLabel
+  };
+}
+
+function resolveTemplateIdForIntentLabel(label: string): RecipeTemplateId | null {
+  const direct = INTENT_LABEL_TO_TEMPLATE_ID[label];
+  if (direct) return direct;
+
+  // Scan every loaded recipe's selectionSignals for a case-insensitive match on the label or any
+  // individual word. Disk-loaded recipes (builtin-recipes/* or ~/.hermes/recipes/*) become
+  // discoverable without editing this file.
+  const normalizedLabel = label.toLowerCase();
+  const definitions = listAvailableRecipeTemplateDefinitions();
+  for (const definition of definitions) {
+    if (!definition.enabled && definition.enabled !== undefined) continue;
+    for (const signal of definition.selectionSignals) {
+      if (signal.toLowerCase() === normalizedLabel) {
+        return definition.id;
+      }
+    }
+  }
+  return null;
+}
 
 export class HermesBridge {
   private readonly now: () => string;
@@ -5384,9 +5461,16 @@ Retry rules:
   private shouldAttemptRecipeAppletUpgrade(
     requestMode: ChatStreamRequest['mode'],
     structuredRecipeIntent: StructuredRecipeIntent | null,
-    isRetryBuild: boolean
+    isRetryBuild: boolean,
+    mutationIntent?: RecipeMutationIntent | null
   ) {
     if (isRetryBuild || requestMode === 'recipe_refresh' || requestMode === 'recipe_action') {
+      return true;
+    }
+
+    // A mutation intent (user asking to change how the current recipe looks) always triggers
+    // enrichment so the template can be switched/updated, even when there's no fresh data intent.
+    if (mutationIntent) {
       return true;
     }
 
@@ -6404,9 +6488,28 @@ ${this.serializeStructuredContext(createRecipeDslRepairExcerpt(input.errors), 6_
   private buildRecipeTemplateSelectionPrompt(input: {
     context: RecipeTemplateArtifactContext;
     currentRecipe: Recipe;
+    mutationIntent?: RecipeMutationIntent | null;
   }) {
     const assistantMarkdown = this.resolveRecipeTemplateAssistantMarkdown(input.context);
-    return `Bridge execution note: Select the approved recipe template for Hermes Home enrichment.
+    const mutationBlock = input.mutationIntent
+      ? `\n\nCRITICAL — USER REQUESTED A RECIPE MUTATION (do not ignore):
+The user explicitly asked to change how their current recipe looks or is structured.
+Mutation kind: ${input.mutationIntent.kind}
+Visual preferences: ${[
+          input.mutationIntent.wantsImages && 'images/photos',
+          input.mutationIntent.wantsCards && 'cards/tiles',
+          input.mutationIntent.wantsCharts && 'charts',
+          input.mutationIntent.wantsTable && 'table/matrix',
+          input.mutationIntent.wantsKanban && 'kanban board',
+          input.mutationIntent.wantsTimeline && 'timeline',
+          input.mutationIntent.wantsFewerItems && 'fewer items',
+          input.mutationIntent.wantsMoreItems && 'more items'
+        ].filter(Boolean).join(', ') || 'none specified'}
+Suggested template: ${input.mutationIntent.targetTemplateHint ?? 'let the selection LLM decide based on preferences'}
+Mutation summary: "${input.mutationIntent.mutationSummary}"
+Action: You MUST select a template that satisfies these preferences. Use mode=switch if changing templates, mode=update if keeping the same template but changing structure.`
+      : '';
+    return `Bridge execution note: Select the approved recipe template for Hermes Home enrichment.${mutationBlock}
 This is an artifact-only post-processing step. The Hermes task is already complete.
 Return only one JSON object and nothing else.
 
@@ -6766,7 +6869,8 @@ Fix instructions:
     requestId: string,
     prompt: string,
     stage: 'select' | 'text' | 'hydrate' | 'actions' | 'text_repair' | 'actions_repair',
-    settings: ReturnType<BridgeDatabase['getSettings']>
+    settings: ReturnType<BridgeDatabase['getSettings']>,
+    onAssistantSnapshot?: ((markdown: string) => void) | null
   ): Promise<{
     assistantMarkdown: string;
     errorDetail: string | null;
@@ -6786,7 +6890,8 @@ Fix instructions:
         prompt,
         stage,
         requestId,
-        timeoutMs: timeoutPolicy.configuredTimeoutMs
+        timeoutMs: timeoutPolicy.configuredTimeoutMs,
+        onAssistantSnapshot: onAssistantSnapshot ?? undefined
       });
       const endedAt = this.now();
       return {
@@ -7524,7 +7629,8 @@ Emit one corrected TSX module now.`;
     context: RecipeTemplateArtifactContext,
     pipeline: RecipePipelineState,
     build: RecipeBuild,
-    generationTrace: RecipeGenerationTrace
+    generationTrace: RecipeGenerationTrace,
+    mutationIntent?: RecipeMutationIntent | null
   ): Promise<{ recipe: Recipe; pipeline: RecipePipelineState; build: RecipeBuild }> {
     if (this.isRecipeEnrichmentSuperseded(currentRecipe.id, requestId)) {
       await this.markRecipeEnrichmentSuperseded({
@@ -7557,7 +7663,7 @@ Emit one corrected TSX module now.`;
 
     // Win #3: emit an optimistic ghost shell immediately using the predicted template from the
     // intent label — gives the frontend a skeleton to render before the selection LLM call completes.
-    const predictedTemplateId = INTENT_LABEL_TO_TEMPLATE_ID[context.intent.label] ?? null;
+    const predictedTemplateId = resolveTemplateIdForIntentLabel(context.intent.label);
     const optimisticGhostState = predictedTemplateId
       ? createRecipeTemplateGhostState({
           templateId: predictedTemplateId,
@@ -7590,7 +7696,8 @@ Emit one corrected TSX module now.`;
           this.applyRecipeStageRetryPrompt(
             this.buildRecipeTemplateSelectionPrompt({
               context,
-              currentRecipe
+              currentRecipe,
+              mutationIntent
             }),
             priorFailureDetail
           ),
@@ -7861,6 +7968,33 @@ Emit one corrected TSX module now.`;
       validationErrors: ['The staged template text artifact was invalid.']
     };
 
+    // Streaming callback for the text stage: emit partial template states as the LLM writes JSON.
+    // Throttled to once per 400ms to avoid flooding the SSE stream.
+    let lastPartialEmitAt = 0;
+    const PARTIAL_EMIT_INTERVAL_MS = 400;
+    const emitPartialTextState = async (markdown: string) => {
+      const now = Date.now();
+      if (now - lastPartialEmitAt < PARTIAL_EMIT_INTERVAL_MS) return;
+      lastPartialEmitAt = now;
+      try {
+        const partial = parsePartialJsonObject(markdown);
+        if (!partial) return;
+        const partialNorm = normalizeRecipeTemplateText({
+          templateId: selection.templateId,
+          rawValue: partial,
+          assistantSummary: context.summary?.subtitle ?? context.assistantContext.summary ?? null
+        });
+        if (!partialNorm.text) return;
+        const partialFill = createRecipeTemplateFillFromText(partialNorm.text);
+        const partialState = persistTemplatePreviewState('template_text_generation', 'text', partialFill);
+        if (partialState) {
+          await this.emitRecipeBuildProgress(build, onEvent, 'Building recipe…', partialState);
+        }
+      } catch {
+        // Ignore partial parse errors — they are expected for mid-stream JSON chunks.
+      }
+    };
+
     const textOutcome = await this.runRecipeGenerationStageWithRetries<RecipeTemplateText>({
       build,
       trace: generationTrace,
@@ -7881,7 +8015,8 @@ Emit one corrected TSX module now.`;
             priorFailureDetail
           ),
           'text',
-          settings
+          settings,
+          emitPartialTextState
         );
         const extractedText = extractRecipeTemplateTextArtifact(textResponse.assistantMarkdown);
         const normalizedText =
@@ -10247,7 +10382,8 @@ Emit one corrected TSX module now.`;
       context,
       pipeline,
       nextBuild,
-      generationTrace
+      generationTrace,
+      input.mutationIntent ?? null
     );
   }
 
@@ -11309,27 +11445,45 @@ Emit one corrected TSX module now.`;
     return null;
   }
 
-  private classifyRequiredStructuredRecipeIntent(content: string, hasRecipeContext: boolean) {
+  private classifyRequiredStructuredRecipeIntent(
+    content: string,
+    hasRecipeContext: boolean,
+    attachedTemplateId?: string | null
+  ): { intent: StructuredRecipeIntent | null; mutationIntent: RecipeMutationIntent | null } {
     const structuredIntent = classifyStructuredRecipeIntent(content, hasRecipeContext);
     if (structuredIntent) {
-      return structuredIntent;
+      return { intent: structuredIntent, mutationIntent: null };
     }
 
     if (
       /\b(create|build|make)\b.*\b(recipe|recipe|table|card|cards|markdown|note|board|tracker)\b/i.test(content)
     ) {
       return {
-        category: 'results',
-        preferredContentFormat: /\btable\b/i.test(content)
-          ? ('table' as const)
-          : /\b(markdown|note|notes)\b/i.test(content)
-            ? ('markdown' as const)
-            : ('card' as const),
-        label: 'recipe request'
-      } satisfies StructuredRecipeIntent;
+        intent: {
+          category: 'results',
+          preferredContentFormat: /\btable\b/i.test(content)
+            ? ('table' as const)
+            : /\b(markdown|note|notes)\b/i.test(content)
+              ? ('markdown' as const)
+              : ('card' as const),
+          label: 'recipe request'
+        } satisfies StructuredRecipeIntent,
+        mutationIntent: null
+      };
     }
 
-    return null;
+    // When a recipe is already rendered, check for mutation intent (user asking to change how it looks).
+    if (hasRecipeContext && attachedTemplateId) {
+      const mutationIntent = classifyRecipeMutationIntent(content, attachedTemplateId);
+      if (mutationIntent) {
+        // Synthesize a StructuredRecipeIntent from the mutation intent so the rest of the pipeline
+        // (shouldAttemptRecipeAppletUpgrade, optimistic ghost, selection prompt) works correctly.
+        const synthesizedIntent = synthesizeIntentFromMutation(mutationIntent, attachedTemplateId);
+        return { intent: synthesizedIntent, mutationIntent };
+      }
+    }
+
+    return { intent: null, mutationIntent: null };
   }
 
   private async emitRecipeEvent(
@@ -12680,7 +12834,14 @@ Emit one corrected TSX module now.`;
       requestMode === 'recipe_refresh'
         ? (refreshContext?.intentPrompt ?? input.intentContent ?? input.transcriptContent)
         : (input.intentContent ?? input.transcriptContent);
-    const structuredRecipeIntent = this.classifyRequiredStructuredRecipeIntent(structuredIntentPrompt, Boolean(activeRecipe));
+    const attachedTemplateId = activeRecipe?.dynamic?.recipeTemplate?.templateId ?? null;
+    const intentClassification = this.classifyRequiredStructuredRecipeIntent(
+      structuredIntentPrompt,
+      Boolean(activeRecipe),
+      attachedTemplateId
+    );
+    const structuredRecipeIntent = intentClassification.intent;
+    const mutationIntent = intentClassification.mutationIntent;
     const settings = this.options.database.getSettings();
     const transcriptContent = input.transcriptContent.trim();
     const hermesContent = (input.hermesContent ?? transcriptContent).trim();
@@ -12763,6 +12924,74 @@ Emit one corrected TSX module now.`;
         message: `Unrestricted Access was used for session ${session.id}.`,
         createdAt: this.now()
       });
+    }
+
+    // Phase 3 quick win: emit an early optimistic ghost as soon as intent is known — before the
+    // chat LLM even starts.  This gives the frontend a skeleton within ~50ms of the user hitting
+    // send, rather than waiting for the full chat → baseline → queue → enrichment pipeline.
+    //
+    // Conditions: structured intent must resolve to a known template, a recipe must already exist
+    // (we're updating), and we must not be in refresh/action mode (those have their own flows).
+    const earlyGhostTemplateId =
+      structuredRecipeIntent && requestMode === 'chat' && activeRecipe
+        ? resolveTemplateIdForIntentLabel(structuredRecipeIntent.label)
+        : null;
+    if (earlyGhostTemplateId && activeRecipe) {
+      const earlyGhostState = createRecipeTemplateGhostState({
+        templateId: earlyGhostTemplateId,
+        currentState: activeRecipe.dynamic?.recipeTemplate ?? null,
+        transitionReason: null,
+        updatedAt: this.now(),
+        phase: 'selected',
+        failureCategory: null,
+        errorMessage: null,
+        failureScope: 'all'
+      }).state;
+      if (earlyGhostState) {
+        await onEvent({
+          type: 'recipe_build_progress',
+          recipeId: activeRecipe.id,
+          build: {
+            id: `early-ghost-${requestId}`,
+            recipeId: activeRecipe.id,
+            profileId: profile.id,
+            sessionId: session.id,
+            buildVersion: 0,
+            buildKind: 'template_enrichment',
+            triggerKind: 'chat',
+            triggerRequestId: requestId,
+            triggerActionId: null,
+            phase: 'template_selecting',
+            progressMessage: 'Preparing recipe template…',
+            retryCount: 0,
+            startedAt: this.now(),
+            updatedAt: this.now(),
+            completedAt: null,
+            errorCode: null,
+            errorMessage: null,
+            errorDetail: null,
+            failureCategory: null,
+            failureStage: null,
+            userFacingMessage: null,
+            retryable: true,
+            configuredTimeoutMs: null
+          },
+          recipe: activeRecipe,
+          partialTemplateState: earlyGhostState
+        });
+        this.recordTelemetry({
+          profileId: profile.id,
+          sessionId: session.id,
+          requestId,
+          severity: 'info',
+          category: 'recipes',
+          code: 'RECIPE_EARLY_GHOST_EMITTED',
+          message: 'Emitted early optimistic ghost state before chat LLM started.',
+          detail: `Predicted template: ${earlyGhostTemplateId}`,
+          payload: { templateId: earlyGhostTemplateId, recipeId: activeRecipe.id },
+          createdAt: this.now()
+        });
+      }
     }
 
     try {
@@ -12997,7 +13226,7 @@ Emit one corrected TSX module now.`;
       let queuedRecipeEnrichmentJob: RecipeAppletEnrichmentJobInput | null = null;
       if (
         activeRecipe &&
-        this.shouldAttemptRecipeAppletUpgrade(requestMode, structuredRecipeIntent, isRetryBuild)
+        this.shouldAttemptRecipeAppletUpgrade(requestMode, structuredRecipeIntent, isRetryBuild, mutationIntent)
       ) {
         const queuedAppletBuild = await this.queueRecipeAppletBuild({
           profile,
@@ -13035,6 +13264,7 @@ Emit one corrected TSX module now.`;
           structuredIntentPrompt,
           conversationalAssistantMarkdown,
           structuredRecipeIntent,
+          mutationIntent: mutationIntent ?? null,
           refreshContext,
           triggerActionId: input.triggerActionId ?? null,
           triggerKindOverride: input.triggerKindOverride ?? null

@@ -4,6 +4,24 @@ import { StatusPill } from '../atoms/StatusPill';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 
+function JobsIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" stroke="var(--text-muted)" strokeWidth="1.5" />
+      <path d="M16 11v6l4 3" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
 export function JobsPage({
   response,
   loading,
@@ -17,16 +35,43 @@ export function JobsPage({
 }) {
   return (
     <VStack align="stretch" h="100%" minH={0} gap="4">
-      <HStack justify="space-between" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" p="4" boxShadow="var(--shadow-xs)">
-        <HStack gap="2">
-          {response ? <StatusPill label={response.freshness.status} /> : null}
-          {response?.freshness.lastSuccessfulAt ? (
-            <Text color="var(--text-secondary)">
-              Last synced {new Date(response.freshness.lastSuccessfulAt).toLocaleString()}
-            </Text>
-          ) : null}
+      {/* Status bar */}
+      <HStack
+        justify="space-between"
+        rounded="8px"
+        border="1px solid var(--border-subtle)"
+        bg="var(--surface-elevated)"
+        px="4"
+        py="3.5"
+        boxShadow="var(--shadow-xs)"
+        wrap="wrap"
+        gap="3"
+      >
+        <HStack gap="2.5" align="center">
+          {response ? (
+            <>
+              <StatusPill label={response.freshness.status} />
+              {response.freshness.lastSuccessfulAt ? (
+                <Text fontSize="xs" color="var(--text-secondary)">
+                  Last synced {formatDate(response.freshness.lastSuccessfulAt)}
+                </Text>
+              ) : (
+                <Text fontSize="xs" color="var(--text-muted)">
+                  Never synced
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text fontSize="xs" color="var(--text-muted)">Checking job schedule…</Text>
+          )}
         </HStack>
-        <Button variant="outline" rounded="8px" onClick={onRefresh} loading={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          rounded="8px"
+          onClick={onRefresh}
+          loading={loading}
+        >
           Refresh
         </Button>
       </HStack>
@@ -36,16 +81,21 @@ export function JobsPage({
         <ErrorBanner title="Latest Hermes jobs error" detail={response.freshness.lastError} />
       ) : null}
 
-      <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" p="4" boxShadow="var(--shadow-sm)">
+      <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
         {!response ? (
-          <EmptyStateCard title="Loading jobs" detail="Reading Hermes cron state for the selected profile." />
+          <Box p="4">
+            <EmptyStateCard title="Loading jobs" detail="Reading Hermes cron state for the selected profile." />
+          </Box>
         ) : response.items.length === 0 ? (
-          <EmptyStateCard
-            title="No scheduled jobs"
-            detail="Hermes reported no cron jobs for the selected profile."
-          />
+          <Box p="4">
+            <EmptyStateCard
+              icon={<JobsIcon />}
+              title="No scheduled jobs"
+              detail="Hermes reported no cron jobs for the selected profile. Create a new session and ask Hermes to schedule a task."
+            />
+          </Box>
         ) : (
-          <Table.ScrollArea data-testid="jobs-table-scroll" borderWidth="1px" borderColor="var(--border-subtle)" rounded="8px" h="100%">
+          <Table.ScrollArea data-testid="jobs-table-scroll" h="100%">
             <Table.Root size="sm" variant="outline">
               <Table.Header>
                 <Table.Row>
@@ -59,18 +109,30 @@ export function JobsPage({
                 {response.items.map((job) => (
                   <Table.Row key={job.id}>
                     <Table.Cell>
-                      <Text fontWeight="750" color="var(--text-primary)">
+                      <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
                         {job.label}
                       </Text>
-                      <Text fontSize="sm" color="var(--text-secondary)">
-                        {job.description}
+                      {job.description ? (
+                        <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineHeight="1.5">
+                          {job.description}
+                        </Text>
+                      ) : null}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text
+                        fontSize="xs"
+                        color="var(--text-secondary)"
+                        fontFamily="ui-monospace, monospace"
+                      >
+                        {job.schedule}
                       </Text>
                     </Table.Cell>
-                    <Table.Cell color="var(--text-secondary)">{job.schedule}</Table.Cell>
                     <Table.Cell>
                       <StatusPill label={job.status} />
                     </Table.Cell>
-                    <Table.Cell color="var(--text-secondary)">{job.nextRun}</Table.Cell>
+                    <Table.Cell>
+                      <Text fontSize="xs" color="var(--text-secondary)">{job.nextRun}</Text>
+                    </Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>

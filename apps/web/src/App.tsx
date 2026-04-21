@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Box, Button, Center, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
 import { useAppController } from './hooks/use-app-controller';
 import { ChatPage } from './ui/pages/ChatPage';
@@ -10,10 +11,23 @@ import { ToolsPage } from './ui/pages/ToolsPage';
 import { ModelSelector } from './ui/molecules/ModelSelector';
 import { TabBar } from './ui/molecules/TabBar';
 import { ShellLayout, Sidebar } from './ui/templates/ShellLayout';
+import { CommandPalette } from './ui/organisms/CommandPalette';
 import { AppToaster } from './ui/toaster';
 
 export function App() {
   const controller = useAppController();
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdPaletteOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   if (controller.bootstrapStatus === 'loading' && !controller.bootstrap) {
     return (
       <Center h="100dvh" bg="transparent">
@@ -76,8 +90,30 @@ export function App() {
     !(controller.runtimeConfigGate.status === 'checking' && controller.chatSending);
   const usesCombinedSessionRecipeLayout = controller.page === 'chat' && Boolean(controller.sessionPayload?.attachedRecipe);
 
+  const activeModelLabel = controller.runtimeConfigGate.modelId
+    ? `${controller.modelProviderResponse?.config?.provider ?? ''}/${controller.runtimeConfigGate.modelId}`.replace(/^\//, '')
+    : null;
+
   return (
     <>
+      {cmdPaletteOpen ? (
+        <CommandPalette
+          recentSessions={controller.bootstrap.recentSessions}
+          onOpenSession={(sessionId) => {
+            void controller.openSession(sessionId);
+            setCmdPaletteOpen(false);
+          }}
+          onOpenPage={(page) => {
+            void controller.openPage(page);
+            setCmdPaletteOpen(false);
+          }}
+          onCreateSession={() => {
+            void controller.handleCreateSession();
+            setCmdPaletteOpen(false);
+          }}
+          onClose={() => setCmdPaletteOpen(false)}
+        />
+      ) : null}
       <ShellLayout
         connection={controller.bootstrap.connection}
         profileName={controller.activeProfile?.name ?? controller.activeProfile?.id ?? null}
@@ -86,6 +122,7 @@ export function App() {
         headerMode={usesCombinedSessionRecipeLayout ? 'compact' : 'full'}
         hermesVersion={controller.bootstrap.hermesVersion}
         expectedHermesVersion={controller.bootstrap.expectedHermesVersion}
+        activeModelLabel={activeModelLabel}
         onPersistTheme={async (themeMode) => {
           await controller.handleSaveSettings({
             themeMode

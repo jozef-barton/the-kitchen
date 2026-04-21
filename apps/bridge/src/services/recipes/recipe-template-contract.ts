@@ -3072,8 +3072,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
           rows: toTableRows(definition, data.rows),
           footerChips: data.scopeTags,
           footnote: undefined
-        },
-        createNotesSection(definition, 'operator-note', 'Notes', data.noteLines, []),
+        }
       ];
     }
     case 'shopping-shortlist': {
@@ -3085,8 +3084,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
           title: 'Shortlist',
           columns: 1,
           cards: toCardItems(definition, data.cards, [], 'shortlist-card')
-        },
-        createNotesSection(definition, 'notes', 'Shortlist notes', data.noteLines, []),
+        }
       ];
     }
     case 'inbox-triage-board': {
@@ -3135,7 +3133,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
               groups: toGroups(definition, data.groups, groupActionIds, 'results')
             }
           ],
-          right: compactArray<RecipeTemplateSection>([
+          right: [
             createDetailPanelSection(
               definition,
               'result-detail',
@@ -3148,9 +3146,8 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                   : 'Select a result to review website, contact details, and fit.'
               ),
               detailActionIds
-            ),
-            data.noteLines.length > 0 ? createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note']) : null
-          ])
+            )
+          ]
         }
       ];
     }
@@ -3218,7 +3215,6 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
         { id: 'itinerary', label: 'Itinerary' },
         { id: 'bookings', label: 'Bookings' },
         { id: 'packing', label: 'Packing' },
-        { id: 'notes', label: 'Notes' },
         { id: 'links', label: 'Links' }
       ];
       return [
@@ -3254,7 +3250,6 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                 groups: toChecklistGroups(definition, data.packingItems, [])
               }
             ],
-            notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])],
             links: [
               {
                 slotId: 'links',
@@ -3283,7 +3278,6 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
       const data = fill.data;
       const tabs = [
         { id: 'sources', label: 'Sources' },
-        { id: 'notes', label: 'Notes' },
         { id: 'points', label: 'Extracted points' },
         { id: 'follow-ups', label: 'Follow-ups' }
       ];
@@ -3303,7 +3297,6 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                 groups: toGroups(definition, data.sources, [], 'research-sources')
               }
             ],
-            notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])],
             points: [
               {
                 slotId: 'extracted-points',
@@ -3371,8 +3364,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
           rows: toTableRows(definition, data.rows),
           footerChips: data.footerChips,
           footnote: data.footnote
-        },
-        createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])
+        }
       ]);
     }
     case 'job-search-pipeline': {
@@ -3397,10 +3389,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
               columns: toBoardColumns(definition, data.columns, boardActionIds, 'pipeline')
             }
           ],
-          right: compactArray<RecipeTemplateSection>([
-            createDetailPanelSection(definition, 'pipeline-detail', detail.title, detail),
-            createNotesSection(definition, 'notes', 'Notes', [], ['append-template-note'])
-          ])
+          right: [createDetailPanelSection(definition, 'pipeline-detail', detail.title, detail)]
         }
       ]);
     }
@@ -3410,8 +3399,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
         { id: 'venues', label: 'Venues' },
         { id: 'guests', label: 'Guests' },
         { id: 'checklist', label: 'Checklist' },
-        { id: 'itinerary', label: 'Itinerary' },
-        { id: 'notes', label: 'Notes' }
+        { id: 'itinerary', label: 'Itinerary' }
       ];
       return [
         {
@@ -3454,8 +3442,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                 title: 'Itinerary',
                 items: toTimelineItems(definition, data.itineraryItems, [], 'event-itinerary')
               }
-            ],
-            notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])]
+            ]
           }
         }
       ];
@@ -3465,8 +3452,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
       const tabs = [
         { id: 'ideas', label: 'Ideas' },
         { id: 'drafts', label: 'Drafts' },
-        { id: 'schedule', label: 'Schedule' },
-        { id: 'notes', label: 'Notes' }
+        { id: 'schedule', label: 'Schedule' }
       ];
       return [
         {
@@ -3493,8 +3479,7 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                 title: 'Schedule',
                 items: toTimelineItems(definition, data.scheduleItems, [], 'campaign-schedule')
               }
-            ],
-            notes: [createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])]
+            ]
           }
         }
       ];
@@ -3517,9 +3502,8 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
             detail: step.detail,
             checked: false
           })),
-          actions: createActionRefs(definition, ['append-template-note'])
-        } as unknown as RecipeTemplateSection,
-        createNotesSection(definition, 'notes', 'Notes', data.noteLines, ['append-template-note'])
+          actions: createActionRefs(definition, [])
+        } as unknown as RecipeTemplateSection
       ]);
     }
     default: {
@@ -4809,6 +4793,26 @@ function createGhostRecipeTemplateFill(templateId: RecipeTemplateId, currentStat
         kind: 'recipe_template_fill',
         schemaVersion: 'recipe_template_fill/v2',
         templateId,
+        title,
+        subtitle,
+        summary,
+        data: {
+          heroChips: [],
+          prerequisites: [],
+          steps: [],
+          noteLines: []
+        },
+        metadata: {
+          preview: true
+        }
+      });
+    default:
+      // Unknown templateId (custom user recipe): fall back to the step-by-step shape so the preview pipeline
+      // still produces a valid fill. The real rendering path is driven by section kinds regardless.
+      return RecipeTemplateFillSchema.parse({
+        kind: 'recipe_template_fill',
+        schemaVersion: 'recipe_template_fill/v2',
+        templateId: 'step-by-step-instructions',
         title,
         subtitle,
         summary,

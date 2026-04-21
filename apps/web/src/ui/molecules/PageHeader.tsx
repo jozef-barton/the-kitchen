@@ -11,7 +11,7 @@ export function PageHeader({
   detail?: string;
 }) {
   return (
-    <HStack align="center" gap={{ base: '3', md: '5' }} minW={0} data-testid="page-header">
+    <HStack align="center" flex="1" gap={{ base: '3', md: '5' }} minW={0} data-testid="page-header">
       <BrandLockup compact />
       <Box h="8" w="1px" bg="var(--border-subtle)" display={{ base: 'none', md: 'block' }} />
       <VStack align="start" gap="0.5" minW={0}>

@@ -15,6 +15,7 @@ import type {
   OpenRecipeChatRequest,
   PollProviderAuthRequest,
   RenameSessionRequest,
+  ResolveImagesResponse,
   TelemetryResponse,
   UpdateRecipeRequest,
   ToolExecutionPrepareRequest,
@@ -27,6 +28,7 @@ import {
   BootstrapResponseSchema,
   ChatStreamEventSchema,
   OpenRecipeChatResponseSchema,
+  ResolveImagesResponseSchema,
   SessionDeletionResponseSchema,
   JobsResponseSchema,
   ModelProviderResponseSchema,
@@ -489,5 +491,18 @@ export async function streamChat(input: ChatStreamRequest, onEvent: (event: Chat
 
 export async function streamRecipeAction(recipeId: string, input: ExecuteRecipeActionRequest, onEvent: (event: ChatStreamEvent) => void) {
   await streamSseResponse(`/api/recipes/${encodeURIComponent(recipeId)}/actions/stream`, input, onEvent);
+}
+
+export async function resolveImages(queries: string[]): Promise<ResolveImagesResponse> {
+  return parseJsonResponse(
+    await fetch('/api/images/resolve', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ queries })
+    }),
+    ResolveImagesResponseSchema
+  );
 }
 

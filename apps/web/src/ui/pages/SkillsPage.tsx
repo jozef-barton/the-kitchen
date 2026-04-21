@@ -1,33 +1,65 @@
 import { useState } from 'react';
 import { Box, Button, HStack, Menu, Portal, Table, Text, Tooltip, VStack } from '@chakra-ui/react';
 import type { Skill, SkillsResponse } from '@hermes-recipes/protocol';
-import { InfoTag } from '../atoms/InfoTag';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 
-function trustPalette(value: string) {
-  if (/builtin/i.test(value)) {
-    return 'teal';
-  }
-
-  if (/verified/i.test(value)) {
-    return 'green';
-  }
-
-  return 'gray';
+function trustSlot(value: string) {
+  if (/builtin/i.test(value)) return 'managed';
+  if (/verified/i.test(value)) return 'managed';
+  return 'auto';
 }
 
-function categoryPalette(value: string) {
-  if (/productivity/i.test(value)) {
-    return 'blue';
-  }
+function TrustBadge({ value }: { value: string }) {
+  const slot = trustSlot(value);
+  const label = /builtin/i.test(value) ? 'Built-in' : /verified/i.test(value) ? 'Verified' : value;
+  return <span className={`approval-badge approval-badge--${slot}`}>{label}</span>;
+}
 
-  if (/workspace|project/i.test(value)) {
-    return 'orange';
-  }
+function CategoryBadge({ value }: { value: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '2px 8px',
+        borderRadius: '4px',
+        background: 'var(--status-neutral-bg)',
+        color: 'var(--text-secondary)',
+        fontSize: '11px',
+        fontWeight: 600,
+        whiteSpace: 'nowrap'
+      }}
+    >
+      {value || 'Uncategorized'}
+    </span>
+  );
+}
 
-  return 'gray';
+function CapabilityChips({ summary }: { summary: string | undefined }) {
+  if (!summary) return null;
+  const caps = summary.split(',').map((s) => s.trim()).filter(Boolean);
+  const visible = caps.slice(0, 4);
+  const overflow = caps.length - 4;
+  return (
+    <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+      {visible.map((cap, i) => (
+        <span key={i} className="skill-chip">{cap}</span>
+      ))}
+      {overflow > 0 ? (
+        <span className="skill-chip-overflow">+{overflow} more</span>
+      ) : null}
+    </span>
+  );
+}
+
+function SkillsIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path d="M16 5l3.2 7.2 7.8.8-5.8 5 1.8 7.6L16 21.6 9 25.6l1.8-7.6L5 13l7.8-.8z" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
 }
 
 export function SkillsPage({
@@ -49,13 +81,9 @@ export function SkillsPage({
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleDelete() {
-    if (!selectedSkill) {
-      return;
-    }
-
+    if (!selectedSkill) return;
     setDeleteLoading(true);
     setActionError(null);
-
     try {
       await onDeleteSkill(selectedSkill);
       setDeleteOpen(false);
@@ -68,14 +96,33 @@ export function SkillsPage({
 
   return (
     <VStack align="stretch" h="100%" minH={0} gap="4">
-      <HStack justify="space-between" wrap="wrap" gap="3" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" p="4" boxShadow="var(--shadow-xs)">
+      {/* Header bar */}
+      <HStack
+        justify="space-between"
+        wrap="wrap"
+        gap="3"
+        rounded="8px"
+        border="1px solid var(--border-subtle)"
+        bg="var(--surface-elevated)"
+        px="4"
+        py="3.5"
+        boxShadow="var(--shadow-xs)"
+      >
         <Box>
-          <Text fontWeight="750" color="var(--text-primary)">
+          <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
             Runtime skills
           </Text>
-          <Text color="var(--text-secondary)">Skills available to the active Hermes profile.</Text>
+          <Text fontSize="xs" color="var(--text-secondary)" mt="0.5">
+            Skills available to the active Hermes profile.
+          </Text>
         </Box>
-        <Button variant="outline" rounded="8px" onClick={onRefresh} loading={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          rounded="8px"
+          onClick={onRefresh}
+          loading={loading}
+        >
           Refresh
         </Button>
       </HStack>
@@ -83,13 +130,21 @@ export function SkillsPage({
       {error ? <ErrorBanner title="Skills refresh failed" detail={error} /> : null}
       {actionError ? <ErrorBanner title="Skill update failed" detail={actionError} /> : null}
 
-      <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" p="4" boxShadow="var(--shadow-sm)">
+      <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
         {!response ? (
-          <EmptyStateCard title="Loading skills" detail="Reading the active profile skill catalog from Hermes." />
+          <Box p="4">
+            <EmptyStateCard title="Loading skills" detail="Reading the active profile skill catalog from Hermes." />
+          </Box>
         ) : response.items.length === 0 ? (
-          <EmptyStateCard title="No skills reported" detail="Hermes did not report any installed skills for the active profile." />
+          <Box p="4">
+            <EmptyStateCard
+              icon={<SkillsIcon />}
+              title="No skills installed"
+              detail="Hermes did not report any installed skills for the active profile."
+            />
+          </Box>
         ) : (
-          <Table.ScrollArea data-testid="skills-table-scroll" borderWidth="1px" borderColor="var(--border-subtle)" rounded="8px" h="100%">
+          <Table.ScrollArea data-testid="skills-table-scroll" h="100%">
             <Table.Root size="sm" variant="outline">
               <Table.Header>
                 <Table.Row>
@@ -103,11 +158,10 @@ export function SkillsPage({
               <Table.Body>
                 {response.items.map((skill) => {
                   const canDelete = !/builtin/i.test(skill.source) && !/builtin/i.test(skill.trust);
-
                   return (
                     <Table.Row key={skill.id}>
                       <Table.Cell>
-                        <VStack align="stretch" gap="0.5">
+                        <VStack align="stretch" gap="0">
                           <HStack gap="1.5" align="center">
                             {skill.summary ? (
                               <Tooltip.Root openDelay={200} closeDelay={100}>
@@ -117,12 +171,12 @@ export function SkillsPage({
                                     display="inline-flex"
                                     alignItems="center"
                                     justifyContent="center"
-                                    w="16px"
-                                    h="16px"
-                                    rounded="6px"
+                                    w="15px"
+                                    h="15px"
+                                    rounded="4px"
                                     border="1px solid var(--border-subtle)"
                                     color="var(--text-muted)"
-                                    fontSize="10px"
+                                    fontSize="9px"
                                     fontWeight="700"
                                     cursor="help"
                                     flexShrink={0}
@@ -142,71 +196,73 @@ export function SkillsPage({
                                       maxW="280px"
                                       boxShadow="md"
                                     >
-                                      <Text fontSize="sm">{skill.summary}</Text>
+                                      <Text fontSize="xs">{skill.summary}</Text>
                                     </Tooltip.Content>
                                   </Tooltip.Positioner>
                                 </Portal>
                               </Tooltip.Root>
                             ) : null}
-                            <Text fontWeight="750" color="var(--text-primary)">
+                            <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
                               {skill.name}
                             </Text>
                           </HStack>
                           {skill.summary ? (
-                            <Text fontSize="sm" color="var(--text-secondary)" lineClamp={1}>
+                            <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineClamp={2} lineHeight="1.5">
                               {skill.summary}
                             </Text>
                           ) : null}
                         </VStack>
                       </Table.Cell>
                       <Table.Cell>
-                        <InfoTag label={skill.category || 'Uncategorized'} colorPalette={categoryPalette(skill.category)} />
+                        <CategoryBadge value={skill.category} />
                       </Table.Cell>
-                      <Table.Cell color="var(--text-secondary)">{skill.source}</Table.Cell>
                       <Table.Cell>
-                        <InfoTag label={skill.trust} colorPalette={trustPalette(skill.trust)} />
+                        <Text fontSize="xs" color="var(--text-secondary)">{skill.source}</Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <TrustBadge value={skill.trust} />
                       </Table.Cell>
                       <Table.Cell textAlign="end">
-                        <Menu.Root positioning={{ placement: 'bottom-end' }}>
-                          <Menu.Trigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              minW={0}
-                              px="2.5"
-                              rounded="8px"
-                              aria-label={`Actions for ${skill.name}`}
-                              color="var(--text-secondary)"
-                              _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
-                            >
-                              ⋮
-                            </Button>
-                          </Menu.Trigger>
-                          <Portal>
-                            <Menu.Positioner>
-                              <Menu.Content minW="12rem">
-                                <Menu.Item
-                                  value={`delete-${skill.id}`}
-                                  disabled={!canDelete}
-                                  color={canDelete ? 'fg.error' : undefined}
-                                  _hover={canDelete ? { bg: 'bg.error', color: 'fg.error' } : undefined}
-                                  onClick={() => {
-                                    if (!canDelete) {
-                                      return;
-                                    }
-
-                                    setSelectedSkill(skill);
-                                    setActionError(null);
-                                    setDeleteOpen(true);
-                                  }}
-                                >
-                                  Delete
-                                </Menu.Item>
-                              </Menu.Content>
-                            </Menu.Positioner>
-                          </Portal>
-                        </Menu.Root>
+                        <Box className="table-row-actions">
+                          <Menu.Root positioning={{ placement: 'bottom-end' }}>
+                            <Menu.Trigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                minW={0}
+                                px="2"
+                                h="7"
+                                rounded="6px"
+                                aria-label={`Actions for ${skill.name}`}
+                                color="var(--text-secondary)"
+                                _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                              >
+                                ⋮
+                              </Button>
+                            </Menu.Trigger>
+                            <Portal>
+                              <Menu.Positioner>
+                                <Menu.Content minW="11rem" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-1)" boxShadow="var(--shadow-md)">
+                                  <Menu.Item
+                                    value={`delete-${skill.id}`}
+                                    disabled={!canDelete}
+                                    color={canDelete ? 'fg.error' : undefined}
+                                    _hover={canDelete ? { bg: 'bg.error', color: 'fg.error' } : undefined}
+                                    onClick={() => {
+                                      if (!canDelete) return;
+                                      setSelectedSkill(skill);
+                                      setActionError(null);
+                                      setDeleteOpen(true);
+                                    }}
+                                  >
+                                    {canDelete ? 'Delete' : 'Cannot delete built-in'}
+                                  </Menu.Item>
+                                </Menu.Content>
+                              </Menu.Positioner>
+                            </Portal>
+                          </Menu.Root>
+                        </Box>
                       </Table.Cell>
                     </Table.Row>
                   );
@@ -228,10 +284,10 @@ export function SkillsPage({
           onConfirm={handleDelete}
         >
           <Box mt="4" rounded="8px" border="1px solid var(--border-danger)" bg="var(--surface-danger)" px="4" py="3">
-            <Text color="var(--text-primary)" fontWeight="500">
+            <Text fontSize="sm" color="var(--text-primary)" fontWeight="600">
               Permanent deletion
             </Text>
-            <Text color="var(--text-secondary)">
+            <Text fontSize="xs" color="var(--text-secondary)" mt="1">
               This removes the installed skill from the active profile immediately. The app will not recreate it locally after deletion succeeds.
             </Text>
           </Box>

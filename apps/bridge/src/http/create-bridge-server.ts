@@ -15,6 +15,7 @@ import {
   OpenRecipeChatRequestSchema,
   PollProviderAuthRequestSchema,
   RenameSessionRequestSchema,
+  ResolveImagesRequestSchema,
   SelectProfileRequestSchema,
   SelectSessionRequestSchema,
   ToolExecutionResolveRequestSchema,
@@ -24,6 +25,14 @@ import {
   UpdateUiStateRequestSchema,
   RecipeManifestSchema
 } from '@hermes-recipes/protocol';
+import { createUnsplashSourceResolver, resolveImagesInParallel } from '../services/images/image-resolver';
+import { refreshDiskRecipeRegistry } from '../services/recipes/recipe-template-registry';
+
+const defaultImageResolver = createUnsplashSourceResolver();
+
+// Prime the disk recipe registry on startup so user recipes and builtin recipe JSON files participate
+// in template-definition lookups without waiting for the first request.
+void refreshDiskRecipeRegistry();
 import { HermesBridge, BridgeError } from '../services/hermes-bridge-service';
 import { BridgeDatabase } from '../data/bridge-database';
 import { HermesCli } from '../hermes-cli/client';
@@ -222,6 +231,13 @@ export function createBridgeServer(options: {
         return;
       }
 
+      if (request.method === 'POST' && pathname === '/api/images/resolve') {
+        const payload = ResolveImagesRequestSchema.parse(await readJsonBody(request));
+        const results = await resolveImagesInParallel(defaultImageResolver, payload.queries);
+        sendJson(response, 200, { results }, originDecision.allowOrigin);
+        return;
+      }
+
       if (request.method === 'GET' && pathname === '/api/recipes/templates') {
         const { discoverRecipeFolders, getBuiltinRecipesPath, getUserRecipesPath } = await import('../services/recipes/recipe-file-loader');
         const manifests = discoverRecipeFolders([getBuiltinRecipesPath(), getUserRecipesPath()]);
@@ -344,6 +360,8 @@ export function createBridgeServer(options: {
           fixture: fixture ?? null
         });
         const versions = listVersions(folderPath);
+        // Refresh the disk registry so the saved recipe becomes available for selection immediately.
+        void refreshDiskRecipeRegistry();
         sendJson(response, 200, {
           version: newVersion,
           recipe: { manifest, runtime, spec, fixture, versions }

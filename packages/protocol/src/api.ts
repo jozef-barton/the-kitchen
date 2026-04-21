@@ -496,3 +496,19 @@ export const AuditEventsResponseSchema = z.object({
   total: z.number().int().nonnegative()
 });
 export type AuditEventsResponse = z.infer<typeof AuditEventsResponseSchema>;
+
+export const ResolveImagesRequestSchema = z.object({
+  queries: z.array(z.string().min(1)).min(1).max(32)
+});
+export type ResolveImagesRequest = z.infer<typeof ResolveImagesRequestSchema>;
+
+export const ResolveImagesResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      query: z.string(),
+      url: z.string().nullable(),
+      error: z.string().nullable()
+    })
+  )
+});
+export type ResolveImagesResponse = z.infer<typeof ResolveImagesResponseSchema>;

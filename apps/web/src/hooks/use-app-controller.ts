@@ -444,6 +444,26 @@ function mergeSessionIntoBootstrap(
   };
 }
 
+interface SessionStreamState {
+  sending: boolean;
+  progress: string | null;
+  assistantDraft: string;
+  awaitingFinalAssistant: boolean;
+  error: string | null;
+  activityRequests: ActivityRequestBucket[];
+  selectedActivityRequestId: string | null;
+}
+
+const EMPTY_SESSION_STREAM: SessionStreamState = {
+  sending: false,
+  progress: null,
+  assistantDraft: '',
+  awaitingFinalAssistant: false,
+  error: null,
+  activityRequests: [],
+  selectedActivityRequestId: null
+};
+
 export function useAppController() {
   const [bootstrapStatus, setBootstrapStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -452,6 +472,7 @@ export function useAppController() {
   const [toolsTab, setToolsTab] = useState<ToolsTab>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openTabs, setOpenTabs] = useState<Array<{ sessionId: string; title: string }>>([]);
+  const [tabStatuses, setTabStatuses] = useState<Record<string, 'generating' | 'success' | 'error' | 'idle'>>({});
   const [sessionsQuery, setSessionsQuery] = useState('');
   const [submittedSessionsQuery, setSubmittedSessionsQuery] = useState('');
   const [sessionsPage, setSessionsPage] = useState(1);
@@ -461,14 +482,9 @@ export function useAppController() {
   const [sessionPayload, setSessionPayload] = useState<SessionMessagesResponse | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
-  const [chatSending, setChatSending] = useState(false);
-  const [chatProgress, setChatProgress] = useState<string | null>(null);
-  const streamingSessionIdRef = useRef<string | null>(null);
-  const [activityRequests, setActivityRequests] = useState<ActivityRequestBucket[]>([]);
-  const [selectedActivityRequestId, setSelectedActivityRequestId] = useState<string | null>(null);
-  const [assistantDraft, setAssistantDraft] = useState('');
+  const [sessionStreams, setSessionStreams] = useState<Map<string, SessionStreamState>>(() => new Map());
+  const sessionStreamsRef = useRef(sessionStreams);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [chatAwaitingFinalAssistant, setChatAwaitingFinalAssistant] = useState(false);
   const [jobsResponse, setJobsResponse] = useState<Awaited<ReturnType<typeof getJobs>> | null>(null);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
@@ -505,9 +521,6 @@ export function useAppController() {
   const pageRef = useRef<AppPage>('chat');
   const activeProfileIdRef = useRef<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
-  const currentChatRequestIdRef = useRef<string | null>(null);
-  const streamRevisionRef = useRef(0);
-
   const activeProfileId = bootstrap?.activeProfileId ?? null;
   const activeProfile = useMemo(
     () => bootstrap?.profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -526,6 +539,16 @@ export function useAppController() {
     () => activeModelProviderResponse?.providers.find((provider) => provider.id === selectedProviderId) ?? null,
     [activeModelProviderResponse?.providers, selectedProviderId]
   );
+  const activeSessionStream: SessionStreamState = activeSessionId
+    ? sessionStreams.get(activeSessionId) ?? EMPTY_SESSION_STREAM
+    : EMPTY_SESSION_STREAM;
+  const chatSending = activeSessionStream.sending;
+  const chatProgress = activeSessionStream.progress;
+  const assistantDraft = activeSessionStream.assistantDraft;
+  const chatAwaitingFinalAssistant = activeSessionStream.awaitingFinalAssistant;
+  const activityRequests = activeSessionStream.activityRequests;
+  const selectedActivityRequestId = activeSessionStream.selectedActivityRequestId;
+  const activeSessionStreamError = activeSessionStream.error;
   const selectedActivityRequest = useMemo(() => {
     if (activityRequests.length === 0) {
       return null;
@@ -646,35 +669,87 @@ export function useAppController() {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
-  const clearRuntimeRequestState = useCallback((options?: { preserveSendingState?: boolean }) => {
-    currentChatRequestIdRef.current = null;
-    setActivityRequests([]);
-    setSelectedActivityRequestId(null);
-    setAssistantDraft('');
-    if (!options?.preserveSendingState) {
-      setChatProgress(null);
-      setChatAwaitingFinalAssistant(false);
-    }
+  useEffect(() => {
+    sessionStreamsRef.current = sessionStreams;
+  }, [sessionStreams]);
+
+  const updateSessionStream = useCallback(
+    (sessionId: string, updater: (prev: SessionStreamState) => SessionStreamState) => {
+      setSessionStreams((prev) => {
+        const current = prev.get(sessionId) ?? EMPTY_SESSION_STREAM;
+        const next = updater(current);
+        if (next === current) {
+          return prev;
+        }
+        const map = new Map(prev);
+        map.set(sessionId, next);
+        return map;
+      });
+    },
+    []
+  );
+
+  const clearSessionStream = useCallback((sessionId: string) => {
+    setSessionStreams((prev) => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const map = new Map(prev);
+      map.delete(sessionId);
+      return map;
+    });
   }, []);
 
-  const hydrateRuntimeRequestState = useCallback((payload: SessionMessagesResponse | null) => {
-    const nextBuckets =
-      payload && payload.runtimeRequests.length > 0
-        ? seedActivityRequestsFromRuntimeRequests(payload.runtimeRequests)
-        : seedActivityRequestsFromMessages(payload?.messages ?? []);
-    setActivityRequests(nextBuckets);
-    setSelectedActivityRequestId((currentRequestId) => {
-      if (currentRequestId && nextBuckets.some((bucket) => bucket.requestId === currentRequestId)) {
-        return currentRequestId;
-      }
+  const clearAllSessionStreams = useCallback(() => {
+    setSessionStreams((prev) => (prev.size === 0 ? prev : new Map()));
+  }, []);
 
-      return nextBuckets[nextBuckets.length - 1]?.requestId ?? null;
-    });
-    currentChatRequestIdRef.current = nextBuckets[nextBuckets.length - 1]?.requestId ?? null;
-    // Preserve the typing indicator when an active stream is still running (chatSending is true)
-    // so that navigating away and back shows the response is still being generated.
-    setChatAwaitingFinalAssistant((current) => current && chatSending);
-  }, [chatSending]);
+  const clearRuntimeRequestState = useCallback(
+    (sessionId: string | null, options?: { preserveSendingState?: boolean }) => {
+      if (!sessionId) {
+        clearAllSessionStreams();
+        return;
+      }
+      updateSessionStream(sessionId, (prev) => ({
+        ...prev,
+        activityRequests: [],
+        selectedActivityRequestId: null,
+        assistantDraft: '',
+        progress: options?.preserveSendingState ? prev.progress : null,
+        awaitingFinalAssistant: options?.preserveSendingState ? prev.awaitingFinalAssistant : false
+      }));
+    },
+    [clearAllSessionStreams, updateSessionStream]
+  );
+
+  const hydrateRuntimeRequestState = useCallback(
+    (payload: SessionMessagesResponse | null) => {
+      if (!payload) {
+        return;
+      }
+      const sessionId = payload.session.id;
+      const nextBuckets =
+        payload.runtimeRequests.length > 0
+          ? seedActivityRequestsFromRuntimeRequests(payload.runtimeRequests)
+          : seedActivityRequestsFromMessages(payload.messages);
+      updateSessionStream(sessionId, (prev) => {
+        const nextSelected =
+          prev.selectedActivityRequestId &&
+          nextBuckets.some((bucket) => bucket.requestId === prev.selectedActivityRequestId)
+            ? prev.selectedActivityRequestId
+            : nextBuckets[nextBuckets.length - 1]?.requestId ?? null;
+        return {
+          ...prev,
+          activityRequests: nextBuckets,
+          selectedActivityRequestId: nextSelected,
+          // Preserve the typing indicator while a stream is still running so navigating away
+          // and back keeps showing that Hermes is still generating for this session.
+          awaitingFinalAssistant: prev.awaitingFinalAssistant && prev.sending
+        };
+      });
+    },
+    [updateSessionStream]
+  );
 
   useEffect(() => {
     if (page !== 'chat' || !sessionPayload || activityRequests.length > 0) {
@@ -744,10 +819,15 @@ export function useAppController() {
   }, [activeProfileId, hydrateRuntimeRequestState, page, sessionPayload, toolsTab]);
 
   const ensureRuntimeRequestBucket = useCallback(
-    (requestId: string, options: { preview?: string; messageId?: string; status?: ActivityRequestBucket['status']; timestamp?: string } = {}) => {
+    (
+      sessionId: string,
+      requestId: string,
+      options: { preview?: string; messageId?: string; status?: ActivityRequestBucket['status']; timestamp?: string } = {}
+    ) => {
       const timestamp = options.timestamp ?? new Date().toISOString();
-      setActivityRequests((currentBuckets) =>
-        upsertActivityRequestBucket(currentBuckets, requestId, (currentBucket) => ({
+      updateSessionStream(sessionId, (prev) => ({
+        ...prev,
+        activityRequests: upsertActivityRequestBucket(prev.activityRequests, requestId, (currentBucket) => ({
           requestId,
           preview: options.preview ?? currentBucket?.preview ?? 'Hermes request',
           messageIds:
@@ -758,10 +838,11 @@ export function useAppController() {
           status: options.status ?? currentBucket?.status ?? 'running',
           startedAt: currentBucket?.startedAt ?? timestamp,
           updatedAt: timestamp
-        }))
-      );
+        })),
+        selectedActivityRequestId: requestId
+      }));
       setSessionPayload((currentPayload) => {
-        if (!currentPayload) {
+        if (!currentPayload || currentPayload.session.id !== sessionId) {
           return currentPayload;
         }
 
@@ -789,59 +870,63 @@ export function useAppController() {
           }))
         };
       });
-      setSelectedActivityRequestId(requestId);
     },
-    []
+    [updateSessionStream]
   );
 
-  const appendActivityToRuntimeRequest = useCallback((requestId: string, activity: ChatActivity) => {
-    setActivityRequests((currentBuckets) =>
-      upsertActivityRequestBucket(currentBuckets, requestId, (currentBucket) => ({
-        requestId,
-        preview: currentBucket?.preview ?? 'Hermes request',
-        messageIds: currentBucket?.messageIds ?? [],
-        activities: mergeChatActivity(currentBucket?.activities ?? [], activity),
-        status: statusFromActivityState(currentBucket?.status, activity.state),
-        startedAt: currentBucket?.startedAt ?? activity.timestamp,
-        updatedAt: activity.timestamp
-      }))
-    );
-    setSessionPayload((currentPayload) => {
-      if (!currentPayload) {
-        return currentPayload;
-      }
+  const appendActivityToRuntimeRequest = useCallback(
+    (sessionId: string, requestId: string, activity: ChatActivity) => {
+      updateSessionStream(sessionId, (prev) => ({
+        ...prev,
+        activityRequests: upsertActivityRequestBucket(prev.activityRequests, requestId, (currentBucket) => ({
+          requestId,
+          preview: currentBucket?.preview ?? 'Hermes request',
+          messageIds: currentBucket?.messageIds ?? [],
+          activities: mergeChatActivity(currentBucket?.activities ?? [], activity),
+          status: statusFromActivityState(currentBucket?.status, activity.state),
+          startedAt: currentBucket?.startedAt ?? activity.timestamp,
+          updatedAt: activity.timestamp
+        }))
+      }));
+      setSessionPayload((currentPayload) => {
+        if (!currentPayload || currentPayload.session.id !== sessionId) {
+          return currentPayload;
+        }
 
-      return {
-        ...currentPayload,
-        runtimeRequests: upsertRuntimeRequestPayload(currentPayload.runtimeRequests, requestId, (currentRequest) => {
-          const nextStatus = statusFromActivityState(currentRequest?.status, activity.state);
+        return {
+          ...currentPayload,
+          runtimeRequests: upsertRuntimeRequestPayload(currentPayload.runtimeRequests, requestId, (currentRequest) => {
+            const nextStatus = statusFromActivityState(currentRequest?.status, activity.state);
 
-          return {
-            requestId,
-            profileId: currentRequest?.profileId ?? currentPayload.profileId,
-            sessionId: currentRequest?.sessionId ?? currentPayload.session.id,
-            preview: currentRequest?.preview ?? 'Hermes request',
-            messageIds: currentRequest?.messageIds ?? [],
-            activities: mergeChatActivity(currentRequest?.activities ?? [], activity),
-            status: nextStatus,
-            startedAt: currentRequest?.startedAt ?? activity.timestamp,
-            updatedAt: activity.timestamp,
-            completedAt: nextStatus !== 'idle' && nextStatus !== 'running' ? activity.timestamp : currentRequest?.completedAt ?? null,
-            lastError:
-              activity.state === 'failed' || activity.state === 'denied' || activity.state === 'cancelled'
-                ? activity.detail ?? activity.label
-                : currentRequest?.lastError,
-            telemetryCount: currentRequest?.telemetryCount ?? 0
-          };
-        })
-      };
-    });
-  }, []);
+            return {
+              requestId,
+              profileId: currentRequest?.profileId ?? currentPayload.profileId,
+              sessionId: currentRequest?.sessionId ?? currentPayload.session.id,
+              preview: currentRequest?.preview ?? 'Hermes request',
+              messageIds: currentRequest?.messageIds ?? [],
+              activities: mergeChatActivity(currentRequest?.activities ?? [], activity),
+              status: nextStatus,
+              startedAt: currentRequest?.startedAt ?? activity.timestamp,
+              updatedAt: activity.timestamp,
+              completedAt: nextStatus !== 'idle' && nextStatus !== 'running' ? activity.timestamp : currentRequest?.completedAt ?? null,
+              lastError:
+                activity.state === 'failed' || activity.state === 'denied' || activity.state === 'cancelled'
+                  ? activity.detail ?? activity.label
+                  : currentRequest?.lastError,
+              telemetryCount: currentRequest?.telemetryCount ?? 0
+            };
+          })
+        };
+      });
+    },
+    [updateSessionStream]
+  );
 
   const finalizeRuntimeRequest = useCallback(
-    (requestId: string, status: RuntimeRequest['status'], timestamp: string, lastError?: string) => {
-      setActivityRequests((currentBuckets) =>
-        upsertActivityRequestBucket(currentBuckets, requestId, (currentBucket) => ({
+    (sessionId: string, requestId: string, status: RuntimeRequest['status'], timestamp: string, lastError?: string) => {
+      updateSessionStream(sessionId, (prev) => ({
+        ...prev,
+        activityRequests: upsertActivityRequestBucket(prev.activityRequests, requestId, (currentBucket) => ({
           requestId,
           preview: currentBucket?.preview ?? 'Hermes request',
           messageIds: currentBucket?.messageIds ?? [],
@@ -849,10 +934,11 @@ export function useAppController() {
           status,
           startedAt: currentBucket?.startedAt ?? timestamp,
           updatedAt: timestamp
-        }))
-      );
+        })),
+        selectedActivityRequestId: requestId
+      }));
       setSessionPayload((currentPayload) => {
-        if (!currentPayload) {
+        if (!currentPayload || currentPayload.session.id !== sessionId) {
           return currentPayload;
         }
 
@@ -874,14 +960,12 @@ export function useAppController() {
           }))
         };
       });
-      setSelectedActivityRequestId(requestId);
     },
-    []
+    [updateSessionStream]
   );
 
   const loadSession = useCallback(
     async (profileId: string, sessionId: string, options: { persistSelection?: boolean; nextPage?: AppPage } = {}) => {
-      const loadStartedAtStreamRevision = streamRevisionRef.current;
       setSessionLoading(true);
       setSessionError(null);
 
@@ -891,9 +975,6 @@ export function useAppController() {
         }
 
         const nextSessionPayload = await getSessionMessages(profileId, sessionId);
-        if (loadStartedAtStreamRevision !== streamRevisionRef.current && sessionId === activeSessionIdRef.current) {
-          return;
-        }
         setSessionPayload(nextSessionPayload);
         setChatError(null);
         hydrateRuntimeRequestState(nextSessionPayload);
@@ -902,7 +983,7 @@ export function useAppController() {
         );
       } catch (error) {
         setSessionPayload(null);
-        clearRuntimeRequestState();
+        clearRuntimeRequestState(null);
         setSessionError(getErrorMessage(error, 'Failed to load the selected Hermes session.'));
       } finally {
         setSessionLoading(false);
@@ -940,7 +1021,7 @@ export function useAppController() {
 
       if (!shouldReuseCurrentSession) {
         setSessionPayload(null);
-        clearRuntimeRequestState();
+        clearRuntimeRequestState(null);
         setSessionError(null);
         setChatError(null);
         setModelProviderResponse(null);
@@ -952,7 +1033,7 @@ export function useAppController() {
 
       if (options.openPreferredSession === false || nextPage !== 'chat' || !nextActiveProfileId || !preferredSessionId) {
         setSessionPayload(null);
-        clearRuntimeRequestState();
+        clearRuntimeRequestState(null);
         return;
       }
 
@@ -1563,9 +1644,18 @@ export function useAppController() {
           : currentBootstrap
       );
 
+      clearSessionStream(sessionId);
+      setTabStatuses((prev) => {
+        if (!(sessionId in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+
       if (sessionPayload?.session.id === sessionId) {
         setSessionPayload(null);
-        clearRuntimeRequestState();
       }
 
       if (pageRef.current === 'sessions' && nextSessionsPage !== sessionsPage) {
@@ -1585,7 +1675,7 @@ export function useAppController() {
     },
     [
       activeProfileId,
-      clearRuntimeRequestState,
+      clearSessionStream,
       refreshBootstrap,
       sessionsResponse,
       sessionPayload?.session.id,
@@ -1789,368 +1879,418 @@ export function useAppController() {
     [activeProfileId, applySessionAttachedRecipeState, loadSession]
   );
 
-  const focusActivityRequest = useCallback((requestId: string | null) => {
-    if (!requestId) {
-      return;
-    }
+  const focusActivityRequest = useCallback(
+    (requestId: string | null) => {
+      if (!requestId) {
+        return;
+      }
+      const sessionId = activeSessionIdRef.current;
+      if (!sessionId) {
+        return;
+      }
+      updateSessionStream(sessionId, (prev) => ({ ...prev, selectedActivityRequestId: requestId }));
+    },
+    [updateSessionStream]
+  );
 
-    setSelectedActivityRequestId(requestId);
-  }, []);
+  const openRecipeRuntimeRequest = useCallback(
+    (requestId: string | null) => {
+      if (!requestId) {
+        return;
+      }
+      const sessionId = activeSessionIdRef.current;
+      if (sessionId) {
+        updateSessionStream(sessionId, (prev) => ({ ...prev, selectedActivityRequestId: requestId }));
+      }
+      setRecipeRuntimeDrawerOpen(true);
+    },
+    [updateSessionStream]
+  );
 
-  const openRecipeRuntimeRequest = useCallback((requestId: string | null) => {
-    if (!requestId) {
-      return;
-    }
+  const createStreamEventHandler = useCallback(
+    (sessionId: string) => {
+      const requestIdRef = { current: null as string | null };
 
-    setSelectedActivityRequestId(requestId);
-    setRecipeRuntimeDrawerOpen(true);
-  }, []);
-
-  const handleStreamEvent = useCallback(
-    (event: ChatStreamEvent) => {
-      if (event.type === 'session') {
-        setSessionPayload((currentPayload) =>
-          currentPayload
-            ? {
+      return (event: ChatStreamEvent) => {
+        if (event.type === 'session') {
+          if (event.session.id !== sessionId) {
+            return;
+          }
+          setSessionPayload((currentPayload) => {
+            if (currentPayload) {
+              if (currentPayload.session.id !== sessionId) {
+                return currentPayload;
+              }
+              return {
                 ...currentPayload,
                 session: event.session
+              };
+            }
+            const resolvedProfileId =
+              activeProfileIdRef.current ?? event.session.lastUsedProfileId ?? event.session.associatedProfileIds[0] ?? null;
+            if (!resolvedProfileId || activeSessionIdRef.current !== sessionId) {
+              return currentPayload;
+            }
+
+            return {
+              profileId: resolvedProfileId,
+              session: event.session,
+              messages: [],
+              runtimeRequests: [],
+              attachedRecipe: null,
+              recipeEvents: []
+            };
+          });
+        }
+
+        if (event.type === 'message') {
+          if (event.message.sessionId !== sessionId) {
+            return;
+          }
+          const requestId = getMessageRequestId(event.message);
+          setSessionPayload((currentPayload) => {
+            if (!currentPayload) {
+              if (activeSessionIdRef.current !== sessionId) {
+                return currentPayload;
               }
-            : (() => {
-                const resolvedProfileId =
-                  activeProfileIdRef.current ?? event.session.lastUsedProfileId ?? event.session.associatedProfileIds[0] ?? null;
-                if (!resolvedProfileId) {
-                  return currentPayload;
-                }
+              const resolvedProfileId = activeProfileIdRef.current ?? activeRecipe?.profileId ?? null;
+              if (!resolvedProfileId) {
+                return currentPayload;
+              }
 
-                return {
-                  profileId: resolvedProfileId,
-                  session: event.session,
-                  messages: [],
-                  runtimeRequests: [],
-                  attachedRecipe: null,
-                  recipeEvents: []
-                };
-              })()
-        );
-      }
+              return {
+                profileId: resolvedProfileId,
+                session: {
+                  id: event.message.sessionId,
+                  title: 'Active session',
+                  summary: 'Streaming response in progress.',
+                  source: 'local',
+                  lastUpdatedAt: new Date().toISOString(),
+                  lastUsedProfileId: resolvedProfileId,
+                  associatedProfileIds: [resolvedProfileId],
+                  messageCount: 1,
+                  attachedRecipeId: activeRecipe?.id ?? null,
+                  recipeType: activeRecipe?.id ? 'home' : 'tui'
+                },
+                messages: [event.message],
+                runtimeRequests: [],
+                attachedRecipe: activeRecipe ?? null,
+                recipeEvents: []
+              };
+            }
 
-      if (event.type === 'message') {
-        const requestId = getMessageRequestId(event.message);
-        setSessionPayload((currentPayload) => {
-          if (!currentPayload) {
-            const resolvedProfileId = activeProfileIdRef.current ?? activeRecipe?.profileId ?? null;
+            if (currentPayload.session.id !== sessionId) {
+              return currentPayload;
+            }
+
+            return {
+              ...currentPayload,
+              messages: appendUniqueMessage(currentPayload.messages, event.message),
+              runtimeRequests: currentPayload.runtimeRequests
+            };
+          });
+
+          if (requestId) {
+            requestIdRef.current = requestId;
+            ensureRuntimeRequestBucket(sessionId, requestId, {
+              preview: event.message.role === 'user' ? event.message.content : undefined,
+              messageId: event.message.id,
+              status:
+                event.message.role === 'assistant'
+                  ? event.message.status === 'error'
+                    ? 'failed'
+                    : 'completed'
+                  : event.message.role === 'system' && event.message.status === 'error'
+                    ? 'failed'
+                    : 'running',
+              timestamp: event.message.createdAt
+            });
+          }
+
+          const runtimeActivity = deriveRuntimeMessageActivity(event.message);
+          if (runtimeActivity && requestId) {
+            appendActivityToRuntimeRequest(sessionId, requestId, runtimeActivity);
+            const runtimeProgress = deriveProgressMessageFromActivity(runtimeActivity);
+            if (runtimeProgress) {
+              updateSessionStream(sessionId, (prev) => ({ ...prev, progress: runtimeProgress }));
+            }
+          }
+        }
+
+        if (event.type === 'assistant_snapshot') {
+          const requestId = event.requestId ?? requestIdRef.current;
+          updateSessionStream(sessionId, (prev) => ({
+            ...prev,
+            selectedActivityRequestId: requestId ?? prev.selectedActivityRequestId,
+            progress: event.markdown.trim().length > 0 ? 'Hermes is typing…' : prev.progress,
+            assistantDraft: event.markdown
+          }));
+        }
+
+        if (event.type === 'progress') {
+          const requestId = event.requestId ?? requestIdRef.current;
+          updateSessionStream(sessionId, (prev) => ({ ...prev, progress: event.message }));
+          if (requestId) {
+            appendActivityToRuntimeRequest(sessionId, requestId, {
+              kind: 'status',
+              state: 'updated',
+              label: 'Runtime status',
+              detail: event.message,
+              requestId,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+
+        if (event.type === 'activity') {
+          const requestId = event.activity.requestId ?? requestIdRef.current;
+          if (!requestId) {
+            return;
+          }
+
+          appendActivityToRuntimeRequest(sessionId, requestId, {
+            ...event.activity,
+            requestId
+          });
+          const activityProgress = deriveProgressMessageFromActivity(event.activity);
+          updateSessionStream(sessionId, (prev) => ({
+            ...prev,
+            selectedActivityRequestId: requestId,
+            progress: activityProgress ?? prev.progress
+          }));
+        }
+
+        if (event.type === 'recipe_event') {
+          const requestId = requestIdRef.current;
+          setSessionPayload((currentPayload) => {
+            if (!currentPayload || currentPayload.session.id !== sessionId) {
+              return currentPayload;
+            }
+
+            const currentAttachedSpace = currentPayload.attachedRecipe;
+            const nextAttachedSpace =
+              event.recipe && event.recipe.primarySessionId === currentPayload.session.id
+                ? event.recipe
+                : currentAttachedSpace?.id === event.event.recipeId
+                  ? null
+                  : currentAttachedSpace;
+
+            return {
+              ...currentPayload,
+              session: {
+                ...currentPayload.session,
+                attachedRecipeId: nextAttachedSpace?.id ?? null
+              },
+              attachedRecipe: nextAttachedSpace,
+              recipeEvents: appendRecipeEvent(currentPayload.recipeEvents, event.event)
+            };
+          });
+          applySessionAttachedRecipeState(sessionId, event.recipe?.id ?? null);
+          if (
+            !event.recipe &&
+            activeSessionIdRef.current === sessionId &&
+            sessionPayload?.attachedRecipe?.id === event.event.recipeId
+          ) {
+            setRecipeRuntimeDrawerOpen(false);
+          }
+          if (requestId) {
+            appendActivityToRuntimeRequest(sessionId, requestId, {
+              kind: 'status',
+              state: event.event.type === 'deleted' ? 'completed' : 'updated',
+              label: 'Recipe event',
+              detail: event.event.message,
+              requestId,
+              timestamp: event.event.createdAt
+            });
+          }
+        }
+
+        if (event.type === 'recipe_build_progress') {
+          const requestId = event.build.triggerRequestId ?? requestIdRef.current;
+          const pipeline = event.recipe?.metadata.recipePipeline;
+          const pipelineMessage = pipeline
+            ? pipeline.currentStage.startsWith('task')
+              ? pipeline.task.message
+              : pipeline.currentStage.startsWith('baseline')
+                ? pipeline.baseline.message
+                : pipeline.applet.message
+            : null;
+          setSessionPayload((currentPayload) => {
+            if (
+              !currentPayload ||
+              currentPayload.session.id !== sessionId ||
+              !event.recipe ||
+              event.recipe.primarySessionId !== currentPayload.session.id
+            ) {
+              return currentPayload;
+            }
+
+            const partialTemplateState = event.partialTemplateState ?? null;
+            const hasPromotedTemplate = Boolean(event.recipe.dynamic?.recipeTemplate);
+            const recipeToStore =
+              partialTemplateState && !hasPromotedTemplate
+                ? {
+                    ...event.recipe,
+                    dynamic: {
+                      ...event.recipe.dynamic,
+                      renderMode: event.recipe.dynamic?.renderMode ?? 'dynamic_v1',
+                      activeBuild: event.recipe.dynamic?.activeBuild ?? null,
+                      recipeTemplate: partialTemplateState
+                    }
+                  }
+                : event.recipe;
+
+            return {
+              ...currentPayload,
+              session: {
+                ...currentPayload.session,
+                attachedRecipeId: event.recipe.id
+              },
+              attachedRecipe: recipeToStore
+            };
+          });
+
+          if (event.recipe) {
+            applySessionAttachedRecipeState(event.recipe.primarySessionId, event.recipe.id);
+          }
+
+          const nextProgress =
+            event.build.phase === 'ready' || event.build.phase === 'failed'
+              ? null
+              : pipelineMessage ?? event.build.userFacingMessage ?? event.build.progressMessage ?? 'Building recipe…';
+          updateSessionStream(sessionId, (prev) => ({ ...prev, progress: nextProgress }));
+
+          if (requestId) {
+            appendActivityToRuntimeRequest(sessionId, requestId, {
+              kind: 'status',
+              state: event.build.phase === 'failed' ? 'failed' : event.build.phase === 'ready' ? 'completed' : 'updated',
+              label:
+                event.build.buildKind === 'applet'
+                  ? 'Recipe applet'
+                  : event.build.buildKind === 'dsl_enrichment'
+                    ? 'Recipe enrichment'
+                    : 'Home workspace',
+              detail: pipelineMessage ?? event.build.userFacingMessage ?? event.build.progressMessage ?? 'Building recipe…',
+              requestId,
+              timestamp: event.build.updatedAt
+            });
+          }
+        }
+
+        if (event.type === 'complete') {
+          if (event.session.id !== sessionId) {
+            return;
+          }
+          const requestId = getMessageRequestId(event.assistantMessage) ?? requestIdRef.current;
+          setSessionPayload((currentPayload) => {
+            if (currentPayload && currentPayload.session.id !== sessionId) {
+              return currentPayload;
+            }
+            const currentMessages = currentPayload?.messages ?? [];
+            const nextMessages = appendUniqueMessage(
+              currentMessages.filter((message) => message.id !== event.assistantMessage.id),
+              event.assistantMessage
+            );
+            const resolvedProfileId =
+              currentPayload?.profileId ??
+              activeProfileIdRef.current ??
+              event.session.lastUsedProfileId ??
+              event.session.associatedProfileIds[0] ??
+              null;
             if (!resolvedProfileId) {
               return currentPayload;
             }
 
             return {
               profileId: resolvedProfileId,
-              session: {
-                id: event.message.sessionId,
-                title: 'Active session',
-                summary: 'Streaming response in progress.',
-                source: 'local',
-                lastUpdatedAt: new Date().toISOString(),
-                lastUsedProfileId: resolvedProfileId,
-                associatedProfileIds: [resolvedProfileId],
-                messageCount: 1,
-                attachedRecipeId: activeRecipe?.id ?? null,
-                recipeType: activeRecipe?.id ? 'home' : 'tui'
-              },
-              messages: [event.message],
-              runtimeRequests: [],
-              attachedRecipe: activeRecipe ?? null,
-              recipeEvents: []
+              session: event.session,
+              messages: nextMessages,
+              runtimeRequests: currentPayload?.runtimeRequests ?? [],
+              attachedRecipe: currentPayload?.attachedRecipe ?? null,
+              recipeEvents: currentPayload?.recipeEvents ?? []
             };
+          });
+          updateSessionStream(sessionId, (prev) => ({
+            ...prev,
+            assistantDraft: '',
+            progress: null,
+            awaitingFinalAssistant: false
+          }));
+          if (requestId) {
+            ensureRuntimeRequestBucket(sessionId, requestId, {
+              messageId: event.assistantMessage.id,
+              status: 'completed',
+              timestamp: event.assistantMessage.createdAt
+            });
+            appendActivityToRuntimeRequest(sessionId, requestId, {
+              kind: 'status',
+              state: 'completed',
+              label: 'Runtime status',
+              detail: 'Hermes completed the active request.',
+              requestId,
+              timestamp: event.assistantMessage.createdAt
+            });
+            finalizeRuntimeRequest(sessionId, requestId, 'completed', event.assistantMessage.createdAt);
           }
-
-          return {
-            ...currentPayload,
-            messages: appendUniqueMessage(currentPayload.messages, event.message),
-            runtimeRequests: currentPayload.runtimeRequests
-          };
-        });
-
-        if (requestId) {
-          currentChatRequestIdRef.current = requestId;
-          ensureRuntimeRequestBucket(requestId, {
-            preview: event.message.role === 'user' ? event.message.content : undefined,
-            messageId: event.message.id,
-            status:
-              event.message.role === 'assistant'
-                ? event.message.status === 'error'
-                  ? 'failed'
-                  : 'completed'
-                : event.message.role === 'system' && event.message.status === 'error'
-                  ? 'failed'
-                  : 'running',
-            timestamp: event.message.createdAt
+          setBootstrap((currentBootstrap) => {
+            const resolvedProfileId =
+              activeProfileIdRef.current ?? event.session.lastUsedProfileId ?? event.session.associatedProfileIds[0] ?? null;
+            return resolvedProfileId
+              ? mergeSessionIntoBootstrap(currentBootstrap, resolvedProfileId, event.session, 'chat', toolsTab)
+              : currentBootstrap;
           });
         }
 
-        const runtimeActivity = deriveRuntimeMessageActivity(event.message);
-        if (runtimeActivity && requestId) {
-          appendActivityToRuntimeRequest(requestId, runtimeActivity);
-          const runtimeProgress = deriveProgressMessageFromActivity(runtimeActivity);
-          if (runtimeProgress) {
-            setChatProgress(runtimeProgress);
-          }
-        }
-      }
-
-      if (event.type === 'assistant_snapshot') {
-        const requestId = event.requestId ?? currentChatRequestIdRef.current;
-        if (requestId) {
-          setSelectedActivityRequestId(requestId);
-        }
-        if (event.markdown.trim().length > 0) {
-          setChatProgress('Hermes is typing…');
-        }
-        setAssistantDraft(event.markdown);
-      }
-
-      if (event.type === 'progress') {
-        const requestId = event.requestId ?? currentChatRequestIdRef.current;
-        setChatProgress(event.message);
-        if (requestId) {
-          appendActivityToRuntimeRequest(requestId, {
-            kind: 'status',
-            state: 'updated',
-            label: 'Runtime status',
-            detail: event.message,
-            requestId,
-            timestamp: new Date().toISOString()
-          });
-        }
-      }
-
-      if (event.type === 'activity') {
-        const requestId = event.activity.requestId ?? currentChatRequestIdRef.current;
-        if (!requestId) {
-          return;
-        }
-
-        appendActivityToRuntimeRequest(requestId, {
-          ...event.activity,
-          requestId
-        });
-        setSelectedActivityRequestId(requestId);
-        const activityProgress = deriveProgressMessageFromActivity(event.activity);
-        if (activityProgress) {
-          setChatProgress(activityProgress);
-        }
-      }
-
-      if (event.type === 'recipe_event') {
-        const requestId = currentChatRequestIdRef.current;
-        setSessionPayload((currentPayload) => {
-          if (!currentPayload) {
-            return currentPayload;
+        if (event.type === 'error') {
+          const requestId = event.requestId ?? requestIdRef.current;
+          const errorAt = new Date().toISOString();
+          updateSessionStream(sessionId, (prev) => ({
+            ...prev,
+            assistantDraft: '',
+            progress: null,
+            awaitingFinalAssistant: false,
+            error: sanitizeUserFacingErrorMessage(event.error.message)
+          }));
+          if (requestId) {
+            ensureRuntimeRequestBucket(sessionId, requestId, {
+              status: 'failed',
+              timestamp: errorAt
+            });
+            finalizeRuntimeRequest(sessionId, requestId, 'failed', errorAt, event.error.message);
           }
 
-          const currentAttachedSpace = currentPayload.attachedRecipe;
-          const nextAttachedSpace =
-            event.recipe && event.recipe.primarySessionId === currentPayload.session.id
-              ? event.recipe
-              : currentAttachedSpace?.id === event.event.recipeId
-                ? null
-                : currentAttachedSpace;
+          setSessionPayload((currentPayload) => {
+            if (!currentPayload || currentPayload.session.id !== sessionId || !requestId) {
+              return currentPayload;
+            }
 
-          return {
-            ...currentPayload,
-            session: {
-              ...currentPayload.session,
-              attachedRecipeId: nextAttachedSpace?.id ?? null
-            },
-            attachedRecipe: nextAttachedSpace,
-            recipeEvents: appendRecipeEvent(currentPayload.recipeEvents, event.event)
-          };
-        });
-        const resolvedSessionId = activeSessionIdRef.current ?? event.event.sessionId ?? sessionPayload?.session.id ?? null;
-        if (resolvedSessionId) {
-          applySessionAttachedRecipeState(resolvedSessionId, event.recipe?.id ?? null);
-        }
-        if (!event.recipe && sessionPayload?.attachedRecipe?.id === event.event.recipeId) {
-          setRecipeRuntimeDrawerOpen(false);
-        }
-        setChatProgress('Hermes is updating the workspace…');
-        if (requestId) {
-          appendActivityToRuntimeRequest(requestId, {
-            kind: 'status',
-            state: event.event.type === 'deleted' ? 'completed' : 'updated',
-            label: 'Recipe event',
-            detail: event.event.message,
-            requestId,
-            timestamp: event.event.createdAt
+            const alreadyHasVisibleError = currentPayload.messages.some(
+              (message) => message.requestId === requestId && message.role === 'system' && message.status === 'error'
+            );
+            if (alreadyHasVisibleError) {
+              return currentPayload;
+            }
+
+            const nextSystemMessage: ChatMessage = {
+              id: `local-system-${requestId}`,
+              sessionId: currentPayload.session.id,
+              role: 'system',
+              content: sanitizeUserFacingErrorMessage(event.error.message),
+              createdAt: errorAt,
+              status: 'error',
+              requestId,
+              visibility: 'transcript',
+              kind: 'notice'
+            };
+
+            return {
+              ...currentPayload,
+              messages: appendUniqueMessage(currentPayload.messages, nextSystemMessage),
+              runtimeRequests: currentPayload.runtimeRequests
+            };
           });
         }
-      }
-
-      if (event.type === 'recipe_build_progress') {
-        const requestId = event.build.triggerRequestId ?? currentChatRequestIdRef.current;
-        const pipeline = event.recipe?.metadata.recipePipeline;
-        const pipelineMessage = pipeline
-          ? pipeline.currentStage.startsWith('task')
-            ? pipeline.task.message
-            : pipeline.currentStage.startsWith('baseline')
-              ? pipeline.baseline.message
-              : pipeline.applet.message
-          : null;
-        setSessionPayload((currentPayload) => {
-          if (!currentPayload || !event.recipe || event.recipe.primarySessionId !== currentPayload.session.id) {
-            return currentPayload;
-          }
-
-          // Wins #1/#2/#3/#4: inject partialTemplateState into the recipe's dynamic field so
-          // DynamicRecipeView can render the progressive template shell before final promotion.
-          // The partial state is only applied when the recipe doesn't already have a promoted template.
-          const partialTemplateState = event.partialTemplateState ?? null;
-          const hasPromotedTemplate = Boolean(event.recipe.dynamic?.recipeTemplate);
-          const recipeToStore =
-            partialTemplateState && !hasPromotedTemplate
-                ? {
-                  ...event.recipe,
-                  dynamic: {
-                    ...event.recipe.dynamic,
-                    renderMode: event.recipe.dynamic?.renderMode ?? 'dynamic_v1',
-                    activeBuild: event.recipe.dynamic?.activeBuild ?? null,
-                    recipeTemplate: partialTemplateState
-                  }
-                }
-              : event.recipe;
-
-          return {
-            ...currentPayload,
-            session: {
-              ...currentPayload.session,
-              attachedRecipeId: event.recipe.id
-            },
-            attachedRecipe: recipeToStore
-          };
-        });
-
-        if (event.recipe) {
-          applySessionAttachedRecipeState(event.recipe.primarySessionId, event.recipe.id);
-        }
-
-        setChatProgress(pipelineMessage ?? event.build.userFacingMessage ?? event.build.progressMessage ?? 'Building recipe…');
-
-        if (requestId) {
-          appendActivityToRuntimeRequest(requestId, {
-            kind: 'status',
-            state: event.build.phase === 'failed' ? 'failed' : event.build.phase === 'ready' ? 'completed' : 'updated',
-            label:
-              event.build.buildKind === 'applet'
-                ? 'Recipe applet'
-                : event.build.buildKind === 'dsl_enrichment'
-                  ? 'Recipe enrichment'
-                  : 'Home workspace',
-            detail: pipelineMessage ?? event.build.userFacingMessage ?? event.build.progressMessage ?? 'Building recipe…',
-            requestId,
-            timestamp: event.build.updatedAt
-          });
-        }
-      }
-
-      if (event.type === 'complete') {
-        const requestId = getMessageRequestId(event.assistantMessage) ?? currentChatRequestIdRef.current;
-        setSessionPayload((currentPayload) => {
-          const currentMessages = currentPayload?.messages ?? [];
-          const nextMessages = appendUniqueMessage(
-            currentMessages.filter((message) => message.id !== event.assistantMessage.id),
-            event.assistantMessage
-          );
-          const resolvedProfileId =
-            currentPayload?.profileId ??
-            activeProfileIdRef.current ??
-            event.session.lastUsedProfileId ??
-            event.session.associatedProfileIds[0] ??
-            null;
-          if (!resolvedProfileId) {
-            return currentPayload;
-          }
-
-          return {
-            profileId: resolvedProfileId,
-            session: event.session,
-            messages: nextMessages,
-            runtimeRequests: currentPayload?.runtimeRequests ?? [],
-            attachedRecipe: currentPayload?.attachedRecipe ?? null,
-            recipeEvents: currentPayload?.recipeEvents ?? []
-          };
-        });
-        setAssistantDraft('');
-        setChatProgress(null);
-        setChatAwaitingFinalAssistant(false);
-        if (requestId) {
-          ensureRuntimeRequestBucket(requestId, {
-            messageId: event.assistantMessage.id,
-            status: 'completed',
-            timestamp: event.assistantMessage.createdAt
-          });
-          appendActivityToRuntimeRequest(requestId, {
-            kind: 'status',
-            state: 'completed',
-            label: 'Runtime status',
-            detail: 'Hermes completed the active request.',
-            requestId,
-            timestamp: event.assistantMessage.createdAt
-          });
-          finalizeRuntimeRequest(requestId, 'completed', event.assistantMessage.createdAt);
-        }
-        setBootstrap((currentBootstrap) => {
-          const resolvedProfileId =
-            activeProfileIdRef.current ?? event.session.lastUsedProfileId ?? event.session.associatedProfileIds[0] ?? null;
-          return resolvedProfileId ? mergeSessionIntoBootstrap(currentBootstrap, resolvedProfileId, event.session, 'chat', toolsTab) : currentBootstrap;
-        });
-      }
-
-      if (event.type === 'error') {
-        const requestId = event.requestId ?? currentChatRequestIdRef.current;
-        const errorAt = new Date().toISOString();
-        setAssistantDraft('');
-        setChatProgress(null);
-        setChatAwaitingFinalAssistant(false);
-        setChatError(sanitizeUserFacingErrorMessage(event.error.message));
-        if (requestId) {
-          ensureRuntimeRequestBucket(requestId, {
-            status: 'failed',
-            timestamp: errorAt
-          });
-          finalizeRuntimeRequest(requestId, 'failed', errorAt, event.error.message);
-        }
-
-        setSessionPayload((currentPayload) => {
-          if (!currentPayload || !requestId) {
-            return currentPayload;
-          }
-
-          const alreadyHasVisibleError = currentPayload.messages.some(
-            (message) => message.requestId === requestId && message.role === 'system' && message.status === 'error'
-          );
-          if (alreadyHasVisibleError) {
-            return currentPayload;
-          }
-
-          const nextSystemMessage: ChatMessage = {
-            id: `local-system-${requestId}`,
-            sessionId: currentPayload.session.id,
-            role: 'system',
-            content: sanitizeUserFacingErrorMessage(event.error.message),
-            createdAt: errorAt,
-            status: 'error',
-            requestId,
-            visibility: 'transcript',
-            kind: 'notice'
-          };
-
-          return {
-            ...currentPayload,
-            messages: appendUniqueMessage(currentPayload.messages, nextSystemMessage),
-            runtimeRequests: currentPayload.runtimeRequests
-          };
-        });
-      }
+      };
     },
     [
       activeRecipe,
@@ -2159,8 +2299,8 @@ export function useAppController() {
       ensureRuntimeRequestBucket,
       finalizeRuntimeRequest,
       sessionPayload?.attachedRecipe?.id,
-      sessionPayload?.session.id,
-      toolsTab
+      toolsTab,
+      updateSessionStream
     ]
   );
 
@@ -2170,39 +2310,59 @@ export function useAppController() {
       failureMessage: string;
       execute: (onEvent: (event: ChatStreamEvent) => void) => Promise<void>;
     }) => {
-      if (chatSending) {
+      const sessionId = activeSessionIdRef.current;
+      if (!sessionId) {
         return;
       }
 
-      setChatSending(true);
-      streamRevisionRef.current += 1;
-      streamingSessionIdRef.current = activeSessionId;
+      const existingStream = sessionStreamsRef.current.get(sessionId);
+      if (existingStream?.sending) {
+        return;
+      }
+
+      updateSessionStream(sessionId, (prev) => ({
+        ...prev,
+        sending: true,
+        progress: options.initialProgress,
+        awaitingFinalAssistant: true,
+        assistantDraft: '',
+        selectedActivityRequestId: null,
+        error: null
+      }));
+      setTabStatuses((prev) => ({ ...prev, [sessionId]: 'generating' }));
       setChatError(null);
-      setChatProgress(options.initialProgress);
-      setChatAwaitingFinalAssistant(true);
-      currentChatRequestIdRef.current = null;
-      setSelectedActivityRequestId(null);
-      setAssistantDraft('');
+
+      const onEvent = createStreamEventHandler(sessionId);
 
       try {
-        await options.execute(handleStreamEvent);
+        await options.execute(onEvent);
+        setTabStatuses((prev) => ({ ...prev, [sessionId]: 'success' }));
       } catch (error) {
         const message = getErrorMessage(error, options.failureMessage);
-        const requestId = currentChatRequestIdRef.current;
+        const sanitized = sanitizeUserFacingErrorMessage(message);
         const failedAt = new Date().toISOString();
-        if (requestId) {
-          finalizeRuntimeRequest(requestId, 'failed', failedAt, message);
+        const currentRequestId =
+          sessionStreamsRef.current.get(sessionId)?.activityRequests.slice(-1)[0]?.requestId ?? null;
+        if (currentRequestId) {
+          finalizeRuntimeRequest(sessionId, currentRequestId, 'failed', failedAt, message);
         }
-        setChatError(sanitizeUserFacingErrorMessage(message));
-        setChatProgress(null);
-        setAssistantDraft('');
-        setChatAwaitingFinalAssistant(false);
+        setTabStatuses((prev) => ({ ...prev, [sessionId]: 'error' }));
+        updateSessionStream(sessionId, (prev) => ({
+          ...prev,
+          error: sanitized,
+          progress: null,
+          assistantDraft: '',
+          awaitingFinalAssistant: false
+        }));
       } finally {
-        setChatSending(false);
-        streamingSessionIdRef.current = null;
+        updateSessionStream(sessionId, (prev) => ({
+          ...prev,
+          sending: false,
+          progress: null
+        }));
       }
     },
-    [activeSessionId, chatSending, finalizeRuntimeRequest, handleStreamEvent]
+    [createStreamEventHandler, finalizeRuntimeRequest, updateSessionStream]
   );
 
   const runChatRequest = useCallback(
@@ -2217,7 +2377,8 @@ export function useAppController() {
         return;
       }
 
-      if (!content.trim() || chatSending) {
+      const sessionStream = sessionStreamsRef.current.get(activeSessionId);
+      if (!content.trim() || sessionStream?.sending) {
         return;
       }
 
@@ -2244,13 +2405,13 @@ export function useAppController() {
           )
       });
     },
-    [activeProfileId, activeSessionId, activeRecipe?.id, chatSending, runStreamingRequest, sessionPayload?.session.attachedRecipeId]
+    [activeProfileId, activeSessionId, activeRecipe?.id, runStreamingRequest, sessionPayload?.session.attachedRecipeId]
   );
 
   const handleSendMessage = useCallback(
     (content: string) => {
       const trimmedContent = content.trim();
-      if (!trimmedContent || chatSending) {
+      if (!trimmedContent) {
         return false;
       }
 
@@ -2264,10 +2425,15 @@ export function useAppController() {
         return false;
       }
 
+      const sessionStream = sessionStreamsRef.current.get(activeSessionId);
+      if (sessionStream?.sending) {
+        return false;
+      }
+
       void runChatRequest(trimmedContent);
       return true;
     },
-    [activeProfileId, activeSessionId, chatSending, runChatRequest]
+    [activeProfileId, activeSessionId, runChatRequest]
   );
 
   const handleRefreshRecipe = useCallback(
@@ -2632,7 +2798,7 @@ export function useAppController() {
     page,
     toolsTab,
     sidebarCollapsed,
-    openTabs,
+    openTabs: openTabs.map(tab => ({ ...tab, status: tabStatuses[tab.sessionId] ?? 'idle' })),
     openSessionInTab,
     closeTab,
     reorderTabs,
@@ -2648,14 +2814,14 @@ export function useAppController() {
     sessionPayload,
     sessionLoading,
     sessionError,
-    chatSending: chatSending && (streamingSessionIdRef.current === null || streamingSessionIdRef.current === activeSessionId),
-    chatProgress: (streamingSessionIdRef.current === null || streamingSessionIdRef.current === activeSessionId) ? chatProgress : null,
+    chatSending,
+    chatProgress,
     chatActivities,
     selectedActivityRequestId,
     selectedActivityRequest,
-    assistantDraft: (streamingSessionIdRef.current === null || streamingSessionIdRef.current === activeSessionId) ? assistantDraft : '',
-    chatAwaitingFinalAssistant: chatAwaitingFinalAssistant && (streamingSessionIdRef.current === null || streamingSessionIdRef.current === activeSessionId),
-    chatError,
+    assistantDraft,
+    chatAwaitingFinalAssistant,
+    chatError: activeSessionStreamError ?? chatError,
     jobsResponse,
     jobsLoading,
     jobsError,

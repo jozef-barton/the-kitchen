@@ -68,7 +68,12 @@ export const ChatTranscript = memo(function ChatTranscript({
       return;
     }
 
-    viewport.scrollTop = viewport.scrollHeight;
+    // Only auto-scroll when the user is already near the bottom (within 150px).
+    // This lets users scroll up to read history without being yanked back down.
+    const distFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    if (distFromBottom < 150) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
   }, [assistantDraft, loading, showTypingIndicator, visibleMessages]);
 
   return (
@@ -115,7 +120,6 @@ const MarkdownMessage = memo(function MarkdownMessage({ children }: { children: 
   return (
     <Box
       color="var(--text-primary)"
-      overflow="hidden"
       css={{
         '& h1, & h2, & h3': {
           fontWeight: 700,

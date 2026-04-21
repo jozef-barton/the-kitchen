@@ -104,7 +104,7 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     useCase: 'Compare the same product or adjacent products across multiple merchants.',
     selectionSignals: ['price comparison', 'same product', 'cheapest store', 'merchant grid'],
     slots: [
-      { id: 'offer-grid', kind: 'comparison-table', required: true },
+      { id: 'offer-grid', kind: 'comparison-table', required: false },
       { id: 'operator-note', kind: 'notes' },
     ],
     allowedUpdateOps: ['set_header', 'set_scope_tags', 'upsert_table_rows', 'remove_items', 'append_note_lines'],
@@ -397,6 +397,86 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
   })
 };
 
+let diskRecipeCache: Map<string, RecipeTemplateRuntimeDefinition> | null = null;
+
+function coerceRuntimeFromDisk(raw: Record<string, unknown>, manifestId: string): RecipeTemplateRuntimeDefinition | null {
+  try {
+    const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : manifestId;
+    const selectionSignals = Array.isArray(raw.selectionSignals) ? (raw.selectionSignals as unknown[]).filter((value): value is string => typeof value === 'string') : [];
+    const slots = Array.isArray(raw.slots) ? (raw.slots as Array<Record<string, unknown>>).filter((slot) => typeof slot.id === 'string' && typeof slot.kind === 'string') : [];
+    const allowedUpdateOps = Array.isArray(raw.allowedUpdateOps) ? (raw.allowedUpdateOps as unknown[]).filter((op): op is RecipeTemplateUpdateOperation['op'] => typeof op === 'string') : [];
+    const actions = raw.actions && typeof raw.actions === 'object' ? (raw.actions as Record<string, RecipeActionDefinition>) : {};
+    const transitions = Array.isArray(raw.transitions) ? (raw.transitions as RecipeTemplateTransitionDefinition[]) : [];
+
+    if (selectionSignals.length === 0 || slots.length === 0) {
+      return null;
+    }
+
+    return {
+      id,
+      name: typeof raw.name === 'string' ? raw.name : manifestId,
+      useCase: typeof raw.useCase === 'string' ? raw.useCase : '',
+      enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
+      selectionSignals,
+      slots: slots as unknown as RecipeTemplateSlotDefinition[],
+      allowedUpdateOps,
+      actions: {
+        ...DEFAULT_TEMPLATE_ACTIONS,
+        ...actions
+      },
+      transitions
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function loadDiskRecipes(): Promise<Map<string, RecipeTemplateRuntimeDefinition>> {
+  const cache = new Map<string, RecipeTemplateRuntimeDefinition>();
+  try {
+    const { discoverRecipeFolders, getBuiltinRecipesPath, getUserRecipesPath, loadRecipeFromDisk } = await import('./recipe-file-loader');
+    const { default: fs } = await import('node:fs');
+    const { default: path } = await import('node:path');
+    const roots = [getBuiltinRecipesPath(), getUserRecipesPath()];
+    const manifests = discoverRecipeFolders(roots);
+    for (const manifest of manifests) {
+      for (const rootPath of roots) {
+        const folderPath = path.join(rootPath, manifest.id);
+        if (!fs.existsSync(folderPath)) continue;
+        const loaded = loadRecipeFromDisk(folderPath);
+        if (!loaded?.runtime) continue;
+        const definition = coerceRuntimeFromDisk(loaded.runtime, manifest.id);
+        if (definition) {
+          cache.set(definition.id, definition);
+          break;
+        }
+      }
+    }
+  } catch {
+    // If disk loading fails, leave cache empty and rely on the TS registry.
+  }
+  return cache;
+}
+
+export async function refreshDiskRecipeRegistry(): Promise<void> {
+  diskRecipeCache = await loadDiskRecipes();
+}
+
 export function getRecipeTemplateRuntimeDefinition(templateId: RecipeTemplateId) {
+  const fromDisk = diskRecipeCache?.get(templateId);
+  if (fromDisk) return fromDisk;
   return WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY[templateId] ?? null;
+}
+
+export function listAvailableRecipeTemplateDefinitions(): RecipeTemplateRuntimeDefinition[] {
+  const merged = new Map<string, RecipeTemplateRuntimeDefinition>();
+  for (const def of Object.values(WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY)) {
+    merged.set(def.id, def);
+  }
+  if (diskRecipeCache) {
+    for (const [id, def] of diskRecipeCache) {
+      merged.set(id, def); // disk overrides TS
+    }
+  }
+  return Array.from(merged.values());
 }

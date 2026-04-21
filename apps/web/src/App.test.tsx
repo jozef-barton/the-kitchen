@@ -2670,7 +2670,7 @@ describe('App', () => {
     expect(plainRow).toBeTruthy();
     expect(within(sessionsTable).getByText('Type')).toBeInTheDocument();
     expect(within(attachedRow as HTMLTableRowElement).getByTestId('session-recipe-indicator')).toBeInTheDocument();
-    expect(within(attachedRow as HTMLTableRowElement).getByText('Home')).toBeInTheDocument();
+    expect(within(attachedRow as HTMLTableRowElement).getByText('Kitchen')).toBeInTheDocument();
     expect(within(plainRow as HTMLTableRowElement).getByText('TUI')).toBeInTheDocument();
     expect(within(sessionsTable).queryByText('Spaces')).not.toBeInTheDocument();
   });

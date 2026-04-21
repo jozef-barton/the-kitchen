@@ -1,39 +1,35 @@
-import { Badge } from '@chakra-ui/react';
-
-const toneByStatus: Record<string, string> = {
-  connected: 'green',
-  degraded: 'orange',
-  disconnected: 'red',
-  error: 'red',
-  enabled: 'green',
-  disabled: 'gray',
-  unavailable: 'red',
-  healthy: 'green',
-  paused: 'orange',
-  attention: 'orange',
-  pending: 'orange',
-  approved: 'blue',
-  rejected: 'red',
-  completed: 'green',
-  failed: 'red',
-  started: 'gray',
-  updated: 'blue',
-  cancelled: 'gray',
-  denied: 'red'
+const STATUS_SLOT: Record<string, string> = {
+  connected: 'connected',
+  degraded: 'degraded',
+  disconnected: 'disconnected',
+  error: 'error',
+  enabled: 'enabled',
+  disabled: 'disabled',
+  unavailable: 'unavailable',
+  healthy: 'healthy',
+  paused: 'paused',
+  attention: 'attention',
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+  completed: 'completed',
+  failed: 'failed',
+  started: 'started',
+  updated: 'updated',
+  cancelled: 'cancelled',
+  denied: 'denied',
+  stopped: 'stopped',
+  idle: 'idle',
+  warning: 'warning',
+  info: 'info',
 };
 
 export function StatusPill({ label }: { label: string }) {
+  const slot = STATUS_SLOT[label] ?? 'unknown';
   return (
-    <Badge
-      colorPalette={toneByStatus[label] ?? 'gray'}
-      variant="subtle"
-      rounded="8px"
-      px="2.5"
-      py="1"
-      textTransform="none"
-      fontWeight="600"
-    >
+    <span className={`status-badge status-badge--${slot}`}>
+      <span className="status-badge__dot" />
       {label}
-    </Badge>
+    </span>
   );
 }

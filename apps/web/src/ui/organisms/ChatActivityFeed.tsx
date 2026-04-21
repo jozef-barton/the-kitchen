@@ -18,6 +18,23 @@ function requestStatusPalette(status: RuntimeRequest['status'] | null) {
   }
 }
 
+function StatusDot({ active }: { active: boolean }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 6,
+        height: 6,
+        borderRadius: '50%',
+        background: active ? 'var(--accent)' : 'var(--status-neutral)',
+        flexShrink: 0,
+        animation: active ? 'status-pulse 1.4s ease infinite' : undefined,
+        marginRight: 2
+      }}
+    />
+  );
+}
+
 export function ChatActivityFeed({
   activities,
   sending,
@@ -45,35 +62,41 @@ export function ChatActivityFeed({
       data-testid="chat-activity-pane"
     >
       <VStack align="stretch" gap="3" minH={0} h="100%">
-        <Box>
-          <Text fontSize="sm" fontWeight="750" color="var(--text-primary)">
-            Runtime activity
-          </Text>
-          <Text fontSize="xs" color="var(--text-secondary)">
-            {requestPreview
-              ? 'Bridge, tool, skill, and CLI events for the focused request.'
-              : sending
-                ? 'The bridge is waiting for structured runtime events from Hermes.'
-                : 'Click a chat message to focus its runtime trail, or send a new request to start a fresh stream.'}
-          </Text>
-        </Box>
+        {/* Header */}
+        <HStack justify="space-between" align="center" gap="2">
+          <Box>
+            <Text fontSize="12px" fontWeight="700" color="var(--text-secondary)" letterSpacing="0.04em" textTransform="uppercase">
+              Runtime activity
+            </Text>
+            <Text fontSize="xs" color="var(--text-muted)">
+              {requestPreview
+                ? 'Bridge, tool, skill, and CLI events for the focused request.'
+                : sending
+                  ? 'Waiting for structured runtime events from Hermes.'
+                  : 'Click a chat message to focus its runtime trail.'}
+            </Text>
+          </Box>
+        </HStack>
 
+        {/* Focused request card */}
         <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3" py="2.5">
           <VStack align="stretch" gap="2">
             <HStack justify="space-between" gap="2" align="start">
               <Box minW={0}>
-                <Text fontSize="xs" fontWeight="700" color="var(--text-muted)" letterSpacing="0">
+                <Text fontSize="xs" fontWeight="600" color="var(--text-muted)" letterSpacing="0.03em" textTransform="uppercase" mb="0.5">
                   Focused request
                 </Text>
-                <Text mt="0.5" fontSize="sm" fontWeight="650" color="var(--text-primary)" lineClamp={2}>
+                <Text fontSize="sm" fontWeight="600" color="var(--text-primary)" lineClamp={2} lineHeight="1.35">
                   {requestPreview ?? (sending ? 'New Hermes request in progress' : 'No request selected')}
                 </Text>
               </Box>
               <InfoTag label={requestStatus ?? 'idle'} colorPalette={requestStatusPalette(requestStatus)} />
             </HStack>
 
-            <HStack gap="2" align="center">
-              {sending ? <Spinner size="xs" color="var(--accent)" borderWidth="2px" /> : null}
+            <HStack gap="1.5" align="center">
+              {sending ? (
+                <StatusDot active />
+              ) : null}
               <Text fontSize="xs" color="var(--text-secondary)">
                 {progress ?? (sending ? 'Waiting for runtime updates…' : 'Idle')}
               </Text>
@@ -81,6 +104,7 @@ export function ChatActivityFeed({
           </VStack>
         </Box>
 
+        {/* Activity scroll list */}
         <ScrollArea.Root flex="1" minH={0} variant="hover">
           <ScrollArea.Viewport data-testid="chat-activity-scroll">
             <VStack align="stretch" gap="1.5" pr="1">
@@ -94,7 +118,10 @@ export function ChatActivityFeed({
                 </Box>
               ) : (
                 activities.map((activity) => (
-                  <ActivityCard key={`${activity.timestamp}-${activity.kind}-${activity.label}-${activity.state}`} activity={activity} />
+                  <ActivityCard
+                    key={`${activity.timestamp}-${activity.kind}-${activity.label}-${activity.state}`}
+                    activity={activity}
+                  />
                 ))
               )}
             </VStack>

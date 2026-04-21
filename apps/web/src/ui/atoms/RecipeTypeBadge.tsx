@@ -4,7 +4,7 @@ import type { Session } from '@hermes-recipes/protocol';
 function recipeTypePresentation(recipeType: Session['recipeType']) {
   if (recipeType === 'home') {
     return {
-      label: 'Home',
+      label: 'Kitchen',
       background: 'var(--surface-accent)',
       color: 'var(--text-primary)'
     };

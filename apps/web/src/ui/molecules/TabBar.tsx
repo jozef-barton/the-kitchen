@@ -1,10 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
 import { Button, Flex, HStack, Text } from '@chakra-ui/react';
+
+const tabPulseStyle = `@keyframes tabPulse { 0%, 100% { border-bottom-color: var(--accent); } 50% { border-bottom-color: transparent; } }`;
 
 export interface TabItem {
   sessionId: string;
   title: string;
+  status?: 'generating' | 'success' | 'error' | 'idle';
 }
 
 export function TabBar({
@@ -26,6 +29,18 @@ export function TabBar({
 }) {
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [clearedStatuses, setClearedStatuses] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const generatingIds = tabs.filter(t => t.status === 'generating').map(t => t.sessionId);
+    if (generatingIds.length > 0) {
+      setClearedStatuses(prev => {
+        const next = new Set(prev);
+        generatingIds.forEach(id => next.delete(id));
+        return next;
+      });
+    }
+  }, [tabs]);
 
   const handleDragStart = useCallback((index: number) => {
     dragIndexRef.current = index;
@@ -68,6 +83,7 @@ export function TabBar({
       flexShrink={0}
       data-testid="session-tab-bar"
     >
+      <style>{tabPulseStyle}</style>
       <Flex
         align="center"
         gap="2"
@@ -81,6 +97,7 @@ export function TabBar({
           {tabs.map((tab, index) => {
             const isActive = tab.sessionId === activeTabId;
             const isDragOver = dragOverIndex === index;
+            const effectiveStatus = clearedStatuses.has(tab.sessionId) ? 'idle' : (tab.status ?? 'idle');
             return (
               <HStack
                 key={tab.sessionId}
@@ -89,16 +106,27 @@ export function TabBar({
                 px="3"
                 py="1.5"
                 cursor="pointer"
-                bg={isActive ? 'var(--surface-selected)' : 'transparent'}
-                rounded="8px"
-                border="1px solid"
-                borderColor={isActive ? 'rgba(14, 116, 103, 0.22)' : 'transparent'}
-                borderBottom={isActive ? '1px solid rgba(14, 116, 103, 0.22)' : '1px solid transparent'}
+                bg={isActive ? 'var(--surface-1)' : 'transparent'}
+                rounded="6px 6px 0 0"
+                borderBottom={
+                  effectiveStatus === 'generating'
+                    ? '2px solid var(--accent)'
+                    : effectiveStatus === 'success'
+                    ? '2px solid var(--status-success, #38a169)'
+                    : effectiveStatus === 'error'
+                    ? '2px solid var(--status-error, #e53e3e)'
+                    : isActive
+                    ? '2px solid var(--accent)'
+                    : '2px solid transparent'
+                }
+                animation={effectiveStatus === 'generating' ? 'tabPulse 1.2s ease-in-out infinite' : undefined}
                 borderLeft={isDragOver ? '2px solid var(--accent)' : '2px solid transparent'}
-                boxShadow={isActive ? 'var(--shadow-xs)' : 'none'}
-                _hover={{ bg: isActive ? 'var(--surface-selected)' : 'var(--surface-hover)' }}
-                transition="all 140ms ease"
-                onClick={() => onSelectTab(tab.sessionId)}
+                _hover={{ bg: isActive ? 'var(--surface-1)' : 'rgba(128, 128, 128, 0.08)' }}
+                transition="all 80ms ease"
+                onClick={() => {
+                  setClearedStatuses((prev) => new Set(prev).add(tab.sessionId));
+                  onSelectTab(tab.sessionId);
+                }}
                 maxW="200px"
                 minW="0"
                 draggable

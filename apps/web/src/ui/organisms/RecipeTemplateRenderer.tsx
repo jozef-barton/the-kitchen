@@ -1,9 +1,10 @@
-import { Badge, Box, Button, Checkbox, Flex, HStack, Input, Separator, Skeleton, Spinner, Table, Text, Textarea, VStack } from '@chakra-ui/react';
+import { AspectRatio, Badge, Box, Button, Checkbox, Flex, HStack, Image, Input, Separator, Skeleton, Spinner, Table, Text, Textarea, VStack } from '@chakra-ui/react';
 import type {
   Recipe,
   RecipeActionDefinition,
   RecipeActionSpec,
   RecipeTemplateActionReference,
+  RecipeTemplateImage,
   RecipeTemplateSectionProgress,
   RecipeTemplateField,
   RecipeTemplateSection,
@@ -14,8 +15,114 @@ import type { Components } from 'react-markdown';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from 'recharts';
 import { TemplateActionButton, TemplateChipPill, TemplateSectionHeader, TemplateSurface } from '../../features/recipe-templates/template-primitives';
 import { templateToneStyles } from '../../features/recipe-templates/template-style-helpers';
+import { useResolvedTemplateState } from '../../features/recipe-templates/use-resolved-images';
+
+const IMAGE_RADIUS_MAP: Record<RecipeTemplateImage['borderRadius'], string> = {
+  none: '0',
+  sm: '4px',
+  md: '8px',
+  lg: '16px',
+  full: '9999px'
+};
+
+const IMAGE_BORDER_MAP: Record<RecipeTemplateImage['border'], string> = {
+  none: 'none',
+  subtle: '1px solid var(--border-subtle)',
+  strong: '1px solid var(--border-strong)'
+};
+
+const IMAGE_ASPECT_MAP: Record<RecipeTemplateImage['aspect'], number | undefined> = {
+  square: 1,
+  video: 16 / 9,
+  portrait: 3 / 4,
+  natural: undefined
+};
+
+const CHART_TONE_COLORS: Record<string, string> = {
+  neutral: 'var(--chart-tone-neutral, #64748b)',
+  accent: 'var(--chart-tone-accent, #2563eb)',
+  success: 'var(--chart-tone-success, #16a34a)',
+  warning: 'var(--chart-tone-warning, #f59e0b)',
+  danger: 'var(--chart-tone-danger, #dc2626)'
+};
+
+const CHART_SERIES_FALLBACK = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#9333ea', '#0ea5e9', '#14b8a6', '#f97316'];
+
+function chartSeriesColor(tone: string | undefined, index: number): string {
+  if (tone && CHART_TONE_COLORS[tone]) {
+    return CHART_TONE_COLORS[tone];
+  }
+  return CHART_SERIES_FALLBACK[index % CHART_SERIES_FALLBACK.length];
+}
+
+function formatChartValue(value: string | number, format: 'number' | 'currency' | 'percent' | undefined): string {
+  if (typeof value !== 'number') {
+    return String(value);
+  }
+  switch (format) {
+    case 'currency':
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+    case 'percent':
+      return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(value / 100);
+    default:
+      return new Intl.NumberFormat().format(value);
+  }
+}
+
+function RecipeImageView({ image, size }: { image: RecipeTemplateImage; size?: 'sm' | 'md' | 'lg' | 'fill' }) {
+  const radius = IMAGE_RADIUS_MAP[image.borderRadius];
+  const border = IMAGE_BORDER_MAP[image.border];
+  const aspect = IMAGE_ASPECT_MAP[image.aspect];
+  const maxWidth = size === 'sm' ? '56px' : size === 'md' ? '160px' : size === 'lg' ? '320px' : undefined;
+  const width = size === 'fill' ? '100%' : undefined;
+  const pending = !image.src;
+
+  const frame = (content: ReactNode) => (
+    <Box
+      overflow="hidden"
+      borderRadius={radius}
+      border={border}
+      bg="var(--surface-2)"
+      maxW={maxWidth}
+      w={width}
+    >
+      {content}
+    </Box>
+  );
+
+  const imageNode = pending ? (
+    <Skeleton w="100%" h="100%" minH={size === 'sm' ? '56px' : '120px'} />
+  ) : (
+    <Image
+      src={image.src ?? ''}
+      alt={image.alt}
+      w="100%"
+      h="100%"
+      objectFit={image.fit}
+      loading="lazy"
+    />
+  );
+
+  const content = aspect !== undefined ? <AspectRatio ratio={aspect}>{imageNode}</AspectRatio> : imageNode;
+  return frame(content);
+}
 
 function actionToneFromDefinition(action: RecipeActionDefinition): 'neutral' | 'accent' | 'danger' {
   if (action.intent === 'primary') {
@@ -166,6 +273,16 @@ function sectionHasRenderableContent(section: RecipeTemplateSection): boolean {
       return [...section.left, ...section.right].some((nested) => sectionHasRenderableContent(nested));
     case 'tabs':
       return Object.values(section.panes).some((pane) => pane.some((nested) => sectionHasRenderableContent(nested)));
+    case 'image':
+      return Boolean(section.image.src) || Boolean(section.image.query);
+    case 'audio':
+      return Boolean(section.src);
+    case 'bar-chart':
+    case 'line-chart':
+    case 'time-series':
+      return section.data.length > 0 && section.series.length > 0;
+    case 'pie-chart':
+      return section.data.length > 0;
     default:
       return false;
   }
@@ -311,6 +428,21 @@ function renderGhostSectionBody(section: RecipeTemplateSection) {
             <Box h="8" w="104px" rounded="8px" bg="rgba(148, 163, 184, 0.18)" />
           </Flex>
         </VStack>
+      );
+    case 'image':
+      return (
+        <Box rounded="12px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" aspectRatio={16 / 9} w="100%" />
+      );
+    case 'audio':
+      return (
+        <Box rounded="12px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" h="14" />
+      );
+    case 'bar-chart':
+    case 'line-chart':
+    case 'pie-chart':
+    case 'time-series':
+      return (
+        <Box rounded="12px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" h="52" />
       );
     default:
       return (
@@ -601,7 +733,7 @@ function CollapsibleNotesSection({
 
 export function RecipeTemplateRenderer({
   recipe: _space,
-  templateState,
+  templateState: rawTemplateState,
   actionSpec,
   actionLoadingId,
   actionError,
@@ -620,6 +752,7 @@ export function RecipeTemplateRenderer({
     }
   ) => Promise<void> | void;
 }) {
+  const templateState = useResolvedTemplateState(rawTemplateState) ?? rawTemplateState;
   const actionMap = useMemo(() => new Map((actionSpec?.actions ?? []).map((action) => [action.id, action] as const)), [actionSpec]);
   const [activeTabsBySlot, setActiveTabsBySlot] = useState<Record<string, string>>(() => findInitialActiveTabs(templateState.sections));
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
@@ -924,7 +1057,7 @@ export function RecipeTemplateRenderer({
         );
       case 'stats':
         return wrap(
-          <TemplateSurface key={section.slotId} bg="var(--surface-2)">
+          <TemplateSurface key={section.slotId} bg="transparent">
             <VStack align="stretch" gap="3">
               {section.title ? (
                 <Text fontSize="sm" fontWeight="500" color="var(--text-secondary)">
@@ -999,7 +1132,10 @@ export function RecipeTemplateRenderer({
                             <Table.ColumnHeader>Criteria</Table.ColumnHeader>
                             {section.rows.map((row) => (
                               <Table.ColumnHeader key={row.id}>
-                                {row.label}
+                                <HStack gap="2" align="center">
+                                  {row.leadingImage ? <RecipeImageView image={row.leadingImage} size="sm" /> : null}
+                                  <Text>{row.label}</Text>
+                                </HStack>
                               </Table.ColumnHeader>
                             ))}
                           </Table.Row>
@@ -1058,9 +1194,14 @@ export function RecipeTemplateRenderer({
                               onClick={() => setSelectedItemId((prev) => (prev === row.id ? null : row.id))}
                             >
                               <Table.Cell>
-                                <Text fontWeight="700" color="var(--text-primary)">
-                                  {row.label}
-                                </Text>
+                                <HStack gap="2.5" align="center">
+                                  {row.leadingImage ? (
+                                    <RecipeImageView image={row.leadingImage} size="sm" />
+                                  ) : null}
+                                  <Text fontWeight="700" color="var(--text-primary)">
+                                    {row.label}
+                                  </Text>
+                                </HStack>
                               </Table.Cell>
                               {row.cells.map((cell, index) => {
                                 const tone = templateToneStyles(cell.tone);
@@ -1198,18 +1339,34 @@ export function RecipeTemplateRenderer({
                 renderGhostSectionBody(section)
               ) : (
                 <Flex gap="3.5" wrap="wrap">
-                  {section.cards.map((card) => (
+                  {section.cards.filter((card) =>
+                    activeFilters.size === 0 ||
+                    card.chips.some((chip) => activeFilters.has(chip.label))
+                  ).map((card) => (
                     <Box key={card.id ?? card.title} flex={{ base: '1 1 100%', md: `1 1 calc(${100 / (section.columns ?? 2)}% - 14px)` }} minW="260px" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-1)" overflow="hidden">
+                      {card.image ? (
+                        <Box borderBottom="1px solid var(--border-subtle)">
+                          <AspectRatio ratio={IMAGE_ASPECT_MAP[card.image.aspect] ?? 16 / 9}>
+                            {card.image.src ? (
+                              <Image src={card.image.src} alt={card.image.alt} objectFit={card.image.fit} loading="lazy" />
+                            ) : (
+                              <Skeleton w="100%" h="100%" />
+                            )}
+                          </AspectRatio>
+                        </Box>
+                      ) : null}
                       <Box
                         px="4"
                         py="3.5"
                         bg="var(--surface-1)"
                         borderBottom="1px solid var(--border-subtle)"
                       >
-                        <Text fontSize="11px" fontWeight="600" letterSpacing="0" textTransform="uppercase" color="var(--text-muted)">
-                          {card.imageLabel ?? 'Preview state'}
-                        </Text>
-                        <Text mt="1.5" fontWeight="600" color="var(--text-primary)">
+                        {!card.image ? (
+                          <Text fontSize="11px" fontWeight="600" letterSpacing="0.12em" textTransform="uppercase" color="var(--text-muted)">
+                            {card.imageLabel ?? 'Preview state'}
+                          </Text>
+                        ) : null}
+                        <Text mt={card.image ? '0' : '1.5'} fontWeight="600" color="var(--text-primary)">
                           {card.title}
                         </Text>
                         {card.subtitle ? (
@@ -1530,7 +1687,7 @@ export function RecipeTemplateRenderer({
           if (leftGroupedList?.kind === 'grouped-list' && rightDetailPanel?.kind === 'detail-panel') {
             const detailPanel = rightDetailPanel;
             return wrap(
-              <TemplateSurface key={section.slotId}>
+              <Box key={section.slotId}>
                 <VStack align="stretch" gap="0">
                   {leftGroupedList.title ? <Box pb="3"><TemplateSectionHeader title={leftGroupedList.title} /></Box> : null}
                   {leftGroupedList.groups.map((group, groupIndex) => {
@@ -1549,7 +1706,7 @@ export function RecipeTemplateRenderer({
                             const isSelected = selectedItemId === itemKey;
                             const isToneColored = group.tone === 'danger' || group.tone === 'warning';
                             return (
-                              <Box key={`${group.id}-${itemKey}`}>
+                              <Box key={`${group.id}-${itemKey}`} py="0.5">
                                 {itemIndex > 0 ? <Separator borderColor="var(--border-subtle)" /> : null}
                                 <Box
                                   py="2.5"
@@ -1581,14 +1738,13 @@ export function RecipeTemplateRenderer({
                                 </Box>
                                 {isSelected ? (
                                   <Box
-                                    pl="3"
-                                    pr="1"
-                                    pb="3"
-                                    pt="1"
-                                    rounded="8px"
-                                    bg="var(--surface-2)"
-                                    border="1px solid var(--border-subtle)"
+                                    px="3"
+                                    py="2"
+                                    borderLeft="3px solid"
+                                    borderLeftColor={gTone.color}
+                                    _dark={{ borderLeftColor: gTone.darkColor }}
                                     mb="2"
+                                    ml="1"
                                   >
                                     <VStack align="stretch" gap="3">
                                       {detailPanel.summary ? (
@@ -1624,7 +1780,7 @@ export function RecipeTemplateRenderer({
                     );
                   })}
                 </VStack>
-              </TemplateSurface>
+              </Box>
             );
           }
         }
@@ -1697,6 +1853,167 @@ export function RecipeTemplateRenderer({
                 })}
               </Flex>
               {ghost ? <Box>{renderGhostSectionBody(section)}</Box> : <VStack align="stretch" gap="4">{activePane.map((child) => renderSection(child))}</VStack>}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'image': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              {section.title ? <TemplateSectionHeader title={section.title} /> : null}
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <VStack align="stretch" gap="2">
+                  <RecipeImageView image={section.image} size="fill" />
+                  {section.image.caption ? (
+                    <Text fontSize="xs" color="var(--text-muted)">
+                      {section.image.caption}
+                    </Text>
+                  ) : null}
+                </VStack>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'audio': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {section.subtitle ? (
+                <Text fontSize="sm" color="var(--text-secondary)">
+                  {section.subtitle}
+                </Text>
+              ) : null}
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <audio controls style={{ width: '100%' }}>
+                  <source src={section.src} />
+                </audio>
+              )}
+              {section.transcript && !ghost ? (
+                <Text fontSize="sm" color="var(--text-secondary)" whiteSpace="pre-wrap">
+                  {section.transcript}
+                </Text>
+              ) : null}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'bar-chart': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <Box h="64" w="100%">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={section.data}
+                      layout={section.orientation === 'horizontal' ? 'vertical' : 'horizontal'}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                      {section.orientation === 'horizontal' ? (
+                        <>
+                          <XAxis type="number" tickFormatter={(value: number) => formatChartValue(value, section.valueFormat)} />
+                          <YAxis type="category" dataKey={section.xKey} width={110} />
+                        </>
+                      ) : (
+                        <>
+                          <XAxis dataKey={section.xKey} />
+                          <YAxis tickFormatter={(value: number) => formatChartValue(value, section.valueFormat)} />
+                        </>
+                      )}
+                      <Tooltip formatter={(value) => formatChartValue(value as number, section.valueFormat)} />
+                      <Legend />
+                      {section.series.map((series, index) => (
+                        <Bar
+                          key={series.id}
+                          dataKey={series.id}
+                          name={series.label}
+                          fill={chartSeriesColor(series.tone, index)}
+                          stackId={section.stacked ? 'stack' : undefined}
+                        />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'line-chart':
+      case 'time-series': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <Box h="64" w="100%">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={section.data}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                      <XAxis dataKey={section.xKey} />
+                      <YAxis tickFormatter={(value: number) => formatChartValue(value, section.valueFormat)} />
+                      <Tooltip formatter={(value) => formatChartValue(value as number, section.valueFormat)} />
+                      <Legend />
+                      {section.series.map((series, index) => (
+                        <Line
+                          key={series.id}
+                          type={section.kind === 'line-chart' && section.smooth ? 'monotone' : 'linear'}
+                          dataKey={series.id}
+                          name={series.label}
+                          stroke={chartSeriesColor(series.tone, index)}
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'pie-chart': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <Box h="64" w="100%">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Tooltip formatter={(value) => formatChartValue(value as number, section.valueFormat)} />
+                      <Legend />
+                      <Pie
+                        data={section.data}
+                        dataKey="value"
+                        nameKey="label"
+                        innerRadius={section.variant === 'donut' ? '55%' : 0}
+                        outerRadius="80%"
+                        paddingAngle={section.variant === 'donut' ? 2 : 0}
+                      >
+                        {section.data.map((slice, index) => (
+                          <Cell key={slice.id} fill={chartSeriesColor(slice.tone, index)} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
             </VStack>
           </TemplateSurface>
         );
