@@ -5161,8 +5161,6 @@ if (command === 'chat') {
 }
 
 if (command === 'login') {
-  // Create a pending Nous auth session so the bridge can expose the verification link
-  beginFixtureProviderAuth('nous');
   print('Login successful (fixture)');
   process.exit(0);
 }

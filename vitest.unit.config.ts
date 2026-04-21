@@ -12,12 +12,6 @@ export default defineConfig({
     }
   },
   test: {
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        execArgv: ['--experimental-sqlite']
-      }
-    },
     include: [
       'packages/**/src/**/*.test.ts',
       'packages/**/src/**/*.test.tsx',
