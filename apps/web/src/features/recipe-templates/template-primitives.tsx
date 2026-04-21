@@ -284,7 +284,7 @@ export function TemplateGroupedList({
 
 function TemplateCard({
   card,
-  wide = false
+  wide: _wide = false
 }: {
   card: TemplateCardItem;
   wide?: boolean;

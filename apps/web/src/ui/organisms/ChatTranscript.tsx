@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, MouseEvent as ReactMouseEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Box, Button, Code, HStack, ScrollArea, Text, VStack, chakra } from '@chakra-ui/react';
 import type { ChatActivity, ChatMessage } from '@hermes-recipes/protocol';
 import ReactMarkdown from 'react-markdown';
@@ -9,21 +9,6 @@ import { TypingDots } from '../atoms/TypingDots';
 import { StatusTicker } from '../atoms/StatusTicker';
 import { safeMarkdownUrlTransform } from '../../lib/markdown-url-transform';
 
-function formatMessageTime(value: string | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    return null;
-  }
-
-  return new Date(parsed).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit'
-  });
-}
 
 
 export const ChatTranscript = memo(function ChatTranscript({
@@ -343,7 +328,7 @@ function TranscriptBubble({
   const isAssistant = messageRole === 'assistant' || messageRole === 'assistant_draft';
   const [copied, setCopied] = useState(false);
 
-  function handleCopy(e: React.MouseEvent) {
+  function handleCopy(e: ReactMouseEvent) {
     e.stopPropagation(); // always stop — click on copy should never bubble to message click
     if (!copyContent) return;
     void navigator.clipboard.writeText(copyContent).then(() => {
@@ -405,7 +390,7 @@ function TranscriptBubble({
           tabIndex: 0,
           cursor: 'pointer',
           onClick,
-          onKeyDown: (e: React.KeyboardEvent) => {
+          onKeyDown: (e: ReactKeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
           }
         } : {})}
