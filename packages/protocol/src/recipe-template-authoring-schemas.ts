@@ -522,19 +522,7 @@ const RecipeTemplateTimelineLinksOverlaySchema = z
   })
   .strict();
 
-const RecipeTemplateBoardCardLinksOverlaySchema = z
-  .object({
-    id: z.string().min(1),
-    links: z.array(RecipeTemplateAuthoringLinkSchema).default([])
-  })
-  .strict();
 
-const RecipeTemplateBoardColumnLinksOverlaySchema = z
-  .object({
-    id: z.string().min(1),
-    cards: z.array(RecipeTemplateBoardCardLinksOverlaySchema).default([])
-  })
-  .strict();
 
 const RecipeTemplateDetailFieldLinksOverlaySchema = z
   .object({

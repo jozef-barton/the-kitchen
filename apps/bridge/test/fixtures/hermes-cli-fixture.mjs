@@ -2337,25 +2337,6 @@ function comparisonTableToData(section) {
   };
 }
 
-function kanbanToColumns(section) {
-  if (!section || section.kind !== 'kanban') {
-    return [];
-  }
-
-  return (section.columns ?? []).map((column) => ({
-    id: column.id ?? column.label,
-    label: column.label,
-    tone: column.tone,
-    cards: (column.cards ?? []).map((card) => ({
-      id: card.id,
-      title: card.title,
-      subtitle: card.subtitle,
-      chips: card.chips ?? [],
-      footer: card.footer,
-      links: actionRefsToLinks(card.actions)
-    }))
-  }));
-}
 
 function groupedChecklistToItems(section) {
   if (!section || section.kind !== 'grouped-list') {

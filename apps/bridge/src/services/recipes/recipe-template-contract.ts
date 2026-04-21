@@ -936,49 +936,6 @@ function coerceTimelineItems(value: unknown, repairs: RecipeTemplateRepairSummar
     .filter((item): item is RecipeTemplateAuthoringTimelineItem => Boolean(item));
 }
 
-function coerceBoardColumns(value: unknown, repairs: RecipeTemplateRepairSummary, path: string) {
-  const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
-  if (!Array.isArray(value) && value !== undefined && value !== null) {
-    registerNormalizedValue(repairs, `${path}:singular -> array`);
-  }
-
-  return source
-    .map((item, index) => {
-      const record = toRecord(item);
-      const label = preferString(record, ['label', 'title', 'name'], repairs, 'label');
-      if (!label) {
-        return null;
-      }
-
-      const cards = (Array.isArray(record.cards) ? record.cards : []).map((card, cardIndex) => {
-        const parsed = RecipeTemplateAuthoringBoardCardSchema.safeParse(card);
-        if (parsed.success) {
-          return parsed.data;
-        }
-        const cardRecord = toRecord(card);
-        const title = preferString(cardRecord, ['title', 'label', 'name'], repairs, 'title');
-        if (!title) {
-          return null;
-        }
-        return {
-          id: preferString(cardRecord, ['id', 'itemId'], repairs, 'id'),
-          title,
-          subtitle: preferString(cardRecord, ['subtitle', 'summary'], repairs, 'subtitle'),
-          chips: coerceChips(cardRecord.chips ?? cardRecord.tags, repairs, `${path}[${index}].cards[${cardIndex}].chips`),
-          footer: preferString(cardRecord, ['footer', 'note'], repairs, 'footer'),
-          links: coerceLinks(cardRecord.links ?? cardRecord.actions, repairs, `${path}[${index}].cards[${cardIndex}].links`)
-        };
-      });
-
-      return {
-        id: preferString(record, ['id', 'columnId', 'key'], repairs, 'id') ?? `column-${index + 1}`,
-        label,
-        tone: asTone(record.tone),
-        cards: cards.filter((card): card is RecipeTemplateAuthoringBoardCard => Boolean(card))
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
-}
 
 function coerceChecklistItems(value: unknown, repairs: RecipeTemplateRepairSummary, path: string) {
   const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
@@ -1412,15 +1369,6 @@ function clearTimelineLinks(items: RecipeTemplateAuthoringTimelineItem[]) {
   }));
 }
 
-function clearBoardLinks(columns: RecipeTemplateAuthoringBoardColumn[]) {
-  return columns.map((column) => ({
-    ...column,
-    cards: column.cards.map((card) => ({
-      ...card,
-      links: []
-    }))
-  }));
-}
 
 function clearDetailLinks(detail: RecipeTemplateAuthoringDetail) {
   return {
@@ -1621,19 +1569,6 @@ function collectLinkedTimelineItems(items: RecipeTemplateAuthoringTimelineItem[]
     }));
 }
 
-function collectLinkedBoardColumns(columns: RecipeTemplateAuthoringBoardColumn[]) {
-  return columns
-    .map((column) => ({
-      id: column.id,
-      cards: column.cards
-        .filter((card) => card.links.length > 0)
-        .map((card) => ({
-          id: card.id ?? card.title,
-          links: card.links
-        }))
-    }))
-    .filter((column) => column.cards.length > 0);
-}
 
 function collectLinkedDetail(detail: RecipeTemplateAuthoringDetail | null | undefined) {
   if (!detail) {
@@ -1866,27 +1801,6 @@ function mergeTimelineLinks(
   }));
 }
 
-function mergeBoardLinks(
-  columns: RecipeTemplateAuthoringBoardColumn[],
-  overlays: Array<{ id: string; cards: Array<{ id: string; links: RecipeTemplateAuthoringLink[] }> }> = []
-) {
-  const columnMap = new Map(overlays.map((overlay) => [overlay.id, overlay] as const));
-  return columns.map((column) => {
-    const columnOverlay = columnMap.get(column.id ?? column.label);
-    if (!columnOverlay) {
-      return column;
-    }
-
-    const cardMap = new Map((columnOverlay.cards ?? []).map((card) => [card.id, card.links] as const));
-    return {
-      ...column,
-      cards: column.cards.map((card) => ({
-        ...card,
-        links: cardMap.get(card.id ?? card.title) ?? card.links
-      }))
-    };
-  });
-}
 
 function mergeDetailLinks(
   detail: RecipeTemplateAuthoringDetail,
@@ -2778,9 +2692,6 @@ function countGroupItems(groups: RecipeTemplateAuthoringGroup[]) {
   return groups.reduce((total, group) => total + group.items.length, 0);
 }
 
-function countBoardCards(columns: RecipeTemplateAuthoringBoardColumn[]) {
-  return columns.reduce((total, column) => total + column.cards.length, 0);
-}
 
 function semanticCompletenessFailure(
   fill: RecipeTemplateFill,
@@ -4101,16 +4012,6 @@ function summarizeTimeline(items: RecipeTemplateAuthoringTimelineItem[]) {
   }));
 }
 
-function summarizeBoard(columns: RecipeTemplateAuthoringBoardColumn[]) {
-  return columns.map((column) => ({
-    id: column.id ?? column.label,
-    label: column.label,
-    cards: column.cards.map((card) => ({
-      id: card.id ?? card.title,
-      title: card.title
-    }))
-  }));
-}
 
 function summarizeDetailFields(detail: RecipeTemplateAuthoringDetail | undefined) {
   if (!detail) {
