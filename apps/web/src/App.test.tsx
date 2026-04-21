@@ -1139,7 +1139,7 @@ describe('App', () => {
     expect(screen.getByText(/2 synthetic sessions hidden/i)).toBeInTheDocument();
   });
 
-  it('blocks the main screen when no usable provider and model are configured, while keeping Settings and Spaces accessible', async () => {
+  it('blocks the main screen when no usable provider and model are configured, while keeping Settings and Recipes accessible', async () => {
     const blockedProviders = createModelProviderResponse({
       config: {
         ...createModelProviderResponse().config
@@ -1211,7 +1211,7 @@ describe('App', () => {
     expect(screen.getByText('Connect OpenRouter and choose a default model before using chat.')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Ask Hermes something real.')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Spaces' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Recipes' }));
     expect(await screen.findByTestId('spaces-template-gallery')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
@@ -2592,7 +2592,7 @@ describe('App', () => {
     expect(screen.getByText('2 runtime entries · 1 reviewed entries')).toBeInTheDocument();
   });
 
-  it('shows the top-level Spaces navigation and keeps attached-recipe indicators in recent sessions and All sessions', async () => {
+  it('shows the top-level Recipes navigation and keeps attached-recipe indicators in recent sessions and All sessions', async () => {
     const attachedSession = createSession('session-recipe', 'Launch recipe', 'jbarton', {
       attachedRecipeId: 'recipe-launch'
     });
@@ -2648,7 +2648,7 @@ describe('App', () => {
     );
 
     const sidebarScroll = await screen.findByTestId('sidebar-scroll');
-    expect(within(sidebarScroll).getByRole('button', { name: /^Spaces$/ })).toBeInTheDocument();
+    expect(within(sidebarScroll).getByRole('button', { name: /^Recipes$/ })).toBeInTheDocument();
     const recentRow = within(sidebarScroll)
       .getAllByTestId('recent-session-row')
       .find((row) => row.getAttribute('data-session-id') === attachedSession.id);
@@ -2658,7 +2658,7 @@ describe('App', () => {
     expect(within(recentRow as HTMLElement).queryByText(attachedSession.summary)).not.toBeInTheDocument();
     expect(screen.getAllByTestId('hermes-home-brand').length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByRole('button', { name: /^Spaces$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Recipes$/ }));
     expect(await screen.findByTestId('spaces-template-gallery')).toBeInTheDocument();
     expect(screen.getByTestId('page-header')).toBeInTheDocument();
 
@@ -2672,7 +2672,7 @@ describe('App', () => {
     expect(within(attachedRow as HTMLTableRowElement).getByTestId('session-recipe-indicator')).toBeInTheDocument();
     expect(within(attachedRow as HTMLTableRowElement).getByText('Kitchen')).toBeInTheDocument();
     expect(within(plainRow as HTMLTableRowElement).getByText('TUI')).toBeInTheDocument();
-    expect(within(sessionsTable).queryByText('Spaces')).not.toBeInTheDocument();
+    expect(within(sessionsTable).queryByText('Recipes')).not.toBeInTheDocument();
   });
 
   it('opens a session without an attached recipe in the normal chat-only layout', async () => {

@@ -25,17 +25,6 @@ function formatMessageTime(value: string | undefined) {
   });
 }
 
-function roleLabel(role: ChatMessage['role'] | 'assistant_draft') {
-  switch (role) {
-    case 'assistant':
-    case 'assistant_draft':
-      return 'Hermes';
-    case 'user':
-      return 'You';
-    default:
-      return 'System';
-  }
-}
 
 export const ChatTranscript = memo(function ChatTranscript({
   messages,
@@ -83,7 +72,8 @@ export const ChatTranscript = memo(function ChatTranscript({
   return (
     <ScrollArea.Root flex="1" minH={0} variant="hover">
       <ScrollArea.Viewport ref={viewportRef} data-testid="chat-transcript-scroll">
-        <VStack align="stretch" gap={{ base: '5', md: '6' }} px={{ base: '1', md: '2' }} py={{ base: '2', md: '3' }}>
+        <Box maxW="740px" mx="auto" w="100%">
+        <VStack align="stretch" gap={{ base: '6', md: '8' }} px={{ base: '2', md: '4' }} pt={{ base: '4', md: '6' }} pb={{ base: '2', md: '4' }}>
           {loading ? (
             <TranscriptBubble messageRole="system">
               <Text fontWeight="700">Loading session…</Text>
@@ -115,6 +105,7 @@ export const ChatTranscript = memo(function ChatTranscript({
             </>
           )}
         </VStack>
+        </Box>
       </ScrollArea.Viewport>
       <ScrollArea.Scrollbar />
     </ScrollArea.Root>
@@ -351,24 +342,6 @@ function TranscriptBubble({
 }) {
   const isUser = messageRole === 'user';
   const isAssistant = messageRole === 'assistant' || messageRole === 'assistant_draft';
-  const alignment = isUser ? 'flex-end' : 'flex-start';
-  const bubbleTone = isUser
-    ? {
-        bg: 'var(--surface-selected)',
-        border: 'rgba(14, 116, 103, 0.22)'
-      }
-    : isAssistant
-      ? {
-          bg: 'var(--surface-elevated)',
-          border: messageRole === 'assistant_draft' ? 'rgba(14, 116, 103, 0.24)' : 'var(--border-subtle)'
-        }
-      : {
-          bg: 'var(--surface-2)',
-          border: 'var(--border-subtle)'
-        };
-
-  const activeBorder = selected ? 'var(--accent)' : bubbleTone.border;
-  const ClickableBubble = chakra('div');
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
@@ -379,128 +352,119 @@ function TranscriptBubble({
     });
   }
 
-  return (
-    <Box display="flex" justifyContent={alignment} overflow="hidden">
-      <HStack
-        align="start"
-        gap="3"
-        justify={isUser ? 'flex-end' : 'flex-start'}
-        flexDirection={isUser ? 'row-reverse' : 'row'}
-        maxW="min(820px, 100%)"
-        minW={0}
+  const ActionRow = ({ stopProp }: { stopProp?: boolean }) => (
+    <HStack gap="1.5" opacity={0.5} _hover={{ opacity: 1 }} transition="opacity 140ms ease" mt="1.5">
+      {copyContent ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          minW={0}
+          px="2"
+          h="6"
+          rounded="6px"
+          color="var(--text-muted)"
+          fontSize="xs"
+          _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
+          onClick={stopProp ? (e) => { e.stopPropagation(); handleCopy(); } : handleCopy}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+      ) : null}
+      {formatMessageTime(timestamp) ? (
+        <Text fontSize="xs" color="var(--text-muted)">{formatMessageTime(timestamp)}</Text>
+      ) : null}
+    </HStack>
+  );
+
+  /* ── User message: right-aligned soft bubble ── */
+  if (isUser) {
+    const bubble = (
+      <Box
+        maxW="min(620px, 88%)"
+        bg={selected ? 'var(--surface-selected)' : 'var(--surface-2)'}
+        rounded="20px"
+        roundedBottomRight="6px"
+        px={{ base: '4', md: '5' }}
+        py={{ base: '3', md: '3.5' }}
+        transition="background-color 160ms ease"
+        style={selected ? { outline: '2px solid var(--accent)', outlineOffset: '2px' } : undefined}
         overflow="hidden"
+        wordBreak="break-word"
       >
-        {isAssistant ? <HermesAvatar size="sm" /> : null}
-        {clickable ? (
-          <ClickableBubble
+        {children}
+        <ActionRow stopProp={clickable} />
+      </Box>
+    );
+
+    if (clickable) {
+      return (
+        <Box display="flex" justifyContent="flex-end">
+          <Box
             role="button"
             tabIndex={0}
-            maxW="min(760px, 100%)"
-            minW={0}
-            overflow="hidden"
-            rounded="12px"
-            border={`1px solid ${activeBorder}`}
-            bg={bubbleTone.bg}
-            px={{ base: '4', md: '5' }}
-            py={{ base: '4', md: '4.5' }}
-            textAlign="left"
             cursor="pointer"
-            transition="border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease"
-            boxShadow={selected ? '0 0 0 1px var(--accent), var(--shadow-sm)' : 'var(--shadow-xs)'}
-            _hover={{
-              borderColor: 'var(--accent)',
-              transform: 'translateY(-1px)',
-              boxShadow: 'var(--shadow-sm)'
-            }}
             onClick={onClick}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onClick?.();
-              }
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
           >
-            <VStack align="stretch" gap="3">
-              <HStack justify="space-between" gap="3" wrap="wrap">
-                <Text fontSize="xs" fontWeight="700" color="var(--text-muted)" letterSpacing="0">
-                  {roleLabel(messageRole)}
-                </Text>
-                <HStack gap="2">
-                  {copyContent ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      minW={0}
-                      px="2"
-                      py="1"
-                      rounded="8px"
-                      color="var(--text-muted)"
-                      fontSize="xs"
-                      _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
-                      onClick={(e) => { e.stopPropagation(); handleCopy(); }}
-                    >
-                      {copied ? 'Copied' : 'Copy'}
-                    </Button>
-                  ) : null}
-                  {formatMessageTime(timestamp) ? (
-                    <Text fontSize="xs" color="var(--text-muted)">
-                      {formatMessageTime(timestamp)}
-                    </Text>
-                  ) : null}
-                </HStack>
-              </HStack>
-              {children}
-            </VStack>
-          </ClickableBubble>
-        ) : (
-          <Box
-            maxW="min(760px, 100%)"
-            minW={0}
-            overflow="hidden"
-            rounded="12px"
-            border={`1px solid ${activeBorder}`}
-            bg={bubbleTone.bg}
-            px={{ base: '4', md: '5' }}
-            py={{ base: '4', md: '4.5' }}
-            textAlign="left"
-            boxShadow={selected ? '0 0 0 1px var(--accent), var(--shadow-sm)' : 'var(--shadow-xs)'}
-          >
-            <VStack align="stretch" gap="3">
-              <HStack justify="space-between" gap="3" wrap="wrap">
-                <Text fontSize="xs" fontWeight="700" color="var(--text-muted)" letterSpacing="0">
-                  {roleLabel(messageRole)}
-                </Text>
-                <HStack gap="2">
-                  {copyContent ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      minW={0}
-                      px="2"
-                      py="1"
-                      rounded="8px"
-                      color="var(--text-muted)"
-                      fontSize="xs"
-                      _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
-                      onClick={handleCopy}
-                    >
-                      {copied ? 'Copied' : 'Copy'}
-                    </Button>
-                  ) : null}
-                  {formatMessageTime(timestamp) ? (
-                    <Text fontSize="xs" color="var(--text-muted)">
-                      {formatMessageTime(timestamp)}
-                    </Text>
-                  ) : null}
-                </HStack>
-              </HStack>
-              {children}
-            </VStack>
+            {bubble}
           </Box>
-        )}
+        </Box>
+      );
+    }
+    return <Box display="flex" justifyContent="flex-end">{bubble}</Box>;
+  }
+
+  /* ── Assistant message: open canvas, no bubble ── */
+  if (isAssistant) {
+    const content = (
+      <HStack align="start" gap="3" w="100%" maxW="100%">
+        <Box flexShrink={0} mt="1px">
+          <HermesAvatar size="sm" />
+        </Box>
+        <VStack align="stretch" gap="0" flex="1" minW={0} overflow="hidden" wordBreak="break-word">
+          {children}
+          <ActionRow stopProp={clickable} />
+        </VStack>
       </HStack>
+    );
+
+    if (clickable) {
+      return (
+        <Box
+          role="button"
+          tabIndex={0}
+          cursor="pointer"
+          rounded="12px"
+          px="3"
+          py="2"
+          mx="-3"
+          transition="background-color 140ms ease"
+          _hover={{ bg: 'var(--surface-hover)' }}
+          style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
+          onClick={onClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+        >
+          {content}
+        </Box>
+      );
+    }
+    return <Box>{content}</Box>;
+  }
+
+  /* ── System message: centered, minimal ── */
+  return (
+    <Box display="flex" justifyContent="center" py="2">
+      <Box
+        maxW="480px"
+        textAlign="center"
+        px="4"
+        py="3"
+        rounded="10px"
+        bg="var(--surface-hover)"
+      >
+        {children}
+      </Box>
     </Box>
   );
 }

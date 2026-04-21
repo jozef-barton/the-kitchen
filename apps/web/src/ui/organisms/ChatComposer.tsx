@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { Button, HStack, Text, Textarea, VStack } from '@chakra-ui/react';
+import { useCallback, useState, type FormEvent } from 'react';
+import { Box, Button, HStack, Text, Textarea } from '@chakra-ui/react';
 
 export function ChatComposer({
   onSend,
@@ -15,33 +15,30 @@ export function ChatComposer({
 
   const handleSubmit = useCallback(async () => {
     const content = draft.trim();
-    if (!content || disabled || sending) {
-      return;
-    }
-
+    if (!content || disabled || sending) return;
     const accepted = await Promise.resolve(onSend(content)).catch(() => false);
-    if (accepted) {
-      setDraft('');
-    }
+    if (accepted) setDraft('');
   }, [disabled, draft, onSend, sending]);
 
   return (
-    <VStack
+    <Box
       as="form"
-      align="stretch"
-      gap="3"
-      rounded="8px"
-      border="1px solid var(--border-subtle)"
+      rounded="16px"
+      border="1px solid var(--border-default)"
       bg="var(--surface-elevated)"
-      px={{ base: '4', md: '5' }}
-      py={{ base: '4', md: '5' }}
+      overflow="hidden"
       boxShadow="var(--shadow-sm)"
       data-testid="chat-composer"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSubmit) {
-          void handleSubmit();
+      css={{
+        transition: 'box-shadow 200ms ease, border-color 200ms ease',
+        '&:focus-within': {
+          borderColor: 'var(--accent)',
+          boxShadow: 'var(--focus-ring), var(--shadow-sm)'
         }
+      }}
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        if (canSubmit) void handleSubmit();
       }}
     >
       <Textarea
@@ -51,47 +48,47 @@ export function ChatComposer({
         autoresize
         resize="none"
         variant="subtle"
-        minH="118px"
-        maxH="240px"
-        disabled={disabled}
-        borderRadius="8px"
-        bg="var(--surface-2)"
-        border="1px solid transparent"
+        minH="0"
+        maxH="280px"
+        px="4"
+        pt="4"
+        pb="2"
+        fontSize="sm"
+        lineHeight="1.65"
         color="var(--text-primary)"
-        lineHeight="1.6"
-        fontSize="md"
-        _placeholder={{ color: 'var(--text-muted)' }}
-        _focus={{ borderColor: 'var(--accent)', boxShadow: 'var(--focus-ring)', bg: 'var(--surface-1)' }}
+        disabled={disabled}
+        bg="transparent"
+        border="none"
+        _placeholder={{ color: 'var(--text-muted)', fontSize: 'sm' }}
+        _focus={{ boxShadow: 'none', bg: 'transparent' }}
         onKeyDown={(event) => {
-          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
-            return;
-          }
-
+          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
           event.preventDefault();
-          if (canSubmit) {
-            void handleSubmit();
-          }
+          if (canSubmit) void handleSubmit();
         }}
       />
-      <HStack justify="space-between" align="center" gap="3" wrap="wrap">
-        <Text fontSize="sm" color="var(--text-muted)">
-          Press Enter to send. Press Shift+Enter for a newline.
+      <HStack justify="space-between" align="center" gap="3" px="4" pb="3" pt="1">
+        <Text fontSize="xs" color="var(--text-muted)" opacity={0.7} display={{ base: 'none', md: 'block' }}>
+          Enter ↵ to send · Shift+Enter for newline
         </Text>
         <Button
           type="submit"
-          rounded="8px"
+          size="sm"
+          rounded="10px"
+          px="4"
           bg="var(--accent)"
           color="var(--accent-contrast)"
-          px="5"
-          fontWeight="750"
-          boxShadow="var(--shadow-xs)"
-          _hover={{ bg: 'var(--accent-strong)', transform: 'translateY(-1px)' }}
+          fontWeight="600"
+          fontSize="xs"
+          _hover={{ bg: 'var(--accent-strong)' }}
           loading={sending}
           disabled={!canSubmit}
+          ml="auto"
+          flexShrink={0}
         >
           Send
         </Button>
       </HStack>
-    </VStack>
+    </Box>
   );
 }

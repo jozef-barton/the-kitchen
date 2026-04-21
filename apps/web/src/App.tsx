@@ -117,7 +117,9 @@ export function App() {
       <ShellLayout
         connection={controller.bootstrap.connection}
         profileName={controller.activeProfile?.name ?? controller.activeProfile?.id ?? null}
-        pageTitle={pageTitle(controller.page)}
+        pageTitle={controller.page === 'chat'
+          ? (controller.sessionPayload?.session.title ?? 'Hermes')
+          : pageTitle(controller.page)}
         headerDetail={subtitle}
         headerMode={usesCombinedSessionRecipeLayout ? 'compact' : 'full'}
         hermesVersion={controller.bootstrap.hermesVersion}
@@ -399,7 +401,7 @@ function pageTitle(page: string) {
     case 'sessions':
       return 'All sessions';
     case 'recipes':
-      return 'Spaces';
+      return 'Recipes';
     case 'jobs':
       return 'Jobs';
     case 'tools':
