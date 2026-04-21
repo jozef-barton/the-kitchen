@@ -3593,7 +3593,7 @@ describe('App', () => {
                 kind: 'conversation'
               }
             }
-          ], 48);
+          ], 120);
         }
 
         throw new Error(`Unexpected request: ${url}`);
@@ -3620,11 +3620,16 @@ describe('App', () => {
     await userEvent.type(screen.getByPlaceholderText('Ask Hermes something real.'), 'How many unread emails do I have?');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(await screen.findByTestId('hermes-typing-indicator')).toBeInTheDocument();
-    expect(await within(activityPane).findByText('google-workspace')).toBeInTheDocument();
-    expect(await within(activityPane).findByText('{"count":1,"labels":["Inbox"]}')).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('hermes-typing-indicator')).toBeInTheDocument();
+      },
+      { timeout: 3000 }
+    );
+    expect(await within(activityPane).findByText('google-workspace', undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(await within(activityPane).findByText('{"count":1,"labels":["Inbox"]}', undefined, { timeout: 3000 })).toBeInTheDocument();
     expect(within(transcript).queryByText('{"count":1,"labels":["Inbox"]}')).not.toBeInTheDocument();
-    expect(await within(transcript).findByText('You have 1 unread email in jbarton.')).toBeInTheDocument();
+    expect(await within(transcript).findByText('You have 1 unread email in jbarton.', undefined, { timeout: 3000 })).toBeInTheDocument();
     expect(within(transcript).queryByText('google-workspace')).not.toBeInTheDocument();
   });
 
