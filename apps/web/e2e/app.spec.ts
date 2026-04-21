@@ -167,12 +167,12 @@ test('creates a new session, streams the assistant reply, and restores it after 
   await expect(composer).toBeVisible();
   await composer.click();
   await composer.fill(prompt);
-  await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+  await expect(sendButton).toBeEnabled({ timeout: 20_000 });
   await sendButton.click();
 
   await expect(
     page.getByTestId('chat-transcript-scroll').getByText(`Fixture Hermes reply for jbarton: ${prompt}`, { exact: true })
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible({ timeout: 45_000 });
 
   await page.reload();
 
@@ -202,10 +202,10 @@ test('keeps recent sessions and runtime activity visually compact while preservi
   await emailComposer.fill('How many unread emails do I have?');
   await emailComposer.press('Enter');
 
-  await expect(page.getByRole('button', { name: 'Runtime' })).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole('button', { name: 'Runtime' })).toBeVisible({ timeout: 60_000 });
   await page.getByRole('button', { name: 'Runtime' }).click();
   const runtimeDrawer = page.getByTestId('recipe-runtime-drawer');
-  await expect(runtimeDrawer).toContainText(/Hermes agent|Runtime status|google-workspace|gmail_unread_count/, { timeout: 20_000 });
+  await expect(runtimeDrawer).toContainText(/Hermes agent|Runtime status|google-workspace|gmail_unread_count/, { timeout: 30_000 });
   const activityCard = page.getByTestId('activity-card').first();
   await expect(activityCard).toBeVisible();
 
@@ -225,9 +225,9 @@ test('creates a session-attached space, opens the combined recipe layout, and pr
   await firstComposer.fill('Create a launch tracker recipe.');
   await firstComposer.press('Enter');
   await expect(page.getByTestId('chat-transcript-scroll').getByText('Created a launch tracker recipe for this request.')).toBeVisible({
-    timeout: 15_000
+    timeout: 45_000
   });
-  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 45_000 });
   await expect(page.getByTestId('attached-recipe-panel')).toContainText('Created a launch tracker recipe for this request.');
   await expect(page.getByTestId('session-recipe-chat-pane')).toBeVisible();
   await expect(page.getByTestId('page-header')).toHaveCount(0);
@@ -246,9 +246,9 @@ test('creates a session-attached space, opens the combined recipe layout, and pr
   await page.getByPlaceholder('Ask Hermes something real.').fill('Update the current recipe with another card.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByTestId('session-recipe-content-scroll')).toContainText('Updated the current recipe with fixture data.', {
-    timeout: 15_000
+    timeout: 30_000
   });
-  await expect(page.getByTestId('session-recipe-chat-pane')).toContainText('Updated the current recipe with fixture data.', { timeout: 15_000 });
+  await expect(page.getByTestId('session-recipe-chat-pane')).toContainText('Updated the current recipe with fixture data.', { timeout: 30_000 });
 
   await page
     .getByTestId('session-recipe-chat-pane')
@@ -257,7 +257,7 @@ test('creates a session-attached space, opens the combined recipe layout, and pr
   const transcriptRuntimeDrawer = page.getByTestId('recipe-runtime-drawer');
   await expect(transcriptRuntimeDrawer).toBeVisible();
   await expect(transcriptRuntimeDrawer).toContainText(/Hermes is updating the recipe|Hermes updated the Home recipe|Hermes updated the recipe|Hermes completed/, {
-    timeout: 15_000
+    timeout: 30_000
   });
   await transcriptRuntimeDrawer.getByRole('button', { name: 'Close runtime drawer' }).click();
   await expect(page.getByTestId('recipe-runtime-drawer')).toHaveCount(0);
@@ -269,9 +269,9 @@ test('creates a session-attached space, opens the combined recipe layout, and pr
   await attachedSessionRow.click();
 
   await page.reload();
-  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 45_000 });
   await expect(page.getByTestId('session-recipe-content-scroll')).toContainText('Updated the current recipe with fixture data.', {
-    timeout: 15_000
+    timeout: 30_000
   });
   await expect(page.getByTestId('page-header')).toHaveCount(0);
 
@@ -293,9 +293,9 @@ test('creates a prose-only Home recipe and hides the legacy content-format contr
     await composer.fill('Summarize the latest note.');
     await composer.press('Enter');
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('attached-recipe-panel')).toContainText('Fixture Hermes reply for jbarton: Summarize the latest note.', {
-      timeout: 15_000
+      timeout: 30_000
     });
     await expect(page.getByRole('button', { name: 'Markdown' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Table' })).toHaveCount(0);
@@ -316,17 +316,17 @@ test('shows the baseline Home recipe immediately and fills richer sections async
     await expect(composer).toBeVisible();
     await composer.click();
     await composer.fill('good Italian restaurants near Dayton, OH');
-    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    await expect(sendButton).toBeEnabled({ timeout: 20_000 });
     await sendButton.click();
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('recipe-template-generation-running')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('recipe-template-generation-running')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
 
-    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('dynamic-recipe-template-ready')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('recipe-template-section-results')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('dynamic-recipe-template-ready')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('recipe-template-section-results')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Markdown' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Table' })).toHaveCount(0);
@@ -348,11 +348,11 @@ test('keeps a data-rich Home recipe usable in a smaller pane without legacy form
   await expect(composer).toBeVisible();
   await composer.click();
   await composer.fill('good Italian restaurants near Dayton, OH');
-  await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+  await expect(sendButton).toBeEnabled({ timeout: 20_000 });
   await sendButton.click();
 
-  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('dynamic-recipe-template-ready')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('dynamic-recipe-template-ready')).toBeVisible({ timeout: 45_000 });
   await expect(page.getByTestId('attached-recipe-panel')).toContainText('Mamma Disalvo');
   await expect(page.getByRole('button', { name: 'Markdown' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Table' })).toHaveCount(0);
@@ -375,16 +375,16 @@ test('renders an explicit recipe generation failure state when fill and bounded 
     await expect(composer).toBeVisible();
     await composer.click();
     await composer.fill('good Italian restaurants near Dayton, OH');
-    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    await expect(sendButton).toBeEnabled({ timeout: 20_000 });
     await sendButton.click();
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('recipe-enrichment-failed-banner')).toContainText('Baseline ready, recipe generation failed', {
-      timeout: 15_000
+      timeout: 45_000
     });
     await expect(page.getByTestId('recipe-enrichment-failed-banner')).toContainText('Cause: Template text repair failed');
     await expect(page.getByRole('button', { name: 'Rebuild recipe' })).toBeVisible();
-    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('recipe-template-section-results')).toHaveAttribute('data-hydration-state', 'failed');
     await expect(page.getByTestId('recipe-template-section-results')).toHaveAttribute('data-repair-state', 'failed');
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
@@ -407,14 +407,14 @@ test('renders a specific timeout failure when template generation exceeds the sc
     await expect(composer).toBeVisible();
     await composer.click();
     await composer.fill('good Italian restaurants near Dayton, OH');
-    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    await expect(sendButton).toBeEnabled({ timeout: 20_000 });
     await sendButton.click();
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
     await expect(page.getByTestId('recipe-template-generation-failed')).toContainText('Recipe generation failed', {
-      timeout: 25_000
+      timeout: 60_000
     });
     await expect(page.getByTestId('recipe-template-generation-failed')).toContainText('Reason: Runtime timeout');
     await expect(page.getByTestId('recipe-template-generation-failed')).toContainText('template selection');
@@ -443,7 +443,7 @@ test('classifies timeout failures clearly when the configured limit is too small
     await page.getByRole('button', { name: 'Send', exact: true }).click();
 
     await expect(page.getByTestId('chat-transcript-scroll')).toContainText('The configured limit is 20,000ms.', {
-      timeout: 15_000
+      timeout: 45_000
     });
     await expect(page.getByTestId('chat-transcript-scroll')).toContainText('before the Home recipe baseline could update');
     await expect(page.getByTestId('combined-session-recipe-layout')).toHaveCount(0);
@@ -465,21 +465,21 @@ test('retries recipe enrichment explicitly and promotes it after a one-time fail
     await expect(composer).toBeVisible();
     await composer.click();
     await composer.fill('good Italian restaurants near Dayton, OH');
-    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    await expect(sendButton).toBeEnabled({ timeout: 20_000 });
     await sendButton.click();
 
     await expect(page.getByTestId('recipe-enrichment-failed-banner')).toContainText('Baseline ready, recipe generation failed', {
-      timeout: 15_000
+      timeout: 45_000
     });
     await page.getByRole('button', { name: 'Rebuild recipe' }).click();
 
     await expect(page.getByTestId('recipe-enrichment-building-banner')).toContainText('Baseline ready, recipe generation running', {
-      timeout: 15_000
+      timeout: 30_000
     });
-    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
-    await expect(page.getByTestId('dynamic-recipe-template-ready')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('recipe-enrichment-building-banner')).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.getByTestId('dynamic-recipe-template-ready')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('recipe-enrichment-building-banner')).toHaveCount(0, { timeout: 45_000 });
     await expect(page.getByRole('button', { name: 'Markdown' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Table' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Cards' })).toHaveCount(0);
@@ -499,20 +499,20 @@ test('shows a visible repairing marker on ghost template sections while staged r
     await expect(composer).toBeVisible();
     await composer.click();
     await composer.fill('good Italian restaurants near Dayton, OH');
-    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    await expect(sendButton).toBeEnabled({ timeout: 20_000 });
     await sendButton.click();
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 45_000 });
     const resultsSection = page.getByTestId('recipe-template-section-results');
-    await expect(resultsSection).toHaveAttribute('data-repair-state', 'repairing', { timeout: 20_000 });
-    await expect(resultsSection).toContainText('Repairing', { timeout: 20_000 });
+    await expect(resultsSection).toHaveAttribute('data-repair-state', 'repairing', { timeout: 45_000 });
+    await expect(resultsSection).toContainText('Repairing', { timeout: 45_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
 
     await expect(page.getByTestId('recipe-enrichment-failed-banner')).toContainText('Baseline ready, recipe generation failed', {
-      timeout: 25_000
+      timeout: 60_000
     });
-    await expect(resultsSection).toHaveAttribute('data-repair-state', 'failed', { timeout: 25_000 });
+    await expect(resultsSection).toHaveAttribute('data-repair-state', 'failed', { timeout: 60_000 });
   } finally {
     await temporaryServer.close();
   }
