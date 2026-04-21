@@ -197,15 +197,17 @@ test('keeps recent sessions and runtime activity visually compact while preservi
   expect(recentRowBox?.height ?? 0).toBeLessThan(72);
 
   await page.getByRole('button', { name: 'New session', exact: true }).click();
-  const emailComposer = page.getByPlaceholder('Ask Hermes something real.');
-  await emailComposer.click();
-  await emailComposer.fill('How many unread emails do I have?');
-  await emailComposer.press('Enter');
+  const activityComposer = page.getByPlaceholder('Ask Hermes something real.');
+  const activitySendButton = page.getByRole('button', { name: 'Send', exact: true });
+  await activityComposer.click();
+  await activityComposer.fill('Find nearby coffee shops.');
+  await expect(activitySendButton).toBeEnabled({ timeout: 20_000 });
+  await activitySendButton.click();
 
   await expect(page.getByRole('button', { name: 'Runtime' })).toBeVisible({ timeout: 60_000 });
   await page.getByRole('button', { name: 'Runtime' }).click();
   const runtimeDrawer = page.getByTestId('recipe-runtime-drawer');
-  await expect(runtimeDrawer).toContainText(/Hermes agent|Runtime status|google-workspace|gmail_unread_count/, { timeout: 30_000 });
+  await expect(runtimeDrawer).toContainText(/Hermes agent|Runtime status|local_discovery_search|nearby_restaurants_search/, { timeout: 30_000 });
   const activityCard = page.getByTestId('activity-card').first();
   await expect(activityCard).toBeVisible();
 
