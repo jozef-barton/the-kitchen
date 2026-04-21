@@ -25,17 +25,6 @@ function formatMessageTime(value: string | undefined) {
   });
 }
 
-function roleLabel(role: ChatMessage['role'] | 'assistant_draft') {
-  switch (role) {
-    case 'assistant':
-    case 'assistant_draft':
-      return 'Hermes';
-    case 'user':
-      return 'You';
-    default:
-      return 'System';
-  }
-}
 
 export const ChatTranscript = memo(function ChatTranscript({
   messages,
