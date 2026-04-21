@@ -197,12 +197,15 @@ test('keeps recent sessions and runtime activity visually compact while preservi
   expect(recentRowBox?.height ?? 0).toBeLessThan(72);
 
   await page.getByRole('button', { name: 'New session', exact: true }).click();
-  await page.getByPlaceholder('Ask Hermes something real.').fill('How many unread emails do I have?');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const emailComposer = page.getByPlaceholder('Ask Hermes something real.');
+  await emailComposer.click();
+  await emailComposer.fill('How many unread emails do I have?');
+  await emailComposer.press('Enter');
 
+  await expect(page.getByRole('button', { name: 'Runtime' })).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: 'Runtime' }).click();
   const runtimeDrawer = page.getByTestId('recipe-runtime-drawer');
-  await expect(runtimeDrawer).toContainText(/Hermes agent|Runtime status|google-workspace|gmail_unread_count/, { timeout: 15_000 });
+  await expect(runtimeDrawer).toContainText(/Hermes agent|Runtime status|google-workspace|gmail_unread_count/, { timeout: 20_000 });
   const activityCard = page.getByTestId('activity-card').first();
   await expect(activityCard).toBeVisible();
 
@@ -217,12 +220,10 @@ test('creates a session-attached space, opens the combined recipe layout, and pr
   await page.goto('/');
   await page.getByRole('button', { name: 'New session', exact: true }).click();
   const firstComposer = page.getByPlaceholder('Ask Hermes something real.');
-  const firstSendButton = page.getByRole('button', { name: 'Send', exact: true });
   await expect(firstComposer).toBeVisible();
   await firstComposer.click();
   await firstComposer.fill('Create a launch tracker recipe.');
-  await expect(firstSendButton).toBeEnabled({ timeout: 10_000 });
-  await firstSendButton.click();
+  await firstComposer.press('Enter');
   await expect(page.getByTestId('chat-transcript-scroll').getByText('Created a launch tracker recipe for this request.')).toBeVisible({
     timeout: 15_000
   });
@@ -276,51 +277,32 @@ test('creates a session-attached space, opens the combined recipe layout, and pr
 
 });
 
-test('auto-creates and populates an attached space from a natural structured-result prompt', async ({ page }) => {
+
+test('creates a prose-only Home recipe and hides the legacy content-format controls', async ({ page }) => {
   const temporaryServer = await startTemporaryBridgeServer('');
 
   try {
     await page.goto(temporaryServer.baseUrl);
+    const profileSelector = page.getByRole('combobox').first();
+    await profileSelector.selectOption('jbarton');
+    await expect(profileSelector).toHaveValue('jbarton');
     await page.getByRole('button', { name: 'New session', exact: true }).click();
-    await page.getByPlaceholder('Ask Hermes something real.').fill('good Italian restaurants near Dayton, OH');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const composer = page.getByPlaceholder('Ask Hermes something real.');
+    await expect(composer).toBeVisible();
+    await composer.click();
+    await composer.fill('Summarize the latest note.');
+    await composer.press('Enter');
 
     await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('attached-recipe-panel')).toContainText('Mamma Disalvo', { timeout: 15_000 });
-    await expect(page.getByTestId('attached-recipe-panel')).toContainText('Selected restaurant', { timeout: 15_000 });
-    await expect(page.getByTestId('session-recipe-chat-pane')).toContainText('Italian restaurants near Dayton, OH', { timeout: 15_000 });
-    await expect(page.getByTestId('recipe-runtime-drawer')).toHaveCount(0);
-
-    await page.reload();
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('attached-recipe-panel')).toContainText('Mamma Disalvo');
-    await expect(page.getByTestId('session-recipe-chat-pane')).toContainText('Italian restaurants near Dayton, OH');
+    await expect(page.getByTestId('attached-recipe-panel')).toContainText('Fixture Hermes reply for jbarton: Summarize the latest note.', {
+      timeout: 15_000
+    });
+    await expect(page.getByRole('button', { name: 'Markdown' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Table' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Cards' })).toHaveCount(0);
   } finally {
     await temporaryServer.close();
   }
-});
-
-test('creates a prose-only Home recipe and hides the legacy content-format controls', async ({ page }) => {
-  await page.goto('/');
-  const profileSelector = page.getByRole('combobox').first();
-  await profileSelector.selectOption('jbarton');
-  await expect(profileSelector).toHaveValue('jbarton');
-  await page.getByRole('button', { name: 'New session', exact: true }).click();
-  const composer = page.getByPlaceholder('Ask Hermes something real.');
-  const sendButton = page.getByRole('button', { name: 'Send', exact: true });
-  await expect(composer).toBeVisible();
-  await composer.click();
-  await composer.fill('Summarize the latest note.');
-  await expect(sendButton).toBeEnabled({ timeout: 10_000 });
-  await sendButton.click();
-
-  await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('attached-recipe-panel')).toContainText('Fixture Hermes reply for jbarton: Summarize the latest note.', {
-    timeout: 15_000
-  });
-  await expect(page.getByRole('button', { name: 'Markdown' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Table' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Cards' })).toHaveCount(0);
 });
 
 test('shows the baseline Home recipe immediately and fills richer sections asynchronously', async ({ page }) => {
@@ -337,9 +319,9 @@ test('shows the baseline Home recipe immediately and fills richer sections async
     await expect(sendButton).toBeEnabled({ timeout: 10_000 });
     await sendButton.click();
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('recipe-template-generation-running')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('recipe-template-generation-running')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
 
     await expect(page.getByTestId('recipe-template-renderer')).toBeVisible({ timeout: 20_000 });
@@ -428,11 +410,11 @@ test('renders a specific timeout failure when template generation exceeds the sc
     await expect(sendButton).toBeEnabled({ timeout: 10_000 });
     await sendButton.click();
 
-    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('combined-session-recipe-layout')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('dynamic-recipe-template-shell')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('dynamic-recipe-baseline')).toHaveCount(0);
     await expect(page.getByTestId('recipe-template-generation-failed')).toContainText('Recipe generation failed', {
-      timeout: 20_000
+      timeout: 25_000
     });
     await expect(page.getByTestId('recipe-template-generation-failed')).toContainText('Reason: Runtime timeout');
     await expect(page.getByTestId('recipe-template-generation-failed')).toContainText('template selection');

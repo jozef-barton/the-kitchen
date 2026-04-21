@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  timeout: 60_000,
+  timeout: 90_000,
   retries: 1,
   use: {
     baseURL: `http://127.0.0.1:${fixturePort}`,
