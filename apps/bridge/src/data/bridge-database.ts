@@ -3316,6 +3316,60 @@ export class BridgeDatabase {
     return row ? this.rowToSession(row) : null;
   }
 
+  getProfilesMetrics(): Array<{ profileId: string; sessionCount: number; messageCount: number; recipeCount: number }> {
+    const sessionRows = this.database
+      .prepare(
+        `SELECT spa.profile_id AS profileId,
+                COUNT(DISTINCT s.id) AS sessionCount,
+                COALESCE(SUM(s.message_count), 0) AS messageCount
+         FROM session_profile_associations spa
+         JOIN sessions s ON s.id = spa.session_id
+         WHERE s.deleted_at IS NULL
+         GROUP BY spa.profile_id`
+      )
+      .all() as Array<{ profileId: string; sessionCount: number; messageCount: number }>;
+
+    const recipeRows = this.database
+      .prepare(
+        `SELECT profile_id AS profileId, COUNT(*) AS recipeCount
+         FROM recipes
+         WHERE deleted_at IS NULL
+         GROUP BY profile_id`
+      )
+      .all() as Array<{ profileId: string; recipeCount: number }>;
+
+    const recipeMap = new Map(recipeRows.map((r) => [r.profileId, r.recipeCount]));
+
+    return sessionRows.map((r) => ({
+      profileId: r.profileId,
+      sessionCount: Number(r.sessionCount),
+      messageCount: Number(r.messageCount),
+      recipeCount: Number(recipeMap.get(r.profileId) ?? 0)
+    }));
+  }
+
+  refreshSessionTitleFromConversation(sessionId: string, userContent: string, assistantContent: string) {
+    const session = this.getSession(sessionId);
+    if (!session) return;
+    const storageState = this.getSessionStorageState(sessionId);
+    // Combine the user prompt with the first substantive line from the assistant response
+    // so the title can reflect actual results (e.g. "Asian Restaurants Cleveland" rather than
+    // just the raw question).
+    const assistantHint = assistantContent
+      .split('\n')
+      .map((l) => l.replace(/^#+\s*/u, '').trim())
+      .find((l) => l.length > 10 && !l.startsWith('```') && !l.startsWith('|')) ?? '';
+    const combinedSource = assistantHint
+      ? `${userContent.trim()} ${assistantHint}`.trim()
+      : userContent.trim();
+    const nextTitle = resolveAutoSessionTitle(session.title, combinedSource, {
+      titleOverride: storageState?.title_override ?? null
+    });
+    if (nextTitle !== session.title) {
+      this.updateSession({ id: sessionId, title: nextTitle });
+    }
+  }
+
   renameSessionTitle(sessionId: string, title: string, options: { persistOverride: boolean }) {
     const session = this.getSession(sessionId);
     if (!session) {

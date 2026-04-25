@@ -1,4 +1,4 @@
-import { Box, Table, Tabs, Text, VStack } from '@chakra-ui/react';
+import { Box, Flex, HStack, Table, Tabs, Text, VStack } from '@chakra-ui/react';
 import type { ToolHistoryResponse, ToolsResponse, ToolsTab } from '@hermes-recipes/protocol';
 import { StatusPill } from '../atoms/StatusPill';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
@@ -47,6 +47,46 @@ function ToolsIcon() {
   );
 }
 
+function ToolCard({ tool }: { tool: ToolsResponse['items'][number] }) {
+  const { label: approvalLabel, slot: approvalSlot } = formatApprovalModel(tool.approvalModel);
+  return (
+    <Box
+      rounded="8px"
+      border="1px solid var(--border-subtle)"
+      bg="var(--surface-elevated)"
+      px="4"
+      py="3"
+      boxShadow="var(--shadow-xs)"
+    >
+      <VStack align="stretch" gap="2">
+        <VStack align="start" gap="0.5">
+          <Text fontSize="sm" fontWeight="650" color="var(--text-primary)" fontFamily="ui-monospace, monospace">
+            {tool.name}
+          </Text>
+          {tool.description ? (
+            <Text fontSize="xs" color="var(--text-secondary)" lineClamp={2} lineHeight="1.5">
+              {tool.description}
+            </Text>
+          ) : null}
+        </VStack>
+        <Flex gap="2" wrap="wrap" align="center">
+          <StatusPill label={tool.status} />
+          <span className={`approval-badge approval-badge--${approvalSlot}`}>{approvalLabel}</span>
+          {tool.source ? (
+            <span className="skill-chip">{tool.source}</span>
+          ) : null}
+          {tool.restrictions[0] ? (
+            <span className="skill-chip">{tool.restrictions[0]}</span>
+          ) : null}
+        </Flex>
+        {tool.capabilities.length > 0 ? (
+          <CapabilityChips capabilities={tool.capabilities} />
+        ) : null}
+      </VStack>
+    </Box>
+  );
+}
+
 export function ToolsPage({
   response,
   loading,
@@ -71,7 +111,7 @@ export function ToolsPage({
   onToolHistoryPageChange: (page: number) => void;
 }) {
   return (
-    <VStack align="stretch" h="100%" minH={0} gap="4">
+    <VStack align="stretch" h="100%" minH={0} gap="3" px={{ base: '3', lg: '4' }} pt={{ base: '2', lg: '3' }}>
       {error ? <ErrorBanner title="Tools refresh failed" detail={error} /> : null}
 
       <Tabs.Root
@@ -97,8 +137,8 @@ export function ToolsPage({
           p="1"
           w="fit-content"
         >
-          <Tabs.Trigger value="all" fontSize="sm">All Tools</Tabs.Trigger>
-          <Tabs.Trigger value="history" fontSize="sm">Tool History</Tabs.Trigger>
+          <Tabs.Trigger value="all" fontSize="xs" px="3">All Tools</Tabs.Trigger>
+          <Tabs.Trigger value="history" fontSize="xs" px="3">Tool History</Tabs.Trigger>
           <Tabs.Indicator />
         </Tabs.List>
 
@@ -121,70 +161,80 @@ export function ToolsPage({
               </Text>
             </Box>
 
-            <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
-              {!response ? (
-                <Box p="4">
-                  <EmptyStateCard
-                    icon={<ToolsIcon />}
-                    title={loading ? 'Loading tools…' : 'No tools reported'}
-                    detail="Reading Hermes and bridge tool capabilities."
-                  />
-                </Box>
-              ) : (
-                <Table.ScrollArea data-testid="tools-table-scroll" h="100%">
-                  <Table.Root size="sm" variant="outline">
-                    <Table.Header>
-                      <Table.Row>
-                        <Table.ColumnHeader>Tool</Table.ColumnHeader>
-                        <Table.ColumnHeader>Source</Table.ColumnHeader>
-                        <Table.ColumnHeader>Capabilities</Table.ColumnHeader>
-                        <Table.ColumnHeader>Status</Table.ColumnHeader>
-                        <Table.ColumnHeader>Approval</Table.ColumnHeader>
-                        <Table.ColumnHeader>Restrictions</Table.ColumnHeader>
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {response.items.map((tool) => (
-                        <Table.Row key={tool.id}>
-                          <Table.Cell>
-                            <Text
-                              fontSize="sm"
-                              fontWeight="650"
-                              color="var(--text-primary)"
-                              fontFamily="ui-monospace, monospace"
-                            >
-                              {tool.name}
-                            </Text>
-                            {tool.description ? (
-                              <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineClamp={2} lineHeight="1.5">
-                                {tool.description}
-                              </Text>
-                            ) : null}
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Text fontSize="xs" color="var(--text-secondary)">{tool.source}</Text>
-                          </Table.Cell>
-                          <Table.Cell>
-                            <CapabilityChips capabilities={tool.capabilities} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <StatusPill label={tool.status} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <ApprovalBadge raw={tool.approvalModel} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Text fontSize="xs" color="var(--text-secondary)">
-                              {tool.restrictions[0] ?? '—'}
-                            </Text>
-                          </Table.Cell>
+            {!response ? (
+              <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)" p="4">
+                <EmptyStateCard
+                  icon={<ToolsIcon />}
+                  title={loading ? 'Loading tools…' : 'No tools reported'}
+                  detail="Reading Hermes and bridge tool capabilities."
+                />
+              </Box>
+            ) : (
+              <>
+                {/* Desktop table */}
+                <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)" display={{ base: 'none', md: 'block' }}>
+                  <Table.ScrollArea data-testid="tools-table-scroll" h="100%">
+                    <Table.Root size="sm" variant="outline">
+                      <Table.Header>
+                        <Table.Row>
+                          <Table.ColumnHeader>Tool</Table.ColumnHeader>
+                          <Table.ColumnHeader>Source</Table.ColumnHeader>
+                          <Table.ColumnHeader>Capabilities</Table.ColumnHeader>
+                          <Table.ColumnHeader>Status</Table.ColumnHeader>
+                          <Table.ColumnHeader>Approval</Table.ColumnHeader>
+                          <Table.ColumnHeader>Restrictions</Table.ColumnHeader>
                         </Table.Row>
-                      ))}
-                    </Table.Body>
-                  </Table.Root>
-                </Table.ScrollArea>
-              )}
-            </Box>
+                      </Table.Header>
+                      <Table.Body>
+                        {response.items.map((tool) => (
+                          <Table.Row key={tool.id}>
+                            <Table.Cell>
+                              <Text
+                                fontSize="sm"
+                                fontWeight="650"
+                                color="var(--text-primary)"
+                                fontFamily="ui-monospace, monospace"
+                              >
+                                {tool.name}
+                              </Text>
+                              {tool.description ? (
+                                <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineClamp={2} lineHeight="1.5">
+                                  {tool.description}
+                                </Text>
+                              ) : null}
+                            </Table.Cell>
+                            <Table.Cell>
+                              <Text fontSize="xs" color="var(--text-secondary)">{tool.source}</Text>
+                            </Table.Cell>
+                            <Table.Cell>
+                              <CapabilityChips capabilities={tool.capabilities} />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <StatusPill label={tool.status} />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <ApprovalBadge raw={tool.approvalModel} />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <Text fontSize="xs" color="var(--text-secondary)">
+                                {tool.restrictions[0] ?? '—'}
+                              </Text>
+                            </Table.Cell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table.Root>
+                  </Table.ScrollArea>
+                </Box>
+
+                {/* Mobile cards */}
+                <VStack align="stretch" gap="3" display={{ base: 'flex', md: 'none' }}>
+                  {response.items.map((tool) => (
+                    <ToolCard key={tool.id} tool={tool} />
+                  ))}
+                </VStack>
+              </>
+            )}
           </VStack>
         </Tabs.Content>
 

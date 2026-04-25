@@ -1,20 +1,21 @@
 import { useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Box, Button, Flex, HStack, Input, ScrollArea, Text, VStack, chakra } from '@chakra-ui/react';
+import {
+  Box, Button, Drawer, Flex, HStack, Input, Portal, ScrollArea, Spinner, Text, VStack, chakra
+} from '@chakra-ui/react';
 import type { AppPage, Profile, Session } from '@hermes-recipes/protocol';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
 import { ErrorBanner } from '../molecules/ErrorBanner';
-import { ProfileSelector } from '../molecules/ProfileSelector';
 import { SessionRow } from '../molecules/SessionRow';
 import { SessionRenameDialog } from '../molecules/SessionRenameDialog';
 import { BrandLockup } from '../atoms/BrandLockup';
 
-type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'tools' | 'skills' | 'settings' | 'new-session' | 'collapse' | 'expand' | 'search';
+type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'tools' | 'skills' | 'settings' | 'new-session' | 'collapse' | 'expand' | 'search' | 'gear' | 'plus' | 'trash' | 'user';
 
 /* Primary nav (top of utility section) */
 const primaryNav: Array<{ page: AppPage; label: string; icon: SidebarIconName; shortcut?: string }> = [
-  { page: 'recipes', label: 'Recipes', icon: 'recipes', shortcut: '⌘R' },
-  { page: 'sessions', label: 'All sessions', icon: 'sessions', shortcut: '⌘⇧S' }
+  { page: 'sessions', label: 'All sessions', icon: 'sessions', shortcut: '⌘⇧S' },
+  { page: 'recipes', label: 'Recipes', icon: 'recipes', shortcut: '⌘R' }
 ];
 
 /* Secondary nav (bottom utility) */
@@ -27,6 +28,13 @@ const secondaryNav: Array<{ page: AppPage; label: string; icon: SidebarIconName 
 
 const navItems = [...primaryNav, ...secondaryNav];
 
+export type ProfileMetrics = {
+  profileId: string;
+  sessionCount: number;
+  messageCount: number;
+  recipeCount: number;
+};
+
 export function Sidebar({
   profiles,
   activeProfileId,
@@ -34,13 +42,17 @@ export function Sidebar({
   recentSessions,
   activePage,
   collapsed,
+  drawerMode,
+  profileMetrics,
   onCollapsedChange,
   onProfileChange,
   onCreateSession,
   onOpenSession,
   onOpenPage,
   onRenameSession,
-  onDeleteSession
+  onDeleteSession,
+  onCreateProfile,
+  onDeleteProfile
 }: {
   profiles: Profile[];
   activeProfileId: string | null;
@@ -48,6 +60,8 @@ export function Sidebar({
   recentSessions: Session[];
   activePage: AppPage;
   collapsed: boolean;
+  drawerMode?: boolean;
+  profileMetrics?: ProfileMetrics[];
   onCollapsedChange: (collapsed: boolean) => Promise<void> | void;
   onProfileChange: (profileId: string) => void;
   onCreateSession: () => void;
@@ -55,6 +69,8 @@ export function Sidebar({
   onOpenPage: (page: AppPage) => void;
   onRenameSession: (sessionId: string, title: string) => Promise<void> | void;
   onDeleteSession: (sessionId: string) => Promise<void> | void;
+  onCreateProfile?: (name: string) => Promise<void> | void;
+  onDeleteProfile?: (profileId: string) => Promise<void> | void;
 }) {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -62,6 +78,7 @@ export function Sidebar({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [sessionSearch, setSessionSearch] = useState('');
+  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
 
   const activeProfile = useMemo(
     () => profiles.find((p) => p.id === activeProfileId) ?? null,
@@ -111,19 +128,19 @@ export function Sidebar({
     <>
       <Flex
         direction="column"
-        width={{ base: '100%', lg: sidebarWidth }}
-        minWidth={{ base: '100%', lg: sidebarWidth }}
-        maxWidth={{ base: '100%', lg: sidebarWidth }}
+        width={drawerMode ? '100%' : { base: '100%', lg: sidebarWidth }}
+        minWidth={drawerMode ? '0' : { base: '100%', lg: sidebarWidth }}
+        maxWidth={drawerMode ? '100%' : { base: '100%', lg: sidebarWidth }}
         flexShrink={0}
-        height={{ base: '34dvh', lg: '100dvh' }}
-        minHeight={{ base: '200px', lg: '0' }}
-        maxHeight={{ base: '34dvh', lg: 'none' }}
+        height={drawerMode ? '100dvh' : { base: '34dvh', lg: '100dvh' }}
+        minHeight={drawerMode ? '0' : { base: '200px', lg: '0' }}
+        maxHeight={drawerMode ? 'none' : { base: '34dvh', lg: 'none' }}
         bg="var(--sidebar-bg)"
         minH={0}
         overflow="hidden"
         overflowX="hidden"
         transition="width 220ms cubic-bezier(0.4, 0, 0.2, 1), min-width 220ms cubic-bezier(0.4, 0, 0.2, 1), max-width 220ms cubic-bezier(0.4, 0, 0.2, 1)"
-        borderRight={{ base: 'none', lg: '1px solid var(--border-subtle)' }}
+        borderRight={drawerMode ? 'none' : { base: 'none', lg: '1px solid var(--border-subtle)' }}
       >
         {collapsed ? (
           /* ── Collapsed: icon strip ── */
@@ -201,49 +218,92 @@ export function Sidebar({
         ) : (
           /* ── Expanded layout ── */
           <Flex direction="column" h="100%">
-            {/* Header */}
-            <Box px="3" pt="3" pb="2" flexShrink={0}>
-              <HStack justify="space-between" align="center" mb="3">
-                <BrandLockup />
-                <Button
-                  variant="ghost"
-                  w="7" h="7" minW="0" px="0" rounded="7px"
-                  color="var(--text-muted)"
-                  _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-                  title="Collapse sidebar"
-                  aria-label="Collapse sidebar"
-                  onClick={() => void onCollapsedChange(true)}
-                >
-                  <SidebarIcon name="collapse" />
-                </Button>
-              </HStack>
-
-              <Button
-                justifyContent="start"
-                variant="ghost"
-                w="100%" h="8" minH="0" px="2" rounded="8px"
-                color="var(--text-muted)"
-                fontSize="xs" fontWeight="500"
-                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-                onClick={onCreateSession}
-                title="New session (⌘N)"
-                aria-label="New session"
-              >
-                <HStack gap="2" w="100%">
-                  <SidebarIcon name="new-session" />
-                  <Text>New session</Text>
-                  <Box ml="auto" fontSize="10px" fontWeight="400" opacity={0.4}>⌘N</Box>
+            {/* Header — hidden in drawerMode (outer drawer provides branding/close) */}
+            {!drawerMode ? (
+              <Box px="3" pt="3" pb="2" flexShrink={0}>
+                <HStack justify="space-between" align="center" mb="3">
+                  <BrandLockup />
+                  <Button
+                    variant="ghost"
+                    w="7" h="7" minW="0" px="0" rounded="7px"
+                    color="var(--text-muted)"
+                    _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                    title="Collapse sidebar"
+                    aria-label="Collapse sidebar"
+                    onClick={() => void onCollapsedChange(true)}
+                  >
+                    <SidebarIcon name="collapse" />
+                  </Button>
                 </HStack>
-              </Button>
 
-              {actionError ? (
-                <Box mt="2">
-                  <ErrorBanner title="Session update failed" detail={actionError} />
-                </Box>
-              ) : null}
-            </Box>
+                {/* Profile bar */}
+                <ProfileBar
+                  profile={activeProfile}
+                  onGearClick={() => setProfileDrawerOpen(true)}
+                />
 
-            {/* Body: sessions list + bottom nav — data-testid covers both for tests */}
+                <Button
+                  justifyContent="start"
+                  variant="ghost"
+                  w="100%" h="8" minH="0" px="2" rounded="8px"
+                  color="var(--text-muted)"
+                  fontSize="xs" fontWeight="500"
+                  mt="1.5"
+                  _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                  onClick={onCreateSession}
+                  title="New session (⌘N)"
+                  aria-label="New session"
+                >
+                  <HStack gap="2" w="100%">
+                    <SidebarIcon name="new-session" />
+                    <Text>New session</Text>
+                    <Box ml="auto" fontSize="10px" fontWeight="400" opacity={0.4}>⌘N</Box>
+                  </HStack>
+                </Button>
+
+                {actionError ? (
+                  <Box mt="2">
+                    <ErrorBanner title="Session update failed" detail={actionError} />
+                  </Box>
+                ) : null}
+              </Box>
+            ) : (
+              <Box px="3" pt="3" pb="2" flexShrink={0}>
+                {/* Profile bar in drawer mode */}
+                <ProfileBar
+                  profile={activeProfile}
+                  onGearClick={() => setProfileDrawerOpen(true)}
+                  mb="2"
+                />
+                <Button
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  gap="2"
+                  w="100%"
+                  h="9"
+                  rounded="8px"
+                  bg="var(--accent)"
+                  color="var(--accent-contrast)"
+                  fontSize="sm"
+                  fontWeight="600"
+                  _hover={{ bg: 'var(--accent-strong)' }}
+                  onClick={onCreateSession}
+                  title="New session"
+                  aria-label="New session"
+                >
+                  <SidebarIcon name="new-session" />
+                  <Text as="span">New session</Text>
+                </Button>
+                {actionError ? (
+                  <Box mt="2">
+                    <ErrorBanner title="Session update failed" detail={actionError} />
+                  </Box>
+                ) : null}
+              </Box>
+            )}
+
+            {/* Body: sessions list + bottom nav */}
             <Flex
               data-testid="sidebar-scroll"
               direction="column"
@@ -253,7 +313,6 @@ export function Sidebar({
             >
               {/* Sessions */}
               <Flex direction="column" flex="1" minH={0}>
-                {/* Label + search */}
                 <Box px="3" pb="1" flexShrink={0}>
                   <Text
                     fontSize="11px"
@@ -337,14 +396,15 @@ export function Sidebar({
                       shortcut={item.shortcut}
                       active={activePage === item.page}
                       onClick={() => onOpenPage(item.page)}
+                      large={drawerMode}
                     />
                   ))}
                 </VStack>
 
                 <Box h="1px" bg="var(--border-subtle)" mx="1" mb="2" opacity={0.5} />
 
-                {/* Secondary nav - more muted */}
-                <VStack align="stretch" gap="0.5" mb="3">
+                {/* Secondary nav */}
+                <VStack align="stretch" gap="0.5" mb="2">
                   {secondaryNav.map((item) => (
                     <NavButton
                       key={item.page}
@@ -353,24 +413,27 @@ export function Sidebar({
                       active={activePage === item.page}
                       onClick={() => onOpenPage(item.page)}
                       secondary
+                      large={drawerMode}
                     />
                   ))}
                 </VStack>
-
-                {/* Profile selector at very bottom */}
-                <Box px="1">
-                  <ProfileSelector
-                    profiles={profiles}
-                    activeProfileId={activeProfileId}
-                    onChange={onProfileChange}
-                    compact
-                  />
-                </Box>
               </Box>
             </Flex>
           </Flex>
         )}
       </Flex>
+
+      {/* Profile management drawer */}
+      <ProfileManagementDrawer
+        open={profileDrawerOpen}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        profileMetrics={profileMetrics}
+        onClose={() => setProfileDrawerOpen(false)}
+        onProfileChange={(id) => { onProfileChange(id); setProfileDrawerOpen(false); }}
+        onCreateProfile={onCreateProfile}
+        onDeleteProfile={onDeleteProfile}
+      />
 
       {selectedSession ? (
         <>
@@ -402,13 +465,334 @@ export function Sidebar({
   );
 }
 
+/* ── ProfileBar ── */
+function ProfileBar({
+  profile,
+  onGearClick,
+  mb
+}: {
+  profile: Profile | null;
+  onGearClick: () => void;
+  mb?: string;
+}) {
+  const badge =
+    profile?.name?.slice(0, 2).toUpperCase() ??
+    profile?.id?.slice(0, 2).toUpperCase() ??
+    'HM';
+
+  return (
+    <HStack
+      gap="2"
+      px="1"
+      py="1"
+      rounded="8px"
+      mb={mb}
+      _hover={{ bg: 'var(--surface-hover)' }}
+      transition="background 120ms ease"
+      cursor="default"
+    >
+      <Flex
+        align="center" justify="center"
+        w="6" h="6" rounded="full" flexShrink={0}
+        bg="var(--accent)"
+        color="var(--accent-contrast)"
+        fontWeight="700"
+        fontSize="10px"
+      >
+        {badge}
+      </Flex>
+      <Text
+        flex="1"
+        fontSize="xs"
+        fontWeight="600"
+        color="var(--text-primary)"
+        overflow="hidden"
+        textOverflow="ellipsis"
+        whiteSpace="nowrap"
+        lineHeight="1"
+      >
+        {profile?.id ?? 'No profile'}
+      </Text>
+      <Button
+        variant="ghost"
+        w="6" h="6" minW="0" px="0" rounded="6px"
+        flexShrink={0}
+        color="var(--text-muted)"
+        _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
+        title="Manage profiles"
+        aria-label="Manage profiles"
+        onClick={onGearClick}
+      >
+        <SidebarIcon name="gear" size="sm" />
+      </Button>
+    </HStack>
+  );
+}
+
+/* ── ProfileManagementDrawer ── */
+function ProfileManagementDrawer({
+  open,
+  profiles,
+  activeProfileId,
+  profileMetrics,
+  onClose,
+  onProfileChange,
+  onCreateProfile,
+  onDeleteProfile
+}: {
+  open: boolean;
+  profiles: Profile[];
+  activeProfileId: string | null;
+  profileMetrics?: ProfileMetrics[];
+  onClose: () => void;
+  onProfileChange: (id: string) => void;
+  onCreateProfile?: (name: string) => Promise<void> | void;
+  onDeleteProfile?: (profileId: string) => Promise<void> | void;
+}) {
+  const [newProfileName, setNewProfileName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const metricsMap = useMemo(
+    () => new Map((profileMetrics ?? []).map((m) => [m.profileId, m])),
+    [profileMetrics]
+  );
+
+  async function handleCreate() {
+    const name = newProfileName.trim();
+    if (!name) return;
+    if (!onCreateProfile) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await onCreateProfile(name);
+      setNewProfileName('');
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create profile.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete(profileId: string) {
+    if (!onDeleteProfile) return;
+    setDeletingId(profileId);
+    setDeleteError(null);
+    try {
+      await onDeleteProfile(profileId);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete profile.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <Drawer.Root open={open} onOpenChange={(e) => { if (!e.open) onClose(); }} placement="start" size="xs">
+      <Portal>
+        <Drawer.Backdrop />
+        <Drawer.Positioner>
+          <Drawer.Content bg="var(--surface-1)" borderRight="1px solid var(--border-subtle)">
+            <Drawer.Header borderBottom="1px solid var(--border-subtle)" pb="3">
+              <Drawer.Title fontSize="sm" fontWeight="600" color="var(--text-primary)">
+                Profiles
+              </Drawer.Title>
+              <Drawer.CloseTrigger asChild>
+                <Button
+                  variant="ghost"
+                  w="7" h="7" minW="0" px="0" rounded="6px"
+                  color="var(--text-muted)"
+                  _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                  aria-label="Close"
+                >
+                  ✕
+                </Button>
+              </Drawer.CloseTrigger>
+            </Drawer.Header>
+
+            <Drawer.Body px="3" py="3" overflowY="auto">
+              <VStack align="stretch" gap="2">
+                {deleteError ? (
+                  <ErrorBanner title="Delete failed" detail={deleteError} />
+                ) : null}
+
+                {profiles.map((profile) => {
+                  const metrics = metricsMap.get(profile.id);
+                  const isActive = profile.id === activeProfileId;
+                  const isDeleting = deletingId === profile.id;
+
+                  return (
+                    <Box
+                      key={profile.id}
+                      rounded="10px"
+                      border="1px solid"
+                      borderColor={isActive ? 'var(--accent)' : 'var(--border-subtle)'}
+                      bg={isActive ? 'var(--surface-selected)' : 'var(--surface-2)'}
+                      p="3"
+                    >
+                      <HStack align="start" gap="2" mb={metrics ? '2' : '0'}>
+                        <Flex
+                          align="center" justify="center"
+                          w="7" h="7" rounded="full" flexShrink={0}
+                          bg={isActive ? 'var(--accent)' : 'var(--surface-hover)'}
+                          color={isActive ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                          fontWeight="700"
+                          fontSize="11px"
+                          mt="0.5"
+                        >
+                          {profile.id.slice(0, 2).toUpperCase()}
+                        </Flex>
+
+                        <Box flex="1" minW={0}>
+                          <Text fontSize="xs" fontWeight="600" color="var(--text-primary)" lineHeight="1.3">
+                            {profile.id}
+                            {isActive ? (
+                              <Text as="span" ml="1.5" fontSize="10px" color="var(--accent)" fontWeight="500">
+                                active
+                              </Text>
+                            ) : null}
+                          </Text>
+                          {profile.model ? (
+                            <Text fontSize="10px" color="var(--text-muted)" lineHeight="1.3" mt="0.5" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                              {profile.model}
+                            </Text>
+                          ) : null}
+                        </Box>
+
+                        <HStack gap="1" flexShrink={0}>
+                          {!isActive && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              h="6"
+                              px="2"
+                              fontSize="11px"
+                              color="var(--text-secondary)"
+                              _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                              onClick={() => onProfileChange(profile.id)}
+                            >
+                              Use
+                            </Button>
+                          )}
+                          {!isActive && onDeleteProfile && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              h="6"
+                              w="6"
+                              minW="0"
+                              px="0"
+                              color="var(--text-muted)"
+                              _hover={{ bg: 'var(--surface-hover)', color: '#dc2626' }}
+                              disabled={isDeleting}
+                              onClick={() => void handleDelete(profile.id)}
+                              aria-label={`Delete profile ${profile.id}`}
+                            >
+                              {isDeleting ? <Spinner size="xs" /> : <SidebarIcon name="trash" />}
+                            </Button>
+                          )}
+                        </HStack>
+                      </HStack>
+
+                      {metrics ? (
+                        <HStack gap="3" px="1">
+                          <MetricChip value={metrics.sessionCount} label="chats" />
+                          <MetricChip value={metrics.messageCount} label="messages" />
+                          <MetricChip value={metrics.recipeCount} label="spaces" />
+                        </HStack>
+                      ) : null}
+                    </Box>
+                  );
+                })}
+
+                {/* Create new profile */}
+                {onCreateProfile ? (
+                  <Box
+                    rounded="10px"
+                    border="1px dashed var(--border-subtle)"
+                    p="3"
+                    mt="1"
+                  >
+                    <Text fontSize="xs" fontWeight="600" color="var(--text-secondary)" mb="2">
+                      New profile
+                    </Text>
+                    {createError ? (
+                      <Box mb="2">
+                        <ErrorBanner title="Create failed" detail={createError} />
+                      </Box>
+                    ) : null}
+                    <HStack gap="2">
+                      <Input
+                        value={newProfileName}
+                        onChange={(e) => setNewProfileName(e.currentTarget.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate(); }}
+                        placeholder="profile-name"
+                        size="sm"
+                        h="7"
+                        fontSize="xs"
+                        rounded="6px"
+                        bg="var(--surface-hover)"
+                        border="1px solid var(--border-subtle)"
+                        color="var(--text-primary)"
+                        _placeholder={{ color: 'var(--text-muted)' }}
+                        _focus={{ boxShadow: 'var(--focus-ring)' }}
+                        flex="1"
+                        disabled={creating}
+                      />
+                      <Button
+                        h="7"
+                        px="3"
+                        fontSize="xs"
+                        fontWeight="500"
+                        rounded="6px"
+                        bg="var(--accent)"
+                        color="var(--accent-contrast)"
+                        _hover={{ bg: 'var(--accent-strong)' }}
+                        disabled={!newProfileName.trim() || creating}
+                        onClick={() => void handleCreate()}
+                        flexShrink={0}
+                      >
+                        {creating ? <Spinner size="xs" /> : 'Create'}
+                      </Button>
+                    </HStack>
+                    <Text fontSize="10px" color="var(--text-muted)" mt="1.5">
+                      Clones config from active profile. Lowercase, alphanumeric.
+                    </Text>
+                  </Box>
+                ) : null}
+              </VStack>
+            </Drawer.Body>
+          </Drawer.Content>
+        </Drawer.Positioner>
+      </Portal>
+    </Drawer.Root>
+  );
+}
+
+function MetricChip({ value, label }: { value: number; label: string }) {
+  return (
+    <HStack gap="1" align="baseline">
+      <Text fontSize="xs" fontWeight="700" color="var(--text-primary)" lineHeight="1">
+        {value.toLocaleString()}
+      </Text>
+      <Text fontSize="10px" color="var(--text-muted)" lineHeight="1">
+        {label}
+      </Text>
+    </HStack>
+  );
+}
+
+/* ── NavButton ── */
 function NavButton({
   label,
   icon,
   shortcut,
   active,
   onClick,
-  secondary = false
+  secondary = false,
+  large = false
 }: {
   label: string;
   icon: SidebarIconName;
@@ -416,41 +800,53 @@ function NavButton({
   active: boolean;
   onClick: () => void;
   secondary?: boolean;
+  large?: boolean;
 }) {
   return (
     <Button
-      justifyContent="start"
+      display="flex"
+      alignItems="center"
+      justifyContent="flex-start"
       variant="ghost"
       width="100%"
       minW={0}
       rounded="7px"
-      px="2"
-      h="7"
+      px={large ? '3' : '2'}
+      gap={large ? '3' : '2'}
+      h={large ? '10' : '7'}
       bg={active ? 'var(--surface-selected)' : 'transparent'}
       color={active ? 'var(--text-primary)' : secondary ? 'var(--text-muted)' : 'var(--text-secondary)'}
       fontWeight={active ? '500' : '400'}
-      fontSize="xs"
+      fontSize={large ? 'sm' : 'xs'}
       overflow="hidden"
+      textAlign="left"
       aria-label={label}
       _hover={{ bg: active ? 'var(--surface-selected)' : 'var(--surface-hover)', color: 'var(--text-primary)' }}
       onClick={onClick}
     >
-      <HStack gap="2" w="100%">
-        <Box color={active ? 'var(--text-primary)' : 'var(--text-muted)'} flexShrink={0}>
-          <SidebarIcon name={icon} />
-        </Box>
-        <Text flex="1" minW={0} overflow="hidden" textOverflow="ellipsis">{label}</Text>
-        {shortcut ? (
-          <Text fontSize="10px" color="var(--text-muted)" fontWeight="400" opacity={0} _groupHover={{ opacity: 1 }} flexShrink={0}>
-            {shortcut}
-          </Text>
-        ) : null}
-      </HStack>
+      <Box
+        as="span"
+        display="inline-flex"
+        alignItems="center"
+        flexShrink={0}
+        color={active ? 'var(--text-primary)' : 'var(--text-muted)'}
+      >
+        <SidebarIcon name={icon} size={large ? 'md' : 'sm'} />
+      </Box>
+      <Text as="span" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" lineHeight="1">
+        {label}
+      </Text>
+      {shortcut ? (
+        <Text as="span" fontSize={large ? 'xs' : '10px'} color="var(--text-muted)" fontWeight="400" opacity={0.5} flexShrink={0}>
+          {shortcut}
+        </Text>
+      ) : null}
     </Button>
   );
 }
 
-function SidebarIcon({ name }: { name: SidebarIconName }) {
+/* ── SidebarIcon ── */
+function SidebarIcon({ name, size = 'sm' }: { name: SidebarIconName; size?: 'sm' | 'md' }) {
   const Svg = chakra('svg');
   const content = (() => {
     switch (name) {
@@ -495,6 +891,28 @@ function SidebarIcon({ name }: { name: SidebarIconName }) {
             <path d="M10.5 10.5L13.5 13.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </>
         );
+      case 'gear':
+        return (
+          <>
+            <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M8 3v1.5M8 11.5V13M13 8h-1.5M4.5 8H3M11.2 4.8l-1 1M5.8 9.2l-1 1M11.2 11.2l-1-1M5.8 6.8l-1-1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </>
+        );
+      case 'plus':
+        return <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />;
+      case 'trash':
+        return (
+          <>
+            <path d="M3.5 5h9M5.5 5V3.5h5V5M6.5 7.5v5M9.5 7.5v5M4.5 5l.7 8h5.6l.7-8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        );
+      case 'user':
+        return (
+          <>
+            <circle cx="8" cy="6" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M2.5 13.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </>
+        );
       case 'collapse':
         return <path d="M10.5 3.5 5.5 8l5 4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />;
       case 'expand':
@@ -503,7 +921,7 @@ function SidebarIcon({ name }: { name: SidebarIconName }) {
     }
   })();
   return (
-    <Svg viewBox="0 0 16 16" boxSize="3.5" color="currentColor" aria-hidden="true" flexShrink={0}>
+    <Svg viewBox="0 0 16 16" boxSize={size === 'md' ? '5' : '3.5'} color="currentColor" aria-hidden="true" flexShrink={0}>
       {content}
     </Svg>
   );

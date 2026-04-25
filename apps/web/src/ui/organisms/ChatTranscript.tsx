@@ -35,6 +35,8 @@ export const ChatTranscript = memo(function ChatTranscript({
   onMessageClick?: (message: ChatMessage) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const didInitialScrollRef = useRef(false);
+  const prevLoadingRef = useRef(loading);
   const visibleMessages = useMemo(
     () => messages.filter((message) => message.visibility === 'transcript' && message.kind !== 'technical'),
     [messages]
@@ -46,7 +48,18 @@ export const ChatTranscript = memo(function ChatTranscript({
       return;
     }
 
-    // Only auto-scroll when the user is already near the bottom (within 150px).
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = loading;
+
+    // Force scroll on first render and whenever a session finishes loading.
+    // This covers both initial mount and switching between sessions.
+    if (!didInitialScrollRef.current || (wasLoading && !loading)) {
+      didInitialScrollRef.current = true;
+      viewport.scrollTop = viewport.scrollHeight;
+      return;
+    }
+
+    // During live streaming, only scroll if the user is already near the bottom.
     // This lets users scroll up to read history without being yanked back down.
     const distFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     if (distFromBottom < 150) {
@@ -337,9 +350,15 @@ function TranscriptBubble({
     });
   }
 
-  /* ── Copy button — rendered but opacity controlled by .msg-outer:hover ── */
+  /* ── Copy button — top-right corner, revealed on hover ── */
   const CopyBtn = copyContent ? (
-    <Box className="msg-actions" display="inline-flex" mt="1">
+    <Box
+      className="msg-actions"
+      position="absolute"
+      top="3px"
+      right="4px"
+      zIndex={1}
+    >
       <Button
         type="button"
         variant="ghost"
@@ -351,20 +370,23 @@ function TranscriptBubble({
         color="var(--text-muted)"
         fontSize="10px"
         fontWeight="400"
-        _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
+        bg="var(--surface-elevated)"
+        border="1px solid var(--border-subtle)"
+        boxShadow="var(--shadow-xs)"
+        _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
         onClick={handleCopy}
       >
-        {copied ? '✓ Copied' : 'Copy'}
+        {copied ? '✓' : 'Copy'}
       </Button>
     </Box>
   ) : null;
 
-  /* ── User message: right-aligned soft pill ── */
+  /* ── User message: right-aligned blue pill ── */
   if (isUser) {
     const inner = (
       <Box
         maxW="min(580px, 86%)"
-        bg={selected ? 'var(--surface-selected)' : 'var(--surface-2)'}
+        bg={selected ? 'var(--user-bubble-bg-selected)' : 'var(--user-bubble-bg)'}
         rounded="16px"
         roundedBottomRight="4px"
         px="3"
@@ -373,10 +395,11 @@ function TranscriptBubble({
         wordBreak="break-word"
         overflow="hidden"
         transition="background-color 150ms ease-in-out"
+        position="relative"
         style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
       >
-        {children}
         {CopyBtn}
+        {children}
       </Box>
     );
 
@@ -400,42 +423,55 @@ function TranscriptBubble({
     );
   }
 
-  /* ── Assistant message: open canvas ── */
+  /* ── Assistant message: left-aligned bubble ── */
   if (isAssistant) {
+    const bubble = (
+      <Box
+        maxW="min(620px, 88%)"
+        bg={selected ? 'var(--surface-selected)' : 'var(--surface-2)'}
+        rounded="16px"
+        roundedBottomLeft="4px"
+        px="3"
+        pt="2.5"
+        pb="2"
+        wordBreak="break-word"
+        overflow="hidden"
+        transition="background-color 150ms ease-in-out"
+        position="relative"
+        style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
+      >
+        {CopyBtn}
+        {children}
+      </Box>
+    );
+
     const inner = (
-      <HStack align="start" gap="3" w="100%" maxW="100%">
-        <Box flexShrink={0} mt="2px">
+      <HStack align="end" gap="2" w="100%">
+        <Box flexShrink={0} pb="1">
           <HermesAvatar size="sm" />
         </Box>
-        <Box flex="1" minW={0} overflow="hidden" wordBreak="break-word">
-          {children}
-          {CopyBtn}
-        </Box>
+        {bubble}
       </HStack>
     );
 
-    if (clickable) {
-      return (
-        <Box
-          className="msg-outer"
-          role="button"
-          tabIndex={0}
-          cursor="pointer"
-          rounded="10px"
-          px="2"
-          py="1.5"
-          mx="-2"
-          transition="background-color 150ms ease-in-out"
-          _hover={{ bg: 'var(--surface-hover)' }}
-          style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
-          onClick={onClick}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
-        >
-          {inner}
-        </Box>
-      );
-    }
-    return <Box className="msg-outer">{inner}</Box>;
+    return (
+      <Box
+        className="msg-outer"
+        display="flex"
+        justifyContent="flex-start"
+        {...(clickable ? {
+          role: 'button' as const,
+          tabIndex: 0,
+          cursor: 'pointer',
+          onClick,
+          onKeyDown: (e: ReactKeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
+          }
+        } : {})}
+      >
+        {inner}
+      </Box>
+    );
   }
 
   /* ── System / empty state: centered, barely there ── */

@@ -1,4 +1,5 @@
-import { Box, Button, HStack, Table, Text, VStack } from '@chakra-ui/react';
+import { Box, Flex, HStack, Table, Text, VStack } from '@chakra-ui/react';
+import { Button } from '@chakra-ui/react';
 import type { JobsResponse } from '@hermes-recipes/protocol';
 import { StatusPill } from '../atoms/StatusPill';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
@@ -20,6 +21,35 @@ function formatDate(dateString: string) {
     hour: 'numeric',
     minute: '2-digit'
   });
+}
+
+function JobCard({ job }: { job: JobsResponse['items'][number] }) {
+  return (
+    <Box
+      rounded="8px"
+      border="1px solid var(--border-subtle)"
+      bg="var(--surface-elevated)"
+      px="4"
+      py="3"
+      boxShadow="var(--shadow-xs)"
+    >
+      <VStack align="stretch" gap="2">
+        <VStack align="start" gap="0.5">
+          <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">{job.label}</Text>
+          {job.description ? (
+            <Text fontSize="xs" color="var(--text-secondary)" lineHeight="1.5">{job.description}</Text>
+          ) : null}
+        </VStack>
+        <Flex gap="2" wrap="wrap" align="center">
+          <StatusPill label={job.status} />
+          <span className="skill-chip" style={{ fontFamily: 'ui-monospace, monospace', fontSize: '11px' }}>{job.schedule}</span>
+        </Flex>
+        {job.nextRun ? (
+          <Text fontSize="xs" color="var(--text-muted)">Next: {job.nextRun}</Text>
+        ) : null}
+      </VStack>
+    </Box>
+  );
 }
 
 export function JobsPage({
@@ -81,65 +111,75 @@ export function JobsPage({
         <ErrorBanner title="Latest Hermes jobs error" detail={response.freshness.lastError} />
       ) : null}
 
-      <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
-        {!response ? (
-          <Box p="4">
-            <EmptyStateCard title="Loading jobs" detail="Reading Hermes cron state for the selected profile." />
-          </Box>
-        ) : response.items.length === 0 ? (
-          <Box p="4">
-            <EmptyStateCard
-              icon={<JobsIcon />}
-              title="No scheduled jobs"
-              detail="Hermes reported no cron jobs for the selected profile. Create a new session and ask Hermes to schedule a task."
-            />
-          </Box>
-        ) : (
-          <Table.ScrollArea data-testid="jobs-table-scroll" h="100%">
-            <Table.Root size="sm" variant="outline">
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeader>Job</Table.ColumnHeader>
-                  <Table.ColumnHeader>Schedule</Table.ColumnHeader>
-                  <Table.ColumnHeader>Status</Table.ColumnHeader>
-                  <Table.ColumnHeader>Next run</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {response.items.map((job) => (
-                  <Table.Row key={job.id}>
-                    <Table.Cell>
-                      <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
-                        {job.label}
-                      </Text>
-                      {job.description ? (
-                        <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineHeight="1.5">
-                          {job.description}
-                        </Text>
-                      ) : null}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text
-                        fontSize="xs"
-                        color="var(--text-secondary)"
-                        fontFamily="ui-monospace, monospace"
-                      >
-                        {job.schedule}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <StatusPill label={job.status} />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text fontSize="xs" color="var(--text-secondary)">{job.nextRun}</Text>
-                    </Table.Cell>
+      {!response ? (
+        <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)" p="4">
+          <EmptyStateCard title="Loading jobs" detail="Reading Hermes cron state for the selected profile." />
+        </Box>
+      ) : response.items.length === 0 ? (
+        <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)" p="4">
+          <EmptyStateCard
+            icon={<JobsIcon />}
+            title="No scheduled jobs"
+            detail="Hermes reported no cron jobs for the selected profile. Create a new session and ask Hermes to schedule a task."
+          />
+        </Box>
+      ) : (
+        <>
+          {/* Desktop table */}
+          <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)" display={{ base: 'none', md: 'block' }}>
+            <Table.ScrollArea data-testid="jobs-table-scroll" h="100%">
+              <Table.Root size="sm" variant="outline">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>Job</Table.ColumnHeader>
+                    <Table.ColumnHeader>Schedule</Table.ColumnHeader>
+                    <Table.ColumnHeader>Status</Table.ColumnHeader>
+                    <Table.ColumnHeader>Next run</Table.ColumnHeader>
                   </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Root>
-          </Table.ScrollArea>
-        )}
-      </Box>
+                </Table.Header>
+                <Table.Body>
+                  {response.items.map((job) => (
+                    <Table.Row key={job.id}>
+                      <Table.Cell>
+                        <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
+                          {job.label}
+                        </Text>
+                        {job.description ? (
+                          <Text fontSize="xs" color="var(--text-secondary)" mt="0.5" lineHeight="1.5">
+                            {job.description}
+                          </Text>
+                        ) : null}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text
+                          fontSize="xs"
+                          color="var(--text-secondary)"
+                          fontFamily="ui-monospace, monospace"
+                        >
+                          {job.schedule}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <StatusPill label={job.status} />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text fontSize="xs" color="var(--text-secondary)">{job.nextRun}</Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table.Root>
+            </Table.ScrollArea>
+          </Box>
+
+          {/* Mobile cards */}
+          <VStack align="stretch" gap="3" display={{ base: 'flex', md: 'none' }}>
+            {response.items.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </VStack>
+        </>
+      )}
     </VStack>
   );
 }

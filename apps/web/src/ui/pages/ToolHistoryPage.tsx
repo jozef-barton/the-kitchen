@@ -1,4 +1,4 @@
-import { Badge, Box, Button, HStack, Table, Tabs, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, HStack, Table, Tabs, Text, VStack } from '@chakra-ui/react';
 import type { RuntimeActivityHistoryEntry, ToolHistoryResponse } from '@hermes-recipes/protocol';
 import { StatusPill } from '../atoms/StatusPill';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
@@ -36,6 +36,61 @@ function activityKindPalette(kind: RuntimeActivityHistoryEntry['kind']) {
     default:
       return 'gray';
   }
+}
+
+function RuntimeActivityCard({ item }: { item: RuntimeActivityHistoryEntry }) {
+  return (
+    <Box
+      rounded="8px"
+      border="1px solid var(--border-subtle)"
+      bg="var(--surface-elevated)"
+      px="3.5"
+      py="3"
+      boxShadow="var(--shadow-xs)"
+    >
+      <VStack align="stretch" gap="2">
+        <Flex justify="space-between" align="start" gap="2" wrap="wrap">
+          <Badge colorPalette={activityKindPalette(item.kind)} flexShrink={0}>{activityKindLabel(item.kind)}</Badge>
+          <StatusPill label={item.state} />
+        </Flex>
+        <VStack align="start" gap="0.5">
+          <Text fontWeight="750" color="var(--text-primary)" fontSize="sm">{item.label}</Text>
+          <Text fontSize="xs" color="var(--text-secondary)">{item.command ?? item.detail ?? item.requestPreview ?? 'No detail recorded'}</Text>
+        </VStack>
+        <Flex gap="2" wrap="wrap" align="center">
+          {item.sessionTitle ?? item.sessionId ? (
+            <span className="skill-chip">{item.sessionTitle ?? item.sessionId}</span>
+          ) : null}
+          <Text fontSize="xs" color="var(--text-muted)">{new Date(item.timestamp).toLocaleString()}</Text>
+        </Flex>
+      </VStack>
+    </Box>
+  );
+}
+
+function ReviewedCard({ item }: { item: ToolHistoryResponse['items'][number] }) {
+  return (
+    <Box
+      rounded="8px"
+      border="1px solid var(--border-subtle)"
+      bg="var(--surface-elevated)"
+      px="3.5"
+      py="3"
+      boxShadow="var(--shadow-xs)"
+    >
+      <VStack align="stretch" gap="2">
+        <Flex justify="space-between" align="start" gap="2" wrap="wrap">
+          <StatusPill label={item.status} />
+          {item.profileId ? <span className="skill-chip">{item.profileId}</span> : null}
+        </Flex>
+        <VStack align="start" gap="0.5">
+          <Text fontWeight="750" color="var(--text-primary)" fontSize="sm">{item.summary}</Text>
+          <Text fontSize="xs" color="var(--text-secondary)">{item.command} {item.args.join(' ')}</Text>
+        </VStack>
+        <Text fontSize="xs" color="var(--text-muted)">{new Date(item.requestedAt).toLocaleString()}</Text>
+      </VStack>
+    </Box>
+  );
 }
 
 export function ToolHistoryPage({
@@ -83,9 +138,9 @@ export function ToolHistoryPage({
             '--tabs-trigger-radius': '8px'
           }}
         >
-          <Tabs.List rounded="8px" bg="var(--surface-2)" border="1px solid var(--border-subtle)" p="1" mb="3" flexShrink={0}>
-            <Tabs.Trigger value="runtime">Runtime activity ({runtimeCount})</Tabs.Trigger>
-            <Tabs.Trigger value="reviewed">Reviewed executions ({reviewedCount})</Tabs.Trigger>
+          <Tabs.List rounded="8px" bg="var(--surface-2)" border="1px solid var(--border-subtle)" p="1" mb="3" flexShrink={0} w="fit-content">
+            <Tabs.Trigger value="runtime" fontSize="xs" px="3">Activity ({runtimeCount})</Tabs.Trigger>
+            <Tabs.Trigger value="reviewed" fontSize="xs" px="3">Reviewed ({reviewedCount})</Tabs.Trigger>
             <Tabs.Indicator />
           </Tabs.List>
 
@@ -94,11 +149,13 @@ export function ToolHistoryPage({
               Tool, skill, command, and approval activity captured during chat requests.
             </Text>
 
-              {response.runtimeItems.length === 0 ? (
-                <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
-                  <Text color="var(--text-secondary)">No Hermes runtime tool or command activity has been persisted for this profile yet.</Text>
-                </Box>
-              ) : (
+            {response.runtimeItems.length === 0 ? (
+              <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
+                <Text color="var(--text-secondary)">No Hermes runtime tool or command activity has been persisted for this profile yet.</Text>
+              </Box>
+            ) : (
+              <>
+                {/* Desktop table */}
                 <Table.ScrollArea
                   data-testid="runtime-tool-history-table-scroll"
                   borderWidth="1px"
@@ -106,6 +163,7 @@ export function ToolHistoryPage({
                   rounded="8px"
                   flex="1"
                   minH={0}
+                  display={{ base: 'none', md: 'block' }}
                 >
                   <Table.Root size="sm" variant="outline">
                     <Table.Header>
@@ -147,7 +205,15 @@ export function ToolHistoryPage({
                     </Table.Body>
                   </Table.Root>
                 </Table.ScrollArea>
-              )}
+
+                {/* Mobile cards */}
+                <VStack align="stretch" gap="3" display={{ base: 'flex', md: 'none' }} overflowY="auto" flex="1" minH={0}>
+                  {response.runtimeItems.map((item) => (
+                    <RuntimeActivityCard key={item.id} item={item} />
+                  ))}
+                </VStack>
+              </>
+            )}
           </Tabs.Content>
 
           <Tabs.Content value="reviewed" flex="1" minH={0} display="flex" flexDirection="column" gap="2">
@@ -155,11 +221,13 @@ export function ToolHistoryPage({
               Explicitly approved bridge-reviewed commands and their outcomes.
             </Text>
 
-              {response.items.length === 0 ? (
-                <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
-                  <Text color="var(--text-secondary)">No reviewed bridge executions have been recorded for this profile yet.</Text>
-                </Box>
-              ) : (
+            {response.items.length === 0 ? (
+              <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
+                <Text color="var(--text-secondary)">No reviewed bridge executions have been recorded for this profile yet.</Text>
+              </Box>
+            ) : (
+              <>
+                {/* Desktop table */}
                 <Table.ScrollArea
                   data-testid="tool-history-table-scroll"
                   borderWidth="1px"
@@ -167,6 +235,7 @@ export function ToolHistoryPage({
                   rounded="8px"
                   flex="1"
                   minH={0}
+                  display={{ base: 'none', md: 'block' }}
                 >
                   <Table.Root size="sm" variant="outline">
                     <Table.Header>
@@ -200,13 +269,21 @@ export function ToolHistoryPage({
                     </Table.Body>
                   </Table.Root>
                 </Table.ScrollArea>
-              )}
+
+                {/* Mobile cards */}
+                <VStack align="stretch" gap="3" display={{ base: 'flex', md: 'none' }} overflowY="auto" flex="1" minH={0}>
+                  {response.items.map((item) => (
+                    <ReviewedCard key={item.id} item={item} />
+                  ))}
+                </VStack>
+              </>
+            )}
           </Tabs.Content>
         </Tabs.Root>
 
           <HStack justify="space-between">
             <Text color="var(--text-secondary)">
-              {runtimeCount} runtime entries · {reviewedCount} reviewed entries
+              {runtimeCount} runtime · {reviewedCount} reviewed
             </Text>
             <HStack gap="2">
               <ButtonLike onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}>

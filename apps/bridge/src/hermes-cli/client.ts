@@ -1665,7 +1665,7 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
 
   // Step-by-step instructions  →  step-by-step-instructions
   // "guide" excluded — too generic and causes false positives across domain-specific templates
-  if (/\b(how to|step by step|step-by-step|tutorial|walkthrough|set up|install|configure|deploy|getting started|quick start)\b/i.test(content)) {
+  if (/\b(how to|step by step|step-by-step|instructions?|tutorial|walkthrough|procedure|troubleshoot|set up|install|configure|deploy|getting started|quick start)\b/i.test(content)) {
     return {
       category: 'plan',
       preferredContentFormat: 'table',
@@ -1704,6 +1704,19 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     };
   }
 
+  // Retailer-specific product search — any query mentioning a specific online retailer or marketplace
+  // combined with a discovery verb should route to shopping-shortlist, not a plain text list.
+  if (
+    /\b(amazon|ebay|etsy|walmart|target|bestbuy|best\s+buy|wayfair|shopify|aliexpress)\b/i.test(content) &&
+    isDiscoveryIntent(content)
+  ) {
+    return {
+      category: 'shopping',
+      preferredContentFormat: 'card',
+      label: 'shopping results'
+    };
+  }
+
   // Generic shopping / comparison  →  shopping-shortlist
   if (
     /\b(compare|comparison|vs\.?|options|shortlist|candidates|shopping|buy|buying|products?|purchase|purchasing)\b/i.test(content)
@@ -1724,7 +1737,7 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
     /\b(backpack|bag|bags|wallet|purse|sunglasses|jewelry|supplement|protein|vitamins?)\b/i.test(content)
   ) {
     if (
-      /\b(some|for\s+(?:me|my|the|gym|running|work|summer|winter|training)|I\s+(?:wear|use|like|need|want|normally|usually)|normally\s+wear|usually\s+wear|looking\s+for|gift\s+for|under\s+\$?\d|around\s+\$?\d)\b/i.test(content)
+      /\b(some|for\s+(?:me|my|the|gym|running|work|summer|winter|training)|I\s+(?:wear|use|like|need|want|normally|usually)|normally\s+wear|usually\s+wear|looking\s+for|gift\s+for|under\s+\$?\d|around\s+\$?\d|find\s+me|show\s+me|get\s+me|recommend)\b/i.test(content)
     ) {
       return {
         category: 'shopping',
@@ -1732,6 +1745,20 @@ export function classifyStructuredRecipeIntent(content: string, hasRecipeContext
         label: 'shopping results'
       };
     }
+  }
+
+  // General "find me" product search — catches "find me X" and "show me X" patterns where X
+  // is likely a product or item, and falls through to shopping-shortlist.
+  if (
+    /\b(find\s+me|show\s+me|get\s+me|look\s+for|search\s+for)\b/i.test(content) &&
+    isDiscoveryIntent(content) &&
+    !/\b(restaurant|hotel|coffee|cafe|bar|brunch|dinner|lunch|flight|place|venue|job|email)\b/i.test(content)
+  ) {
+    return {
+      category: 'shopping',
+      preferredContentFormat: 'card',
+      label: 'shopping results'
+    };
   }
 
   // Research notebook  →  research-notebook
@@ -2125,6 +2152,7 @@ ${activeProfileInstruction}
 ${recipeInstruction}
 ${refreshInstruction}
 ${isSimpleRecipeWorkflowIntent(intentContent, Boolean(spaceContext)) ? 'Treat this as a single-step recipe action when possible. Do not expand into a longer autonomous workflow.' : ''}
+When your answer includes products, services, places, bookings, events, or anything a user might want to follow up on — include a direct link (URL) where the user can take action: a purchase link, a booking link, a listing, a review page, or a reference page. Only include links you have verified are real; do not fabricate URLs.
 Return only the final assistant answer.
   Do not include CLI startup banners, tool inventories, tool output, scripts, JSON blobs, or turn-limit summaries in the final answer.`;
 }
@@ -2494,6 +2522,55 @@ export class HermesCli {
     return detailedProfiles;
   }
 
+  async quickModelTest(profile: Profile, signal?: AbortSignal): Promise<{ ok: boolean; latencyMs: number; errorMessage?: string }> {
+    const env = buildProfileEnvironment(profile);
+    const startedAt = Date.now();
+    let result: HermesCliExecutionResult;
+    try {
+      result = await this.run(
+        ['chat', '-Q', '--max-turns', '1', '--source', 'tool', '-q', 'Reply with only the single word: ok'],
+        env,
+        signal
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - startedAt,
+        errorMessage: err instanceof Error ? err.message : 'Model test request timed out or failed.'
+      };
+    }
+
+    const latencyMs = Date.now() - startedAt;
+    if (result.exitCode !== 0) {
+      const raw = (result.stderr.trim() || result.stdout.trim() || 'The model returned an error.').slice(0, 400);
+      return { ok: false, latencyMs, errorMessage: raw };
+    }
+    if (!normalizeOutput(result.stdout).trim()) {
+      return { ok: false, latencyMs, errorMessage: 'The model returned no output.' };
+    }
+    return { ok: true, latencyMs };
+  }
+
+  async createProfile(name: string, signal?: AbortSignal): Promise<Profile[]> {
+    if (!name || !/^[a-z0-9_-]+$/i.test(name)) {
+      throw new Error('Profile name must be non-empty and contain only letters, numbers, hyphens, or underscores.');
+    }
+    const result = await this.run(['profile', 'create', name, '--clone', '--no-alias'], process.env, signal);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || `Failed to create Hermes profile "${name}".`);
+    }
+    return this.listProfiles(signal);
+  }
+
+  async deleteProfile(id: string, signal?: AbortSignal): Promise<Profile[]> {
+    if (!id) throw new Error('Profile ID is required.');
+    const result = await this.run(['profile', 'delete', '--yes', id], process.env, signal);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || `Failed to delete Hermes profile "${id}".`);
+    }
+    return this.listProfiles(signal);
+  }
+
   async listSessions(profile: Profile, limit = 500, signal?: AbortSignal): Promise<Session[]> {
     const timestamp = this.now();
     const env = buildProfileEnvironment(profile);
@@ -2693,6 +2770,74 @@ export class HermesCli {
     }
   }
 
+  private resolveAutoProvider(dumpOutput: string, profile: Pick<Profile, 'path'>): string | null {
+    // When hermes shows provider=(auto), the profile uses credential pooling instead of
+    // an explicit provider. We do NOT parse generic "provider:" keys from config.yaml
+    // because tts.provider, stt.provider, delegation.provider, auxiliary.*.provider
+    // all sit at the same indent depth and would give wrong results.
+    // credential_pool_strategies names the actual backing provider.
+    if (profile.path) {
+      try {
+        const configPath = path.join(profile.path, 'config.yaml');
+        if (fs.existsSync(configPath)) {
+          const yaml = fs.readFileSync(configPath, 'utf8');
+          const poolProvider = yaml.match(/^credential_pool_strategies:\s*\n\s+(\S+):/m)?.[1]?.trim();
+          if (poolProvider) {
+            return poolProvider;
+          }
+        }
+      } catch {
+        // best-effort
+      }
+    }
+
+    // Fall back to the first provider that has its API key marked "set" in the dump.
+    const NON_MODEL = new Set(['firecrawl', 'tavily', 'browserbase', 'fal', 'elevenlabs', 'github', 'anthropic_token']);
+    const apiKeysMatch = dumpOutput.match(/^api_keys:\n((?: {2}.+\n)*)/m);
+    if (apiKeysMatch?.[1]) {
+      for (const line of apiKeysMatch[1].split('\n').filter(Boolean)) {
+        const m = line.match(/^\s+(\S+)\s+set\s*$/);
+        if (m?.[1] && !NON_MODEL.has(m[1])) {
+          return m[1];
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private resolveHermesHome(profile: Pick<Profile, 'path'>): string {
+    if (profile.path) {
+      // Default profile: path IS the home dir (contains models_dev_cache.json directly)
+      if (fs.existsSync(path.join(profile.path, 'models_dev_cache.json'))) {
+        return profile.path;
+      }
+      // Non-default profiles live at <home>/profiles/<name> — go up two levels
+      const candidateHome = path.resolve(profile.path, '../..');
+      if (fs.existsSync(path.join(candidateHome, 'models_dev_cache.json'))) {
+        return candidateHome;
+      }
+    }
+    return path.join(os.homedir(), '.hermes');
+  }
+
+  private loadModelsFromDevCache(hermesHome: string, providerId: string): Array<{ value: string; label: string }> {
+    try {
+      const cachePath = path.join(hermesHome, 'models_dev_cache.json');
+      if (!fs.existsSync(cachePath)) return [];
+      const raw = fs.readFileSync(cachePath, 'utf8');
+      const cache = JSON.parse(raw) as Record<string, { models?: Record<string, { name?: string }> }>;
+      const entry = cache[providerId];
+      if (!entry?.models) return [];
+      return Object.entries(entry.models).map(([id, model]) => ({
+        value: id,
+        label: model.name ?? id
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   private parseDumpProviders(dumpOutput: string, profileId: string, activeProvider: string, now: string): RuntimeProviderOption[] {
     const apiKeysMatch = dumpOutput.match(/^api_keys:\n((?: {2}.+\n)*)/m);
     const providers: RuntimeProviderOption[] = [];
@@ -2723,7 +2868,8 @@ export class HermesCli {
           displayName,
           authKind: authKind as 'api_key' | 'oauth' | 'mixed',
           status: connected ? 'connected' as const : 'missing' as const,
-          source: 'hermes_dump',
+          source: 'local_config',
+          credentialLabel: connected ? 'API key set' : undefined,
           supportsApiKey: meta?.supportsApiKey ?? true,
           supportsOAuth,
           lastSyncedAt: now,
@@ -2754,7 +2900,7 @@ export class HermesCli {
         displayName: meta.displayName,
         authKind: 'oauth' as const,
         status: 'missing' as const,
-        source: 'hermes_dump',
+        source: 'local_config',
         supportsApiKey: meta.supportsApiKey,
         supportsOAuth: true,
         lastSyncedAt: now,
@@ -2779,7 +2925,8 @@ export class HermesCli {
         displayName: meta?.displayName ?? activeProvider,
         authKind: 'api_key' as const,
         status: 'connected' as const,
-        source: 'hermes_dump',
+        source: 'local_config',
+        credentialLabel: 'API key set',
         supportsApiKey: true,
         supportsOAuth: false,
         lastSyncedAt: now,
@@ -2942,6 +3089,17 @@ export class HermesCli {
       const now = this.now();
 
       const config = this.parseDumpConfig(dumpOutput, profile.id, now);
+
+      // '(auto)' means hermes is routing through a credential pool rather than an
+      // explicit provider setting. Resolve it to the real backing provider so we can
+      // find its entry, load cached models, and populate configurationFields correctly.
+      if (config.provider === '(auto)' || config.provider === 'unknown') {
+        const resolved = this.resolveAutoProvider(dumpOutput, profile);
+        if (resolved) {
+          (config as Record<string, unknown>).provider = resolved;
+        }
+      }
+
       const providers = this.parseDumpProviders(dumpOutput, profile.id, config.provider, now);
 
       // Try to read config.yaml for base_url and api_mode before building fields
@@ -2967,30 +3125,44 @@ export class HermesCli {
       // Populate the active provider with model data and configuration fields
       const activeProviderEntry = providers.find((p) => p.id === config.provider);
       if (activeProviderEntry && config.defaultModel !== 'unknown') {
+        const hermesHome = this.resolveHermesHome(profile);
+        const cachedModelOptions = this.loadModelsFromDevCache(hermesHome, config.provider);
+        const hasCachedModels = cachedModelOptions.length > 0;
+
         activeProviderEntry.supportsModelDiscovery = true;
-        activeProviderEntry.models = [{
-          id: config.defaultModel,
-          label: config.defaultModel,
-          providerId: config.provider,
-          disabled: false,
-          supportsReasoningEffort: false,
-          reasoningEffortOptions: [] as string[],
-          metadata: {} as Record<string, unknown>
-        }];
+        activeProviderEntry.models = hasCachedModels
+          ? cachedModelOptions.map((opt) => ({
+              id: opt.value,
+              label: opt.label,
+              providerId: config.provider,
+              disabled: false,
+              supportsReasoningEffort: false,
+              reasoningEffortOptions: [] as string[],
+              metadata: {} as Record<string, unknown>
+            }))
+          : [{
+              id: config.defaultModel,
+              label: config.defaultModel,
+              providerId: config.provider,
+              disabled: false,
+              supportsReasoningEffort: false,
+              reasoningEffortOptions: [] as string[],
+              metadata: {} as Record<string, unknown>
+            }];
+
         activeProviderEntry.configurationFields = [
           {
             key: 'defaultModel',
             label: 'Default model',
-            input: 'select' as const,
+            input: hasCachedModels ? 'select' as const : 'text' as const,
             required: true,
             secret: false,
             disabled: false,
+            placeholder: hasCachedModels ? undefined : 'e.g. openai/gpt-4o',
             value: config.defaultModel,
-            options: [{
-              value: config.defaultModel,
-              label: config.defaultModel,
-              disabled: false
-            }]
+            options: hasCachedModels
+              ? cachedModelOptions.map((opt) => ({ value: opt.value, label: opt.label, disabled: false }))
+              : [{ value: config.defaultModel, label: config.defaultModel, disabled: false }]
           },
           {
             key: 'baseUrl',

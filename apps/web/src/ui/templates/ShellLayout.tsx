@@ -1,4 +1,5 @@
-import { Alert, Box, Flex, HStack, Text } from '@chakra-ui/react';
+import { useState } from 'react';
+import { Alert, Box, Button, CloseButton, Drawer, Flex, HStack, Portal, Text, chakra } from '@chakra-ui/react';
 import { BrandLockup } from '../atoms/BrandLockup';
 import type { ConnectionState } from '@hermes-recipes/protocol';
 import type { ReactNode } from 'react';
@@ -35,12 +36,20 @@ function GatewayBanner({ detail, onDismiss }: { detail: string; onDismiss?: () =
 
 function ModelPill({ label }: { label?: string }) {
   if (!label) return null;
-  // Show just the model name (last segment after /)
   const model = label.split('/').pop() ?? label;
   return (
     <Text fontSize="11px" color="var(--text-muted)" fontWeight="400" letterSpacing="0">
       {model}
     </Text>
+  );
+}
+
+function HamburgerIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="4" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+      <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </Svg>
   );
 }
 
@@ -51,6 +60,7 @@ export function ShellLayout({
   headerDetail,
   headerMode = 'full',
   sidebar,
+  mobileNavContent,
   tabBar,
   onPersistTheme,
   hermesVersion,
@@ -64,6 +74,7 @@ export function ShellLayout({
   headerDetail: string;
   headerMode?: 'full' | 'compact';
   sidebar: ReactNode;
+  mobileNavContent?: ReactNode;
   tabBar?: ReactNode;
   onPersistTheme: (themeMode: 'dark' | 'light') => Promise<void> | void;
   hermesVersion?: string | null;
@@ -71,6 +82,7 @@ export function ShellLayout({
   activeModelLabel?: string | null;
   children: ReactNode;
 }) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const versionMismatch = expectedHermesVersion && hermesVersion && hermesVersion !== expectedHermesVersion;
   const gatewayDown = connection.status !== 'connected' && connection.detail;
 
@@ -82,7 +94,60 @@ export function ShellLayout({
       overflow="hidden"
       bg="var(--shell-bg)"
     >
-      {sidebar}
+      {/* Desktop sidebar — hidden on mobile */}
+      <Box display={{ base: 'none', lg: 'flex' }} flexShrink={0} h="100dvh">
+        {sidebar}
+      </Box>
+
+      {/* Mobile nav drawer */}
+      {mobileNavContent ? (
+        <Drawer.Root
+          lazyMount
+          unmountOnExit
+          open={mobileNavOpen}
+          onOpenChange={(e) => setMobileNavOpen(e.open)}
+          placement="start"
+        >
+          <Portal>
+            <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
+            <Drawer.Positioner display={{ base: 'block', lg: 'none' }}>
+              <Drawer.Content
+                maxW={{ base: '100%', sm: '300px' }}
+                bg="var(--sidebar-bg)"
+                borderRight="1px solid var(--border-subtle)"
+                overflow="hidden"
+              >
+                <Drawer.Header
+                  px="3"
+                  pt="3"
+                  pb="2"
+                  borderBottom="1px solid var(--border-subtle)"
+                >
+                  <HStack justify="space-between" align="center">
+                    <HStack gap="2" minW={0}>
+                      <span aria-hidden="true" style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>🧑‍🍳</span>
+                      <Box minW={0}>
+                        <Text fontSize="xs" fontWeight="700" letterSpacing="-0.01em" color="var(--text-primary)" lineHeight="1.15" truncate>
+                          The Kitchen
+                        </Text>
+                        <Text fontSize="10px" color="var(--text-muted)" lineHeight="1.3" fontWeight="400">
+                          Local Hermes workspace
+                        </Text>
+                      </Box>
+                    </HStack>
+                    <Drawer.CloseTrigger asChild>
+                      <CloseButton size="sm" color="var(--text-muted)" flexShrink={0} />
+                    </Drawer.CloseTrigger>
+                  </HStack>
+                </Drawer.Header>
+                <Drawer.Body p="0" overflow="hidden">
+                  {mobileNavContent}
+                </Drawer.Body>
+              </Drawer.Content>
+            </Drawer.Positioner>
+          </Portal>
+        </Drawer.Root>
+      ) : null}
 
       <Flex
         direction="column"
@@ -93,10 +158,31 @@ export function ShellLayout({
         overflow="hidden"
       >
         {/* Top bar — minimal chrome */}
-        <Box px={{ base: '4', lg: '5' }} py="1" flexShrink={0}>
+        <Box px={{ base: '3', lg: '5' }} py="1" flexShrink={0}>
           <HStack justify="space-between" align="center" gap="3" data-testid="shell-toolbar">
+            {/* Mobile hamburger */}
+            {mobileNavContent ? (
+              <Button
+                display={{ base: 'flex', lg: 'none' }}
+                variant="ghost"
+                size="sm"
+                rounded="8px"
+                px="1.5"
+                h="8"
+                minW={0}
+                color="var(--text-muted)"
+                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                aria-label="Open navigation"
+                title="Open navigation"
+                onClick={() => setMobileNavOpen(true)}
+                flexShrink={0}
+              >
+                <HamburgerIcon />
+              </Button>
+            ) : null}
+
             {headerMode === 'full' ? (
-              <PageHeader profileName={profileName} pageName={pageTitle} detail={headerDetail} />
+              <PageHeader profileName={profileName} pageName={pageTitle} />
             ) : (
               <Box flex="1" minW={0}>
                 <BrandLockup compact />
@@ -104,7 +190,6 @@ export function ShellLayout({
             )}
 
             <HStack gap="2" flexShrink={0} align="center">
-              <ModelPill label={activeModelLabel ?? undefined} />
               <StatusPill label={connection.status} />
               <ThemeToggle onPersist={onPersistTheme} />
             </HStack>
