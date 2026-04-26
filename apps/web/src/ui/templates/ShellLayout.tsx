@@ -119,6 +119,7 @@ export function ShellLayout({
             <Drawer.Positioner display={{ base: 'block', lg: 'none' }}>
               <Drawer.Content
                 maxW={{ base: '100%', sm: '300px' }}
+                h="100dvh"
                 bg="var(--sidebar-bg)"
                 borderRight="1px solid var(--border-subtle)"
                 overflow="hidden"

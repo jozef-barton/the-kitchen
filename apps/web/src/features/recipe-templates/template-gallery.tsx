@@ -149,19 +149,17 @@ export function RecipeTemplateGallery({
                         {template.purpose}
                       </Text>
                     </VStack>
-                    <Flex justify="space-between" align="center" gap="1" wrap="wrap">
-                      <Text fontSize="10px" color="var(--text-muted)">Workspace recipe</Text>
+                    <Flex justify="flex-end" align="center">
                       <Button
                         size="xs"
                         rounded="6px"
                         variant="ghost"
                         fontSize="xs"
                         color="var(--text-muted)"
-                        h="5"
-                        px="1.5"
+                        h="6"
+                        px="2"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onSelectTemplate(template.id);
                           onInspectTemplate(template.id);
                         }}
                       >

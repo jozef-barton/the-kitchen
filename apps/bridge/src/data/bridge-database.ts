@@ -839,6 +839,29 @@ export class BridgeDatabase {
     this.ensureRecipeIndexes();
     this.ensureProfileScopedProviderConnectionsTable();
     this.syncAttachedRecipeSessionCache();
+    this.backfillSessionTitlesFromRecipes();
+  }
+
+  private backfillSessionTitlesFromRecipes() {
+    // For sessions that have a linked recipe but still carry the raw first-message as their
+    // title (i.e. no manual title_override), update the title to match the recipe name.
+    this.database.exec(`
+      UPDATE sessions
+      SET title = (
+        SELECT recipes.title
+        FROM recipes
+        WHERE recipes.primary_session_id = sessions.id
+          AND recipes.deleted_at IS NULL
+        LIMIT 1
+      )
+      WHERE EXISTS (
+        SELECT 1 FROM recipes
+        WHERE recipes.primary_session_id = sessions.id
+          AND recipes.deleted_at IS NULL
+      )
+      AND (sessions.title_override IS NULL OR sessions.title_override = '')
+      AND sessions.deleted_at IS NULL;
+    `);
   }
 
   private ensureRecipeIndexes() {
@@ -3178,12 +3201,23 @@ export class BridgeDatabase {
       const deletionMode = typeof existingRow?.deletion_mode === 'string' ? existingRow.deletion_mode : null;
       const shouldReactivate = isNewerThanDeletedAt(nextSession.lastUpdatedAt, deletedAt);
 
+      // If a recipe is linked to this session and no manual rename has been done,
+      // prefer the recipe title over the raw first-message title from the CLI.
+      const existingTitleOverride = (existingRow?.title_override as string | undefined) ?? null;
+      const linkedRecipe = !existingTitleOverride
+        ? this.getRecipeByPrimarySessionId(profileId, localId)
+        : null;
+      const resolvedTitle = linkedRecipe?.title?.trim()
+        ? generateSessionTitle(linkedRecipe.title.trim(), nextSession.title)
+        : nextSession.title;
+
       this.insertSession({
         ...nextSession,
+        title: resolvedTitle,
         createdAt: (existingRow?.created_at as string | undefined) ?? timestamp,
         updatedAt: timestamp,
         lastMessageSyncAt: (existingRow?.last_message_sync_at as string | undefined) ?? null,
-        titleOverride: (existingRow?.title_override as string | undefined) ?? null,
+        titleOverride: existingTitleOverride,
         deletedAt: shouldReactivate ? null : deletedAt,
         deletionMode: shouldReactivate ? null : deletionMode
       });
@@ -3352,6 +3386,21 @@ export class BridgeDatabase {
     const session = this.getSession(sessionId);
     if (!session) return;
     const storageState = this.getSessionStorageState(sessionId);
+
+    // If the session has a linked space/recipe and the user hasn't manually renamed it,
+    // use the recipe title directly — it's always more meaningful than a message-derived title.
+    const profileId = session.lastUsedProfileId;
+    if (profileId && !storageState?.title_override) {
+      const linkedRecipe = this.getRecipeByPrimarySessionId(profileId, sessionId);
+      if (linkedRecipe?.title?.trim()) {
+        const recipeTitle = generateSessionTitle(linkedRecipe.title.trim(), linkedRecipe.title.trim());
+        if (recipeTitle && recipeTitle !== session.title) {
+          this.updateSession({ id: sessionId, title: recipeTitle });
+        }
+        return;
+      }
+    }
+
     // Combine the user prompt with the first substantive line from the assistant response
     // so the title can reflect actual results (e.g. "Asian Restaurants Cleveland" rather than
     // just the raw question).

@@ -509,9 +509,11 @@ export function ChatPage({
                         size="xs"
                         variant="outline"
                         gap="1"
+                        color={sending ? 'var(--accent)' : undefined}
+                        borderColor={sending ? 'var(--accent)' : undefined}
                         onClick={() => onRuntimeDrawerOpenChange(true)}
                       >
-                        <ActivityIcon />
+                        {sending ? <SpinnerIcon /> : <ActivityIcon />}
                         Activity
                       </Button>
                       {activeSession ? (
@@ -724,23 +726,21 @@ export function ChatPage({
             </Box>
           </Grid>
 
-          {/* Mobile runtime activity drawer */}
+          {/* Sub-desktop runtime activity drawer — right-side panel */}
           <Drawer.Root
             lazyMount
             unmountOnExit
             open={runtimePanelOpen}
             onOpenChange={(event) => setRuntimePanelOpen(event.open)}
-            size={{ base: 'full', sm: 'md' }}
-            placement="bottom"
+            placement="end"
           >
             <Portal>
               <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" display={{ base: 'block', xl: 'none' }} />
               <Drawer.Positioner display={{ base: 'block', xl: 'none' }}>
                 <Drawer.Content
                   bg="var(--surface-elevated)"
-                  borderTop="1px solid var(--border-subtle)"
-                  maxH="75dvh"
-                  rounded={{ base: '16px 16px 0 0', sm: '12px' }}
+                  borderLeft="1px solid var(--border-subtle)"
+                  style={{ width: '320px', maxWidth: '100vw' }}
                 >
                   <Drawer.Header>
                     <HStack justify="space-between" align="center" gap="3" minW={0}>

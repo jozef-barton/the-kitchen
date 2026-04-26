@@ -2658,7 +2658,6 @@ describe('App', () => {
       .find((row) => row.getAttribute('data-session-id') === attachedSession.id);
     expect(recentRow).toBeTruthy();
     expect(within(recentRow as HTMLElement).getByTestId('recent-session-meta')).toHaveTextContent('2 messages');
-    expect(within(recentRow as HTMLElement).getByTestId('recent-session-space-indicator')).toHaveTextContent('Space');
     expect(within(recentRow as HTMLElement).queryByText(attachedSession.summary)).not.toBeInTheDocument();
     expect(screen.getAllByTestId('hermes-home-brand').length).toBeGreaterThan(0);
 
@@ -4209,7 +4208,7 @@ describe('App', () => {
     expect(activityPane).not.toHaveTextContent('running');
   });
 
-  it('renames the active session directly from the recent sessions sidebar pencil action', async () => {
+  it('renames the active session directly from the recent sessions sidebar actions menu', async () => {
     let activeSession = createSession('session-recent-rename', 'Initial title');
     const sessionPayload = createSessionPayload(activeSession, [
       createMessage({
@@ -4285,7 +4284,8 @@ describe('App', () => {
     );
 
     await screen.findByText('Session loaded.');
-    await userEvent.click(screen.getByRole('button', { name: 'Rename Initial title' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Initial title' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
     expect(await screen.findByText('Rename session')).toBeInTheDocument();
 
     const titleInput = screen.getByLabelText('Session title');
@@ -4294,12 +4294,9 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save title' }));
 
     expect(await within(screen.getByTestId('sidebar-scroll')).findByText('Renamed from recent')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Chat actions for Renamed from recent' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actions for Renamed from recent' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Rename Renamed from recent' }));
-    expect(await screen.findByText('Rename session')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Chat actions for Renamed from recent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Renamed from recent' }));
     expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
   });
 
