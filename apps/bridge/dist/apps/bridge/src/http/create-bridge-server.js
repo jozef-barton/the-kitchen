@@ -1,6 +1,6 @@
 import http from 'node:http';
 import path from 'node:path';
-import { ApplyRecipeEntryActionRequestSchema, BeginProviderAuthRequestSchema, ChatStreamRequestSchema, ConnectProviderRequestSchema, CreateRecipeRequestSchema, CreateSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSessionRequestSchema, DeleteSkillRequestSchema, ExecuteRecipeActionRequestSchema, OpenRecipeChatRequestSchema, PollProviderAuthRequestSchema, RenameSessionRequestSchema, ResolveImagesRequestSchema, SelectProfileRequestSchema, SelectSessionRequestSchema, ToolExecutionResolveRequestSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema, RecipeManifestSchema } from '@hermes-recipes/protocol';
+import { ApplyRecipeEntryActionRequestSchema, BeginProviderAuthRequestSchema, ChatStreamRequestSchema, ConnectProviderRequestSchema, CreateProfileRequestSchema, CreateRecipeRequestSchema, TestModelConfigRequestSchema, CreateSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSessionRequestSchema, DeleteSkillRequestSchema, ExecuteRecipeActionRequestSchema, OpenRecipeChatRequestSchema, PollProviderAuthRequestSchema, RenameSessionRequestSchema, ResolveImagesRequestSchema, SelectProfileRequestSchema, SelectSessionRequestSchema, ToolExecutionResolveRequestSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema, RecipeManifestSchema } from '@hermes-recipes/protocol';
 import { createUnsplashSourceResolver, resolveImagesInParallel } from '../services/images/image-resolver';
 import { refreshDiskRecipeRegistry } from '../services/recipes/recipe-template-registry';
 const defaultImageResolver = createUnsplashSourceResolver();
@@ -189,6 +189,25 @@ export function createBridgeServer(options) {
             if (request.method === 'POST' && pathname === '/api/profiles/select') {
                 const payload = SelectProfileRequestSchema.parse(await readJsonBody(request));
                 sendJson(response, 200, await bridge.selectProfile(payload), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'POST' && pathname === '/api/profiles') {
+                const payload = CreateProfileRequestSchema.parse(await readJsonBody(request));
+                sendJson(response, 201, await bridge.createProfile(payload), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'DELETE' && /^\/api\/profiles\/[^/]+$/.test(pathname)) {
+                const profileId = decodeURIComponent(pathname.split('/')[3] ?? '');
+                sendJson(response, 200, await bridge.deleteProfile({ profileId }), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'GET' && pathname === '/api/profiles/metrics') {
+                sendJson(response, 200, bridge.getProfilesMetrics(), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'POST' && pathname === '/api/model-providers/test') {
+                const payload = TestModelConfigRequestSchema.parse(await readJsonBody(request));
+                sendJson(response, 200, await bridge.testModelConfig(payload), originDecision.allowOrigin);
                 return;
             }
             if (request.method === 'POST' && pathname === '/api/sessions') {
