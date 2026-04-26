@@ -137,6 +137,11 @@ describe('HermesCli', () => {
       .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'step by step' });
   });
 
+  it('classifies explicit instructions requests as step-by-step intents even with shopping context', () => {
+    expect(classifyStructuredRecipeIntent('Can you give me instructions on how to return this item?', false))
+      .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'step by step' });
+  });
+
   it('classifies recommendation requests as research notebook intents', () => {
     expect(classifyStructuredRecipeIntent('What should I use for state management in React?', false))
       .toEqual({ category: 'plan', preferredContentFormat: 'table', label: 'research notebook' });
