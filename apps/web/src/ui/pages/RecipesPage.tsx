@@ -124,7 +124,6 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
                     selectedTemplateId={selectedTemplate.id}
                     onCategoryChange={setCategory}
                     omitTestIds
-                    omitPreviews
                     onSelectTemplate={(templateId) => {
                       setSelectedTemplateId(templateId as RecipeTemplateId);
                       setMobilePreviewOpen(true);
