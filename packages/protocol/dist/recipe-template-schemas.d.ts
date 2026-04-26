@@ -1,7 +1,7 @@
 import { z } from 'zod';
-export declare const RECIPE_TEMPLATE_IDS: readonly ["price-comparison-grid", "shopping-shortlist", "inbox-triage-board", "restaurant-finder", "hotel-shortlist", "flight-comparison", "travel-itinerary-planner", "research-notebook", "security-review-board", "vendor-evaluation-matrix", "event-planner", "job-search-pipeline", "content-campaign-planner", "local-discovery-comparison", "step-by-step-instructions"];
+export declare const RECIPE_TEMPLATE_IDS: readonly ["price-comparison-grid", "shopping-shortlist", "inbox-triage-board", "restaurant-finder", "hotel-shortlist", "flight-comparison", "travel-itinerary-planner", "research-notebook", "security-review-board", "vendor-evaluation-matrix", "event-planner", "job-search-pipeline", "local-discovery-comparison", "step-by-step-instructions"];
 export type LegacyRecipeTemplateId = (typeof RECIPE_TEMPLATE_IDS)[number];
-export declare const LegacyRecipeTemplateIdSchema: z.ZodEnum<["price-comparison-grid", "shopping-shortlist", "inbox-triage-board", "restaurant-finder", "hotel-shortlist", "flight-comparison", "travel-itinerary-planner", "research-notebook", "security-review-board", "vendor-evaluation-matrix", "event-planner", "job-search-pipeline", "content-campaign-planner", "local-discovery-comparison", "step-by-step-instructions"]>;
+export declare const LegacyRecipeTemplateIdSchema: z.ZodEnum<["price-comparison-grid", "shopping-shortlist", "inbox-triage-board", "restaurant-finder", "hotel-shortlist", "flight-comparison", "travel-itinerary-planner", "research-notebook", "security-review-board", "vendor-evaluation-matrix", "event-planner", "job-search-pipeline", "local-discovery-comparison", "step-by-step-instructions"]>;
 export declare const RecipeTemplateIdSchema: z.ZodString;
 export type RecipeTemplateId = string;
 export declare const RecipeTemplateToneSchema: z.ZodEnum<["neutral", "accent", "success", "warning", "danger"]>;
@@ -729,16 +729,19 @@ export type RecipeTemplateTableColumn = z.infer<typeof RecipeTemplateTableColumn
 export declare const RecipeTemplateTableCellSchema: z.ZodObject<{
     value: z.ZodString;
     subvalue: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
+    href: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     tone: z.ZodOptional<z.ZodEnum<["neutral", "accent", "success", "warning", "danger"]>>;
     emphasis: z.ZodDefault<z.ZodBoolean>;
 }, "strict", z.ZodTypeAny, {
     value: string;
     emphasis: boolean;
     tone?: "neutral" | "accent" | "success" | "warning" | "danger" | undefined;
+    href?: string | undefined;
     subvalue?: string | undefined;
 }, {
     value: string;
     tone?: "neutral" | "accent" | "success" | "warning" | "danger" | undefined;
+    href?: unknown;
     subvalue?: unknown;
     emphasis?: boolean | undefined;
 }>;
@@ -777,16 +780,19 @@ export declare const RecipeTemplateTableRowSchema: z.ZodObject<{
     cells: z.ZodDefault<z.ZodArray<z.ZodObject<{
         value: z.ZodString;
         subvalue: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
+        href: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
         tone: z.ZodOptional<z.ZodEnum<["neutral", "accent", "success", "warning", "danger"]>>;
         emphasis: z.ZodDefault<z.ZodBoolean>;
     }, "strict", z.ZodTypeAny, {
         value: string;
         emphasis: boolean;
         tone?: "neutral" | "accent" | "success" | "warning" | "danger" | undefined;
+        href?: string | undefined;
         subvalue?: string | undefined;
     }, {
         value: string;
         tone?: "neutral" | "accent" | "success" | "warning" | "danger" | undefined;
+        href?: unknown;
         subvalue?: unknown;
         emphasis?: boolean | undefined;
     }>, "many">>;
@@ -835,6 +841,7 @@ export declare const RecipeTemplateTableRowSchema: z.ZodObject<{
         value: string;
         emphasis: boolean;
         tone?: "neutral" | "accent" | "success" | "warning" | "danger" | undefined;
+        href?: string | undefined;
         subvalue?: string | undefined;
     }[];
     leadingImage?: {
@@ -873,6 +880,7 @@ export declare const RecipeTemplateTableRowSchema: z.ZodObject<{
     cells?: {
         value: string;
         tone?: "neutral" | "accent" | "success" | "warning" | "danger" | undefined;
+        href?: unknown;
         subvalue?: unknown;
         emphasis?: boolean | undefined;
     }[] | undefined;
@@ -1104,6 +1112,16 @@ export declare const RecipeTemplateSectionSchema: z.ZodType<({
     }>;
     data: Array<Record<string, string | number>>;
     valueFormat?: 'number' | 'currency' | 'percent';
+}) | ({
+    slotId: string;
+    kind: 'report';
+    title: string;
+    body: string;
+    footnotes: Array<{
+        id: string;
+        label: string;
+        url?: string;
+    }>;
 }), z.ZodTypeDef, unknown>;
 export type RecipeTemplateSection = z.infer<typeof RecipeTemplateSectionSchema>;
 export declare const RecipeTemplateTransitionRecordSchema: z.ZodObject<{
@@ -1327,6 +1345,16 @@ export declare const RecipeTemplateStateSchema: z.ZodObject<{
         }>;
         data: Array<Record<string, string | number>>;
         valueFormat?: "number" | "currency" | "percent";
+    } | {
+        slotId: string;
+        kind: "report";
+        title: string;
+        body: string;
+        footnotes: Array<{
+            id: string;
+            label: string;
+            url?: string;
+        }>;
     }, z.ZodTypeDef, unknown>, "many">>;
     transitionTargets: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     transitionHistory: z.ZodDefault<z.ZodArray<z.ZodObject<{
@@ -1533,6 +1561,16 @@ export declare const RecipeTemplateStateSchema: z.ZodObject<{
         }>;
         data: Array<Record<string, string | number>>;
         valueFormat?: "number" | "currency" | "percent";
+    } | {
+        slotId: string;
+        kind: "report";
+        title: string;
+        body: string;
+        footnotes: Array<{
+            id: string;
+            label: string;
+            url?: string;
+        }>;
     })[];
     transitionTargets: string[];
     transitionHistory: {

@@ -705,6 +705,11 @@ export const RecipeMetadataSchema = z.object({
     latestRecipeAttemptRequestId: z.string().min(1).optional(),
     latestRecipeAttemptedAt: z.string().datetime().optional(),
     activeTemplateId: RecipeTemplateIdSchema.optional(),
+    alternativeTemplates: z.array(z.object({
+        id: RecipeTemplateIdSchema,
+        name: z.string().min(1),
+        intentLabel: z.string().min(1)
+    })).optional(),
     recipePipeline: RecipePipelineStateSchema.optional()
 });
 export const RecipeContentModelSchema = z.object({

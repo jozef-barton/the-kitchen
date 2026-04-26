@@ -100,8 +100,8 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
                 }}
               />
             </Box>
-            <Box minH={0} overflowY="auto" pl="1" data-testid="spaces-template-inspector">
-              <Box rounded="8px" border="1px solid var(--border-subtle)" overflow="auto">
+            <Box minH={0} overflowY="auto" pl="1" pt="3" data-testid="spaces-template-inspector">
+              <Box rounded="8px" border="1px solid var(--border-subtle)" overflow="auto" p="4">
                 <RecipeTemplatePreview preview={selectedTemplate.preview} />
               </Box>
             </Box>
@@ -150,7 +150,7 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
           >
             <Portal>
               <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
-              <Drawer.Positioner display={{ base: 'block', xl: 'none' }}>
+              <Drawer.Positioner display={{ base: 'block', xl: 'none' }} pt="10">
                 <Drawer.Content
                   bg="var(--surface-elevated)"
                   borderTop="1px solid var(--border-subtle)"
@@ -158,7 +158,7 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
                   mx="auto"
                   w="100%"
                   maxW="600px"
-                  rounded="16px 16px 0 0"
+                  rounded="16px"
                   overflow="hidden"
                 >
                   <Drawer.Header px="4" pt="4" pb="3" borderBottom="1px solid var(--border-subtle)">

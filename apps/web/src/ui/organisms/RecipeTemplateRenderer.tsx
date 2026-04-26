@@ -1,4 +1,4 @@
-import { AspectRatio, Badge, Box, Button, Checkbox, Flex, HStack, Image, Input, Separator, Skeleton, Spinner, Table, Text, Textarea, VStack } from '@chakra-ui/react';
+import { AspectRatio, Badge, Box, Button, Checkbox, Flex, HStack, Image, Input, Separator, Skeleton, Spinner, Table, Text, Textarea, VStack, chakra } from '@chakra-ui/react';
 import type {
   Recipe,
   RecipeActionDefinition,
@@ -15,6 +15,7 @@ import type { Components } from 'react-markdown';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { safeMarkdownUrlTransform } from '../../lib/markdown-url-transform';
 import {
   Bar,
@@ -278,6 +279,8 @@ function sectionHasRenderableContent(section: RecipeTemplateSection): boolean {
       return Boolean(section.image.src) || Boolean(section.image.query);
     case 'audio':
       return Boolean(section.src);
+    case 'report':
+      return Boolean(section.body);
     case 'bar-chart':
     case 'line-chart':
     case 'time-series':
@@ -636,13 +639,15 @@ function ChecklistSectionRenderer({
                     gap="3"
                     rounded="8px"
                     border="1px solid"
-                    borderColor={isChecked ? 'var(--border-subtle)' : 'var(--border-subtle)'}
+                    borderColor="var(--border-subtle)"
                     bg={isChecked ? 'transparent' : 'var(--surface-2)'}
                     px="3.5"
                     py="2.5"
                     transition="background 0.1s"
+                    cursor="pointer"
+                    onClick={() => setCheckedSteps((current) => ({ ...current, [step.id]: !current[step.id] }))}
                   >
-                    <Box pt="1">
+                    <Box pt="1" flexShrink={0}>
                       <Checkbox.Root
                         checked={isChecked}
                         onCheckedChange={(event) =>
@@ -651,9 +656,12 @@ function ChecklistSectionRenderer({
                             [step.id]: !!event.checked
                           }))
                         }
+                        onClick={(e) => e.stopPropagation()}
+                        cursor="pointer"
+                        position="relative"
                       >
                         <Checkbox.HiddenInput />
-                        <Checkbox.Control />
+                        <Checkbox.Control w="4" h="4" />
                       </Checkbox.Root>
                     </Box>
                     <Box flex="1" minW={0}>
@@ -766,6 +774,13 @@ export function RecipeTemplateRenderer({
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [highlightedFnId, setHighlightedFnId] = useState<string | null>(null);
+
+  function handleFootnoteClick(id: string) {
+    setHighlightedFnId(id);
+    document.getElementById(`fn-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => setHighlightedFnId(null), 2000);
+  }
   const toggleFilter = useCallback((label: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
@@ -1185,11 +1200,10 @@ export function RecipeTemplateRenderer({
                           <Table.Row>
                             <Table.ColumnHeader>Item</Table.ColumnHeader>
                             {section.columns.map((column) => (
-                              <Table.ColumnHeader key={column.id} textAlign={column.align ?? 'start'}>
+                              <Table.ColumnHeader key={column.id} textAlign={column.align ?? 'center'}>
                                 {column.label}
                               </Table.ColumnHeader>
                             ))}
-                            <Table.ColumnHeader />
                           </Table.Row>
                         </Table.Header>
                         <Table.Body>
@@ -1212,12 +1226,51 @@ export function RecipeTemplateRenderer({
                                 </HStack>
                               </Table.Cell>
                               {row.cells.map((cell, index) => {
+                                const col = section.columns[index];
                                 const tone = templateToneStyles(cell.tone);
+                                const isIconCell = cell.href && col?.label === '';
                                 return (
-                                  <Table.Cell key={`${row.id}-${section.columns[index]?.id ?? index}`} textAlign={section.columns[index]?.align ?? 'start'}>
-                                    <Text fontWeight={cell.emphasis ? '800' : '600'} color={cell.tone ? tone.color : 'var(--text-primary)'} _dark={cell.tone ? { color: tone.darkColor } : undefined}>
-                                      {cell.value}
-                                    </Text>
+                                  <Table.Cell key={`${row.id}-${col?.id ?? index}`} textAlign={col?.align ?? 'center'}>
+                                    {isIconCell ? (
+                                      <chakra.a
+                                        href={cell.href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        display="inline-flex"
+                                        alignItems="center"
+                                        justifyContent="center"
+                                        w="24px"
+                                        h="24px"
+                                        rounded="full"
+                                        border="1px solid"
+                                        borderColor="blue.200"
+                                        color="blue.600"
+                                        fontSize="11px"
+                                        _dark={{ color: 'blue.300', borderColor: 'blue.700' }}
+                                        _hover={{ bg: 'blue.50' }}
+                                      >
+                                        {cell.value}
+                                      </chakra.a>
+                                    ) : cell.href ? (
+                                      <chakra.a
+                                        href={cell.href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        fontWeight={cell.emphasis ? '800' : '600'}
+                                        fontSize="xs"
+                                        color="blue.600"
+                                        textDecoration="underline"
+                                        textUnderlineOffset="3px"
+                                        _dark={{ color: 'blue.300' }}
+                                        _hover={{ color: 'blue.700' }}
+                                      >
+                                        {cell.value}
+                                      </chakra.a>
+                                    ) : (
+                                      <Text fontWeight={cell.emphasis ? '800' : '600'} fontSize="xs" color={cell.tone ? tone.color : 'var(--text-primary)'} _dark={cell.tone ? { color: tone.darkColor } : undefined}>
+                                        {cell.value}
+                                      </Text>
+                                    )}
                                     {cell.subvalue ? (
                                       <Text fontSize="xs" color="var(--text-muted)">
                                         {cell.subvalue}
@@ -1350,8 +1403,38 @@ export function RecipeTemplateRenderer({
                   {section.cards.filter((card) =>
                     activeFilters.size === 0 ||
                     card.chips.some((chip) => activeFilters.has(chip.label))
-                  ).map((card) => (
-                    <Box key={card.id ?? card.title} flex={{ base: '1 1 100%', md: `1 1 calc(${100 / (section.columns ?? 2)}% - 14px)` }} minW="260px" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-1)" overflow="hidden">
+                  ).map((card) => {
+                    const primaryLink = card.actions.find((a) => a.kind === 'link');
+                    const remainingActions = card.actions.filter((a) => a !== primaryLink);
+                    const cardSharedProps = {
+                      flex: { base: '1 1 100%', md: `1 1 calc(${100 / (section.columns ?? 2)}% - 14px)` } as const,
+                      minW: '260px',
+                      rounded: '8px',
+                      border: '1px solid var(--border-subtle)',
+                      bg: 'var(--surface-1)',
+                      overflow: 'hidden',
+                      display: 'block',
+                    };
+                    const CardWrapper = primaryLink
+                      ? ({ children }: { children: ReactNode }) => (
+                          <chakra.a
+                            key={card.id ?? card.title}
+                            href={primaryLink.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            cursor="pointer"
+                            transition="opacity 120ms ease"
+                            _hover={{ opacity: 0.85 }}
+                            {...cardSharedProps}
+                          >
+                            {children}
+                          </chakra.a>
+                        )
+                      : ({ children }: { children: ReactNode }) => (
+                          <Box key={card.id ?? card.title} {...cardSharedProps}>{children}</Box>
+                        );
+                    return (
+                    <CardWrapper key={card.id ?? card.title}>
                       {card.image ? (
                         <Box borderBottom="1px solid var(--border-subtle)">
                           <AspectRatio ratio={IMAGE_ASPECT_MAP[card.image.aspect] ?? 16 / 9}>
@@ -1413,15 +1496,16 @@ export function RecipeTemplateRenderer({
                             {card.footer}
                           </Text>
                         ) : null}
-                        {card.actions.length > 0 ? (
-                          renderActionRefs(card.actions, {
+                        {remainingActions.length > 0 ? (
+                          renderActionRefs(remainingActions, {
                             contextKey: `${section.slotId}:${card.id ?? card.title}`,
                             fallbackSelectedItemIds: card.id ? [card.id] : undefined
                           })
                         ) : null}
                       </VStack>
-                    </Box>
-                  ))}
+                    </CardWrapper>
+                    );
+                  })}
                 </Flex>
               )}
             </VStack>
@@ -2027,6 +2111,104 @@ export function RecipeTemplateRenderer({
           </TemplateSurface>
         );
       }
+      case 'report':
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="5">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? renderGhostSectionBody(section) : (
+                <>
+                  <Box
+                    color="var(--text-primary)"
+                    css={{
+                      '& h1': { fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '1.5rem', marginBottom: '0.4rem', lineHeight: 1.25 },
+                      '& h2': { fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '1.25rem', marginBottom: '0.35rem', lineHeight: 1.25 },
+                      '& h3': { fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '1rem', marginBottom: '0.3rem', lineHeight: 1.3 },
+                      '& p': { fontSize: '0.875rem', lineHeight: 1.75, color: 'var(--text-secondary)', marginBottom: '0.75rem' },
+                      '& p:last-child': { marginBottom: 0 },
+                      '& ul, & ol': { paddingInlineStart: '1.4rem', marginBottom: '0.75rem' },
+                      '& ul': { listStyleType: 'disc' },
+                      '& ol': { listStyleType: 'decimal' },
+                      '& li': { fontSize: '0.875rem', lineHeight: 1.7, color: 'var(--text-secondary)', marginBottom: '0.2rem' },
+                      '& strong': { fontWeight: 600, color: 'var(--text-primary)' },
+                      '& h1:first-child, & h2:first-child, & h3:first-child': { marginTop: 0 }
+                    }}
+                  >
+                    <ReactMarkdown
+                      urlTransform={(url) => safeMarkdownUrlTransform(url) ?? ''}
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={{
+                        sup({ children }) {
+                          const id = String(children);
+                          return (
+                            <chakra.a
+                              href={`#fn-${id}`}
+                              fontSize="0.6em"
+                              fontWeight="700"
+                              color="var(--accent)"
+                              verticalAlign="super"
+                              lineHeight={1}
+                              textDecoration="none"
+                              position="relative"
+                              top="-0.1em"
+                              cursor="pointer"
+                              _hover={{ textDecoration: 'underline' }}
+                              onClick={(e) => { e.preventDefault(); handleFootnoteClick(id); }}
+                            >
+                              {children}
+                            </chakra.a>
+                          );
+                        }
+                      }}
+                    >
+                      {section.body}
+                    </ReactMarkdown>
+                  </Box>
+                  {section.footnotes.length > 0 ? (
+                    <Box borderTop="1px solid var(--border-subtle)" pt="3">
+                      <VStack align="stretch" gap="1.5">
+                        {section.footnotes.map((fn) => (
+                          <HStack
+                            key={fn.id}
+                            id={`fn-${fn.id}`}
+                            align="start"
+                            gap="2"
+                            px="2"
+                            py="1"
+                            rounded="6px"
+                            bg={highlightedFnId === fn.id ? 'var(--accent-soft)' : 'transparent'}
+                            transition="background 300ms ease"
+                          >
+                            <Text fontSize="10px" fontWeight="700" color="var(--accent)" flexShrink={0} minW="16px">
+                              {fn.id}
+                            </Text>
+                            {fn.url ? (
+                              <chakra.a
+                                href={fn.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                fontSize="xs"
+                                color="var(--text-muted)"
+                                textDecoration="underline"
+                                textUnderlineOffset="2px"
+                                _hover={{ color: 'var(--text-secondary)' }}
+                              >
+                                {fn.label}
+                              </chakra.a>
+                            ) : (
+                              <Text fontSize="xs" color="var(--text-muted)">{fn.label}</Text>
+                            )}
+                          </HStack>
+                        ))}
+                      </VStack>
+                    </Box>
+                  ) : null}
+                </>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
       default:
         return null;
     }

@@ -22,7 +22,7 @@ const BUILTIN_TEMPLATE_IDS = [
   'vendor-evaluation-matrix',
   'event-planner',
   'job-search-pipeline',
-  'content-campaign-planner',
+
   'local-discovery-comparison',
   'step-by-step-instructions'
 ] as const;

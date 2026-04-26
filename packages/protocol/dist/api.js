@@ -96,6 +96,36 @@ export const CreateRecipeRequestSchema = z.object({
 export const SelectProfileRequestSchema = z.object({
     profileId: z.string().min(1)
 });
+export const CreateProfileRequestSchema = z.object({
+    name: z.string().min(1).max(64).regex(/^[a-z0-9_-]+$/i, 'Name must be alphanumeric with hyphens/underscores only')
+});
+export const DeleteProfileRequestSchema = z.object({
+    profileId: z.string().min(1)
+});
+export const ProfileMetricsSchema = z.object({
+    profileId: z.string().min(1),
+    sessionCount: z.number().int().nonnegative(),
+    messageCount: z.number().int().nonnegative(),
+    recipeCount: z.number().int().nonnegative()
+});
+export const ProfilesMetricsResponseSchema = z.object({
+    metrics: z.array(ProfileMetricsSchema)
+});
+export const ProfilesResponseSchema = z.object({
+    profiles: z.array(ProfileSchema),
+    activeProfileId: z.string().min(1).nullable()
+});
+export const TestModelConfigRequestSchema = z.object({
+    profileId: z.string().min(1),
+    defaultModel: z.string().min(1),
+    provider: z.string().min(1).optional()
+});
+export const TestModelConfigResponseSchema = z.object({
+    ok: z.boolean(),
+    message: z.string(),
+    model: z.string(),
+    latencyMs: z.number().int().nonnegative()
+});
 export const SelectSessionRequestSchema = z.object({
     profileId: z.string().min(1),
     sessionId: z.string().min(1)
@@ -201,6 +231,7 @@ export const ChatStreamRequestSchema = z.object({
     sessionId: z.string().min(1),
     recipeId: z.string().min(1).optional(),
     content: z.string().min(1).max(20_000),
+    intentContent: z.string().min(1).max(500).optional(),
     mode: ChatRequestModeSchema.default('chat')
 });
 export const ToolExecutionPrepareRequestSchema = z.object({

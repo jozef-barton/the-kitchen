@@ -1161,16 +1161,6 @@ function normalizeTemplateFillData(templateId: RecipeTemplateId, rawData: unknow
         itineraryItems: coerceTimelineItems(record.itineraryItems ?? record.itinerary, repairs, 'data.itineraryItems'),
         noteLines: coerceNoteLines(record.noteLines ?? record.notes, repairs, 'data.noteLines')
       };
-    case 'content-campaign-planner':
-      return {
-        eyebrow: preferString(record, ['eyebrow', 'kicker'], repairs, 'eyebrow'),
-        heroChips: coerceChips(record.heroChips ?? record.badges, repairs, 'data.heroChips'),
-        activeTabId: preferString(record, ['activeTabId', 'tab'], repairs, 'activeTabId'),
-        ideaCards: coerceCards(record.ideaCards ?? record.ideas, repairs, 'data.ideaCards'),
-        draftLines: coerceNoteLines(record.draftLines ?? record.drafts, repairs, 'data.draftLines'),
-        scheduleItems: coerceTimelineItems(record.scheduleItems ?? record.schedule, repairs, 'data.scheduleItems'),
-        noteLines: coerceNoteLines(record.noteLines ?? record.notes, repairs, 'data.noteLines')
-      };
     case 'step-by-step-instructions':
       {
       const rawSteps = preferValue(record, ['steps', 'instructions', 'items'], repairs, 'steps');
@@ -1480,15 +1470,6 @@ function stripTemplateActionLinks(fill: RecipeTemplateFill): RecipeTemplateFill 
           itineraryItems: clearTimelineLinks(fill.data.itineraryItems)
         }
       });
-    case 'content-campaign-planner':
-      return RecipeTemplateFillSchema.parse({
-        ...fill,
-        data: {
-          ...fill.data,
-          ideaCards: clearCardLinks(fill.data.ideaCards),
-          scheduleItems: clearTimelineLinks(fill.data.scheduleItems)
-        }
-      });
     default:
       return fill;
   }
@@ -1724,17 +1705,6 @@ export function createRecipeTemplateActionsArtifact(fill: RecipeTemplateFill): R
         },
         metadata: {}
       });
-    case 'content-campaign-planner':
-      return RecipeTemplateActionsSchema.parse({
-        kind: 'recipe_template_actions',
-        schemaVersion: 'recipe_template_actions/v1',
-        templateId: fill.templateId,
-        data: {
-          ideaCards: collectLinkedCards(fill.data.ideaCards),
-          scheduleItems: collectLinkedTimelineItems(fill.data.scheduleItems)
-        },
-        metadata: {}
-      });
     default:
       return RecipeTemplateActionsSchema.parse({
         kind: 'recipe_template_actions',
@@ -1941,15 +1911,6 @@ export function assembleRecipeTemplateFill(input: {
           itineraryItems: mergeTimelineLinks(baseFill.data.itineraryItems, actions.data.itineraryItems)
         }
       });
-    case 'content-campaign-planner':
-      return RecipeTemplateFillSchema.parse({
-        ...baseFill,
-        data: {
-          ...baseFill.data,
-          ideaCards: mergeCardLinks(baseFill.data.ideaCards, actions.data.ideaCards),
-          scheduleItems: mergeTimelineLinks(baseFill.data.scheduleItems, actions.data.scheduleItems)
-        }
-      });
     default:
       return baseFill;
   }
@@ -2054,8 +2015,6 @@ function defaultSlotIdForTemplateOperation(templateId: RecipeTemplateId, op: Rec
           return 'research-tabs';
         case 'event-planner':
           return 'event-tabs';
-        case 'content-campaign-planner':
-          return 'campaign-tabs';
         default:
           return 'tabs';
       }
@@ -2093,8 +2052,6 @@ function defaultSlotIdForTemplateOperation(templateId: RecipeTemplateId, op: Rec
           return 'bookings';
         case 'event-planner':
           return 'venues';
-        case 'content-campaign-planner':
-          return 'ideas';
         default:
           return 'cards';
       }
@@ -2120,8 +2077,6 @@ function defaultSlotIdForTemplateOperation(templateId: RecipeTemplateId, op: Rec
           return 'itinerary';
         case 'event-planner':
           return 'itinerary';
-        case 'content-campaign-planner':
-          return 'schedule';
         default:
           return 'timeline';
       }
@@ -2154,8 +2109,6 @@ function defaultSlotIdForTemplateOperation(templateId: RecipeTemplateId, op: Rec
           return 'bookings';
         case 'event-planner':
           return 'venues';
-        case 'content-campaign-planner':
-          return 'ideas';
         default:
           return 'items';
       }
@@ -2920,28 +2873,6 @@ export function validateRecipeTemplateSemanticCompleteness(fill: RecipeTemplateF
             'Event planner'
           );
     }
-    case 'content-campaign-planner': {
-      const primaryContentCounts = {
-        ideaCards: fill.data.ideaCards.length,
-        draftLines: fill.data.draftLines.length,
-        scheduleItems: fill.data.scheduleItems.length
-      };
-      return primaryContentCounts.ideaCards + primaryContentCounts.draftLines + primaryContentCounts.scheduleItems > 0
-        ? {
-            ok: true,
-            templateId: fill.templateId,
-            primaryContentCounts,
-            requiredSignals: ['ideaCards', 'draftLines', 'scheduleItems'],
-            issues: [],
-            summary: 'Campaign planner populated.'
-          }
-        : semanticCompletenessFailure(
-            fill,
-            primaryContentCounts,
-            ['ideaCards', 'draftLines', 'scheduleItems'],
-            'Content campaign planner'
-          );
-    }
     case 'step-by-step-instructions': {
       const primaryContentCounts = {
         steps: fill.data.steps.length
@@ -3338,43 +3269,6 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                 kind: 'timeline',
                 title: 'Itinerary',
                 items: toTimelineItems(definition, data.itineraryItems, [], 'event-itinerary')
-              }
-            ]
-          }
-        }
-      ];
-    }
-    case 'content-campaign-planner': {
-      const data = fill.data;
-      const tabs = [
-        { id: 'ideas', label: 'Ideas' },
-        { id: 'drafts', label: 'Drafts' },
-        { id: 'schedule', label: 'Schedule' }
-      ];
-      return [
-        {
-          slotId: 'campaign-tabs',
-          kind: 'tabs',
-          title: 'Campaign planner',
-          tabs,
-          activeTabId: ensureActiveTabId(data.activeTabId, tabs),
-          panes: {
-            ideas: [
-              {
-                slotId: 'ideas',
-                kind: 'card-grid',
-                title: 'Ideas',
-                columns: 1,
-                cards: toCardItems(definition, data.ideaCards, ['flesh-out-idea', 'write-campaign-email'], 'campaign-idea')
-              }
-            ],
-            drafts: [createNotesSection(definition, 'drafts', 'Drafts', data.draftLines, ['write-campaign-email'])],
-            schedule: [
-              {
-                slotId: 'schedule',
-                kind: 'timeline',
-                title: 'Schedule',
-                items: toTimelineItems(definition, data.scheduleItems, [], 'campaign-schedule')
               }
             ]
           }
@@ -3831,26 +3725,6 @@ function getTemplateFillGuide(templateId: RecipeTemplateId) {
         },
         commonMistakes: ['Use groups for severity categories and detail for the selected finding. Do not flatten findings into one list.']
       };
-    case 'content-campaign-planner':
-      return {
-        allowedDataKeys: ['activeTabId', 'ideaCards', 'draftLines', 'scheduleItems', 'noteLines'],
-        requiredDataKeys: [],
-        validExample: {
-          kind: 'recipe_template_fill',
-          schemaVersion: 'recipe_template_fill/v2',
-          templateId,
-          title: 'Q2 campaign plan',
-          summary: 'Track campaign ideas, drafts, schedule, and notes.',
-          data: {
-            activeTabId: 'ideas',
-            ideaCards: [{ id: 'idea-1', title: 'Blog post: AI in healthcare' }],
-            draftLines: ['Outline: Introduction, key findings, case studies'],
-            scheduleItems: [{ id: 'sched-1', title: 'Publish blog post', time: '2026-04-20' }],
-            noteLines: []
-          }
-        },
-        commonMistakes: ['Use ideaCards, draftLines, scheduleItems for the tab categories. Do not collapse into a single content block.']
-      };
     case 'step-by-step-instructions':
       return {
         allowedDataKeys: ['prerequisites', 'steps', 'noteLines'],
@@ -3950,8 +3824,6 @@ function getTemplateSemanticRequirements(templateId: RecipeTemplateId) {
       return ['Populate at least one job listing card with a title, company subtitle, pay price, and an Apply link action.'];
     case 'event-planner':
       return ['Populate at least one venue, guest, checklist item, or itinerary item.'];
-    case 'content-campaign-planner':
-      return ['Populate at least one idea card, draft line, or schedule item.'];
     case 'step-by-step-instructions':
       return ['Populate at least one instruction step.'];
     default:
@@ -4087,11 +3959,6 @@ function createRecipeTemplateActionsTargetPacket(text: RecipeTemplateText) {
         venueCards: summarizeCards(text.data.venueCards),
         guestGroups: summarizeGroups(text.data.guestGroups),
         itineraryItems: summarizeTimeline(text.data.itineraryItems)
-      };
-    case 'content-campaign-planner':
-      return {
-        ideaCards: summarizeCards(text.data.ideaCards),
-        scheduleItems: summarizeTimeline(text.data.scheduleItems)
       };
     default:
       return {};
@@ -4651,26 +4518,6 @@ function createGhostRecipeTemplateFill(templateId: RecipeTemplateId, currentStat
           guestGroups: [],
           checklistItems: [],
           itineraryItems: [],
-          noteLines: []
-        },
-        metadata: {
-          preview: true
-        }
-      });
-    case 'content-campaign-planner':
-      return RecipeTemplateFillSchema.parse({
-        kind: 'recipe_template_fill',
-        schemaVersion: 'recipe_template_fill/v2',
-        templateId,
-        title,
-        subtitle,
-        summary,
-        data: {
-          heroChips: [],
-          activeTabId: 'ideas',
-          ideaCards: [],
-          draftLines: [],
-          scheduleItems: [],
           noteLines: []
         },
         metadata: {

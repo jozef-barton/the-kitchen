@@ -11,6 +11,25 @@ function SpaceIcon() {
   );
 }
 
+function CollapseIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="3" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+      <path d="M9.5 4L6 8l3.5 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 3v10" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function ChatBubbleIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="3.5" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+      <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 2.5V11H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 function ActivityIcon() {
   const Svg = chakra('svg');
   return (
@@ -404,7 +423,7 @@ export function ChatPage({
                   title="Expand chat pane"
                   onClick={() => setRecipeChatCollapsed(false)}
                 >
-                  Chat
+                  <ChatBubbleIcon />
                 </Button>
                 <Button
                   ref={runtimeButtonRef}
@@ -482,8 +501,8 @@ export function ChatPage({
                           setSpaceStatus('idle');
                         }}
                       >
-                        {spaceStatus === 'building' ? <SpinnerIcon /> : <SpaceIcon />}
-                        Space
+                        {spaceStatus === 'building' ? <SpinnerIcon /> : <CollapseIcon />}
+                        Collapse
                       </Button>
                       <Button
                         ref={runtimeButtonRef}
@@ -547,7 +566,7 @@ export function ChatPage({
             unmountOnExit
             open={runtimeDrawerOpen}
             onOpenChange={(event) => onRuntimeDrawerOpenChange(event.open)}
-            size={{ base: 'full', md: 'lg', xl: 'xl' }}
+            size={{ base: 'full', md: 'sm', xl: 'md' }}
             finalFocusEl={() => (runtimeButtonRef.current && runtimeButtonRef.current.isConnected ? runtimeButtonRef.current : document.body)}
           >
             <Portal>
@@ -593,12 +612,13 @@ export function ChatPage({
           >
             <Portal>
               <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
-              <Drawer.Positioner display={{ base: 'block', xl: 'none' }}>
+              <Drawer.Positioner display={{ base: 'block', xl: 'none' }} p={{ base: '0', md: '6' }}>
                 <Drawer.Content
                   bg="var(--surface-elevated)"
-                  borderTop="1px solid var(--border-subtle)"
-                  rounded={{ base: '16px 16px 0 0' }}
-                  maxH="92dvh"
+                  borderTop={{ base: '1px solid var(--border-subtle)', md: 'none' }}
+                  border={{ md: '1px solid var(--border-subtle)' }}
+                  rounded={{ base: '16px 16px 0 0', md: '16px' }}
+                  maxH={{ base: '92dvh', md: '100%' }}
                   overflow="hidden"
                 >
                   <Drawer.Header px="4" pt="4" pb="3" borderBottom="1px solid var(--border-subtle)">
@@ -714,7 +734,7 @@ export function ChatPage({
             placement="bottom"
           >
             <Portal>
-              <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
+              <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" display={{ base: 'block', xl: 'none' }} />
               <Drawer.Positioner display={{ base: 'block', xl: 'none' }}>
                 <Drawer.Content
                   bg="var(--surface-elevated)"

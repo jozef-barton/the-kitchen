@@ -18,7 +18,7 @@ export const RECIPE_TEMPLATE_IDS = [
   'vendor-evaluation-matrix',
   'event-planner',
   'job-search-pipeline',
-  'content-campaign-planner',
+
   'local-discovery-comparison',
   'step-by-step-instructions'
 ] as const;
@@ -206,6 +206,7 @@ export const RecipeTemplateTableCellSchema = z
   .object({
     value: z.string().min(1),
     subvalue: OptionalTextSchema,
+    href: OptionalTextSchema,
     tone: RecipeTemplateToneSchema.optional(),
     emphasis: z.boolean().default(false)
   })
@@ -444,6 +445,13 @@ export const RecipeTemplateSectionSchema: z.ZodType<
       series: Array<{ id: string; label: string; tone?: RecipeTemplateTone }>;
       data: Array<Record<string, string | number>>;
       valueFormat?: 'number' | 'currency' | 'percent';
+    })
+  | ({
+      slotId: string;
+      kind: 'report';
+      title: string;
+      body: string;
+      footnotes: Array<{ id: string; label: string; url?: string }>;
     }),
   z.ZodTypeDef,
   unknown
@@ -671,6 +679,18 @@ export const RecipeTemplateSectionSchema: z.ZodType<
         .default([]),
       data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))).default([]),
       valueFormat: z.enum(['number', 'currency', 'percent']).default('number')
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('report'),
+      title: z.string().min(1),
+      body: z.string().min(1),
+      footnotes: z.array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          url: OptionalTextSchema
+        }).strict()
+      ).default([])
     }).strict()
   ])
 );

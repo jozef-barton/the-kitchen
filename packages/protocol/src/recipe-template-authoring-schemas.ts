@@ -332,18 +332,6 @@ const JobSearchPipelineDataSchema = z
   })
   .strict();
 
-const ContentCampaignPlannerDataSchema = z
-  .object({
-    eyebrow: OptionalTextSchema,
-    heroChips: z.array(RecipeTemplateChipSchema).default([]),
-    stats: z.array(RecipeTemplateStatSchema).default([]),
-    activeTabId: OptionalTextSchema,
-    ideaCards: z.array(RecipeTemplateAuthoringCardItemSchema).default([]),
-    draftLines: z.array(z.string().min(1)).default([]),
-    scheduleItems: z.array(RecipeTemplateAuthoringTimelineItemSchema).default([]),
-    noteLines: z.array(z.string().min(1)).default([])
-  })
-  .strict();
 
 const StepByStepInstructionsDataSchema = z
   .object({
@@ -403,7 +391,7 @@ export const RecipeTemplateFillSchema = z.discriminatedUnion('templateId', [
   createTemplateFillSchema('vendor-evaluation-matrix', VendorEvaluationMatrixDataSchema),
   createTemplateFillSchema('event-planner', EventPlannerDataSchema),
   createTemplateFillSchema('job-search-pipeline', JobSearchPipelineDataSchema),
-  createTemplateFillSchema('content-campaign-planner', ContentCampaignPlannerDataSchema),
+
   createTemplateFillSchema('local-discovery-comparison', ListDetailResultsDataSchema),
   createTemplateFillSchema('step-by-step-instructions', StepByStepInstructionsDataSchema)
 ]);
@@ -442,7 +430,7 @@ export const RecipeTemplateHydrationSchema = z.discriminatedUnion('templateId', 
   createTemplateHydrationSchema('vendor-evaluation-matrix', VendorEvaluationMatrixDataSchema),
   createTemplateHydrationSchema('event-planner', EventPlannerDataSchema),
   createTemplateHydrationSchema('job-search-pipeline', JobSearchPipelineDataSchema),
-  createTemplateHydrationSchema('content-campaign-planner', ContentCampaignPlannerDataSchema),
+
   createTemplateHydrationSchema('local-discovery-comparison', ListDetailResultsDataSchema),
   createTemplateHydrationSchema('step-by-step-instructions', StepByStepInstructionsDataSchema)
 ]);
@@ -481,7 +469,7 @@ export const RecipeTemplateTextSchema = z.discriminatedUnion('templateId', [
   createTemplateTextSchema('vendor-evaluation-matrix', VendorEvaluationMatrixDataSchema),
   createTemplateTextSchema('event-planner', EventPlannerDataSchema),
   createTemplateTextSchema('job-search-pipeline', JobSearchPipelineDataSchema),
-  createTemplateTextSchema('content-campaign-planner', ContentCampaignPlannerDataSchema),
+
   createTemplateTextSchema('local-discovery-comparison', ListDetailResultsDataSchema),
   createTemplateTextSchema('step-by-step-instructions', StepByStepInstructionsDataSchema)
 ]);
@@ -626,12 +614,6 @@ const JobSearchPipelineActionsDataSchema = z
   })
   .strict();
 
-const ContentCampaignPlannerActionsDataSchema = z
-  .object({
-    ideaCards: z.array(RecipeTemplateCardLinksOverlaySchema).default([]),
-    scheduleItems: z.array(RecipeTemplateTimelineLinksOverlaySchema).default([])
-  })
-  .strict();
 
 const RecipeTemplateActionsBaseSchema = z
   .object({
@@ -663,7 +645,7 @@ export const RecipeTemplateActionsSchema = z.discriminatedUnion('templateId', [
   createTemplateActionsSchema('vendor-evaluation-matrix', VendorEvaluationMatrixActionsDataSchema),
   createTemplateActionsSchema('event-planner', EventPlannerActionsDataSchema),
   createTemplateActionsSchema('job-search-pipeline', JobSearchPipelineActionsDataSchema),
-  createTemplateActionsSchema('content-campaign-planner', ContentCampaignPlannerActionsDataSchema),
+
   createTemplateActionsSchema('local-discovery-comparison', ListDetailActionsDataSchema),
   createTemplateActionsSchema('step-by-step-instructions', StepByStepInstructionsActionsDataSchema)
 ]);
@@ -802,7 +784,7 @@ export const RecipeTemplateUpdateSchema = z.discriminatedUnion('templateId', [
   createTemplateUpdateSchema('vendor-evaluation-matrix'),
   createTemplateUpdateSchema('event-planner'),
   createTemplateUpdateSchema('job-search-pipeline'),
-  createTemplateUpdateSchema('content-campaign-planner'),
+
   createTemplateUpdateSchema('local-discovery-comparison'),
   createTemplateUpdateSchema('step-by-step-instructions')
 ]);

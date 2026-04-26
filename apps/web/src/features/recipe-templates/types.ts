@@ -41,6 +41,7 @@ export interface TemplateStat {
   value: string;
   helper?: string;
   tone?: TemplateTone;
+  action?: string;
 }
 
 export interface TemplateField {
@@ -110,6 +111,7 @@ export interface TemplateTableColumn {
 export interface TemplateTableCell {
   value: string;
   subvalue?: string;
+  href?: string;
   tone?: TemplateTone;
   emphasis?: boolean;
 }
@@ -252,6 +254,37 @@ export type RecipeTemplatePreviewSection =
       rows: TemplateTableRow[];
       primaryAction: string;
       secondaryAction?: string;
+    }
+  | {
+      kind: 'report';
+      title: string;
+      body: string;
+      footnotes?: Array<{ id: string; label: string; url?: string }>;
+    }
+  | {
+      kind: 'interactive-guest-list';
+      title: string;
+      guests: Array<{ id: string; name: string; meta?: string }>;
+    }
+  | {
+      kind: 'interactive-checklist';
+      title: string;
+      items: Array<{ id: string; label: string; checked?: boolean }>;
+    }
+  | {
+      kind: 'editable-notes';
+      title: string;
+      notes: string[];
+    }
+  | {
+      kind: 'step-by-step-preview';
+      prerequisites?: Array<{ id: string; label: string }>;
+      steps: Array<{
+        id: string;
+        label: string;
+        detail?: string;
+        code?: string;
+      }>;
     };
 
 export interface RecipeTemplatePreviewSpec {

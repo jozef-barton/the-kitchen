@@ -7,13 +7,18 @@ import {
   TemplateComparisonTable,
   TemplateConfirmationBlock,
   TemplateDetailPanel,
+  TemplateEditableNotes,
   TemplateSectionHeader,
   TemplateFilterStrip,
   TemplateGroupedList,
+  TemplateInteractiveChecklist,
+  TemplateInteractiveGuestList,
   TemplateKanbanBoard,
   TemplateNotesPanel,
+  TemplateReportSection,
   TemplateSelectableTable,
   TemplateStatStrip,
+  TemplateStepByStepPreview,
   TemplateSurface,
   TemplateTimeline,
   TemplateActivityLog
@@ -68,6 +73,16 @@ function RecipeTemplatePreviewSectionRenderer({ section }: { section: RecipeTemp
       return <TemplateAccordionList {...section} />;
     case 'selectable-table':
       return <TemplateSelectableTable {...section} />;
+    case 'report':
+      return <TemplateReportSection {...section} />;
+    case 'interactive-guest-list':
+      return <TemplateInteractiveGuestList {...section} />;
+    case 'interactive-checklist':
+      return <TemplateInteractiveChecklist {...section} />;
+    case 'editable-notes':
+      return <TemplateEditableNotes {...section} />;
+    case 'step-by-step-preview':
+      return <TemplateStepByStepPreview {...section} />;
     case 'split':
       return (
         <Flex

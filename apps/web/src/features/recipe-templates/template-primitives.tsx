@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import { Badge, Box, Button, Checkbox, Flex, HStack, Separator, SimpleGrid, Table, Text, VStack } from '@chakra-ui/react';
+import { useRef, useState } from 'react';
+import { Badge, Box, Button, Checkbox, Flex, HStack, Image, Input, Separator, SimpleGrid, Table, Text, VStack, chakra } from '@chakra-ui/react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import type {
   RecipeTemplatePreviewSection,
   TemplateAction,
@@ -10,6 +13,8 @@ import type {
   TemplateStat
 } from './types';
 import { templateToneStyles } from './template-style-helpers';
+import { toaster } from '../../ui/toaster-store';
+import { safeMarkdownUrlTransform } from '../../lib/markdown-url-transform';
 
 export function TemplateSurface({
   children,
@@ -145,13 +150,13 @@ export function TemplateStatStrip({ title, items }: { title?: string; items: Tem
           {title}
         </Text>
       ) : null}
-      <Flex gap="0" wrap="wrap">
+      <Flex gap="5" wrap="wrap">
         {items.map((item, i) => {
           const tone = templateToneStyles(item.tone);
           return (
             <Box
               key={`${item.label}-${item.value}`}
-              px={i === 0 ? '0' : '5'}
+              pl={i === 0 ? '0' : '5'}
               borderLeft={i === 0 ? 'none' : '1px solid var(--border-subtle)'}
             >
               <Text fontSize="10px" fontWeight="600" color={item.tone ? tone.color : 'var(--text-muted)'} textTransform="uppercase" letterSpacing="0.05em" _dark={item.tone ? { color: tone.darkColor } : undefined}>
@@ -164,6 +169,25 @@ export function TemplateStatStrip({ title, items }: { title?: string; items: Tem
                 <Text mt="0.5" fontSize="xs" color="var(--text-muted)">
                   {item.helper}
                 </Text>
+              ) : null}
+              {item.action ? (
+                <Button
+                  mt="1.5"
+                  size="xs"
+                  variant="outline"
+                  fontSize="xs"
+                  fontWeight="500"
+                  h="auto"
+                  px="2"
+                  py="1"
+                  borderColor={item.tone ? tone.border : 'var(--border-subtle)'}
+                  color={item.tone ? tone.color : 'var(--text-muted)'}
+                  _dark={{ borderColor: item.tone ? tone.darkBorder : undefined, color: item.tone ? tone.darkColor : undefined }}
+                  _hover={{ bg: item.tone ? tone.bg : 'var(--surface-2)' }}
+                  onClick={() => toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 })}
+                >
+                  {item.action}
+                </Button>
               ) : null}
             </Box>
           );
@@ -290,49 +314,61 @@ function TemplateCard({
   wide?: boolean;
 }) {
   return (
-    <Box py="3.5" borderBottom="1px solid var(--border-subtle)">
+    <Box
+      rounded="8px"
+      border="1px solid var(--border-subtle)"
+      bg="var(--surface-1)"
+      overflow="hidden"
+      cursor="pointer"
+      transition="opacity 120ms ease"
+      _hover={{ opacity: 0.85 }}
+      onClick={() => toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 })}
+    >
       {card.imageLabel ? (
-        <Text fontSize="10px" fontWeight="600" letterSpacing="0.05em" textTransform="uppercase" color="var(--text-muted)" mb="1">
-          {card.imageLabel}
+        <Box borderBottom="1px solid var(--border-subtle)" h="110px" overflow="hidden">
+          <Image
+            src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=640&q=60"
+            alt={card.imageLabel}
+            w="100%"
+            h="100%"
+            objectFit="cover"
+          />
+        </Box>
+      ) : null}
+      <Box py="3.5" px="3.5">
+        <Text fontWeight="600" color="var(--text-primary)" fontSize="sm">
+          {card.title}
         </Text>
-      ) : null}
-      <Text fontWeight="600" color="var(--text-primary)" fontSize="sm">
-        {card.title}
-      </Text>
-      {card.subtitle ? (
-        <Text mt="0.5" fontSize="sm" color="var(--text-secondary)">
-          {card.subtitle}
-        </Text>
-      ) : null}
-      {card.price ? (
-        <Text mt="1.5" fontSize="lg" fontWeight="700" color="var(--text-primary)">
-          {card.price}
-        </Text>
-      ) : null}
-      {card.chips?.length ? (
-        <Flex mt="2" gap="1.5" wrap="wrap">
-          {card.chips.map((chip) => (
-            <TemplateChipPill key={`${card.title}-${chip.label}`} chip={chip} />
-          ))}
-        </Flex>
-      ) : null}
-      {card.bullets?.length ? (
-        <VStack mt="2" align="stretch" gap="1">
-          {card.bullets.map((bullet) => (
-            <HStack key={bullet} align="start" gap="2">
-              <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--text-muted)" flexShrink={0} />
-              <Text fontSize="sm" color="var(--text-secondary)">
-                {bullet}
-              </Text>
-            </HStack>
-          ))}
-        </VStack>
-      ) : null}
-      {card.footer ? (
-        <Text mt="1.5" fontSize="xs" color="var(--text-muted)">
-          {card.footer}
-        </Text>
-      ) : null}
+        {card.subtitle ? (
+          <Text mt="0.5" fontSize="sm" color="var(--text-secondary)">
+            {card.subtitle}
+          </Text>
+        ) : null}
+        {card.price ? (
+          <Text mt="1.5" fontSize="lg" fontWeight="700" color="var(--text-primary)">
+            {card.price}
+          </Text>
+        ) : null}
+        {card.chips?.length ? (
+          <Flex mt="2" gap="1.5" wrap="wrap">
+            {card.chips.map((chip) => (
+              <TemplateChipPill key={`${card.title}-${chip.label}`} chip={chip} />
+            ))}
+          </Flex>
+        ) : null}
+        {card.bullets?.length ? (
+          <VStack mt="2" align="stretch" gap="1">
+            {card.bullets.map((bullet) => (
+              <HStack key={bullet} align="start" gap="2">
+                <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--text-muted)" flexShrink={0} />
+                <Text fontSize="sm" color="var(--text-secondary)">
+                  {bullet}
+                </Text>
+              </HStack>
+            ))}
+          </VStack>
+        ) : null}
+      </Box>
     </Box>
   );
 }
@@ -346,7 +382,7 @@ export function TemplateCardGrid({
     <TemplateSurface>
       <VStack align="stretch" gap="4">
         <TemplateSectionHeader title={title} />
-        <SimpleGrid columns={{ base: 1, md: columns }} gap="3.5">
+        <SimpleGrid columns={{ base: 2, md: columns }} gap="3.5">
           {cards.map((card) => (
             <TemplateCard key={card.title} card={card} wide={columns === 1} />
           ))}
@@ -370,51 +406,93 @@ export function TemplateComparisonTable({
         {/* Column headers */}
         {columns.length > 0 ? (
           <Flex pb="2" mb="1" borderBottom="1px solid var(--border-subtle)">
-            <Box w="38%" flexShrink={0} />
+            <Box w="28%" flexShrink={0} />
             {columns.map((col) => (
-              <Text
+              <Box
                 key={col.id}
-                flex="1"
-                fontSize="xs"
-                fontWeight="600"
-                color="var(--text-secondary)"
-                textAlign={col.align ?? 'start'}
+                flex={col.label === '' ? '0 0 36px' : '1'}
+                textAlign={col.align ?? 'center'}
               >
-                {col.label}
-              </Text>
+                <Text fontSize="11px" fontWeight="600" color="var(--text-secondary)">
+                  {col.label}
+                </Text>
+              </Box>
             ))}
           </Flex>
         ) : null}
         {/* Rows */}
         <VStack align="stretch" gap="0">
           {rows.map((row) => (
-            <Flex key={row.id} py="2.5" borderBottom="1px solid var(--border-subtle)" align="start">
+            <Flex key={row.id} py="1.5" borderBottom="1px solid var(--border-subtle)" align="center">
               <Text
-                w="38%"
+                w="28%"
                 flexShrink={0}
-                fontSize="10px"
+                fontSize="11px"
                 fontWeight="600"
-                color="var(--text-muted)"
-                textTransform="uppercase"
-                letterSpacing="0.05em"
-                pt="0.5"
+                color="var(--text-primary)"
               >
                 {row.label}
               </Text>
               {row.cells.map((cell, index) => {
+                const col = columns[index];
                 const tone = templateToneStyles(cell.tone);
+                const cellColor = cell.tone ? tone.color : 'var(--text-primary)';
+                const cellDark = cell.tone ? { color: tone.darkColor } : undefined;
+                const isIconCell = cell.href && col?.label === '';
                 return (
-                  <Box key={`${row.id}-${columns[index]?.id ?? index}`} flex="1" textAlign={columns[index]?.align ?? 'start'}>
-                    <Text
-                      fontWeight={cell.emphasis ? '700' : '500'}
-                      fontSize="sm"
-                      color={cell.tone ? tone.color : 'var(--text-primary)'}
-                      _dark={cell.tone ? { color: tone.darkColor } : undefined}
-                    >
-                      {cell.value}
-                    </Text>
+                  <Box key={`${row.id}-${col?.id ?? index}`} flex={col?.label === '' ? '0 0 36px' : '1'} textAlign={col?.align ?? 'center'}>
+                    {isIconCell ? (
+                      <chakra.a
+                        display="inline-flex"
+                        alignItems="center"
+                        justifyContent="center"
+                        w="24px"
+                        h="24px"
+                        rounded="full"
+                        border="1px solid"
+                        borderColor="blue.200"
+                        color="blue.600"
+                        fontSize="11px"
+                        _dark={{ color: 'blue.300', borderColor: 'blue.700' }}
+                        _hover={{ bg: 'blue.50' }}
+                        cursor="pointer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 });
+                        }}
+                      >
+                        {cell.value}
+                      </chakra.a>
+                    ) : cell.href ? (
+                      <chakra.a
+                        href={cell.href}
+                        fontWeight={cell.emphasis ? '700' : '500'}
+                        fontSize="11px"
+                        color="blue.600"
+                        textDecoration="underline"
+                        textUnderlineOffset="3px"
+                        _dark={{ color: 'blue.300' }}
+                        _hover={{ color: 'blue.700' }}
+                        cursor="pointer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 });
+                        }}
+                      >
+                        {cell.value}
+                      </chakra.a>
+                    ) : (
+                      <Text
+                        fontWeight={cell.emphasis ? '700' : '500'}
+                        fontSize="11px"
+                        color={cellColor}
+                        _dark={cellDark}
+                      >
+                        {cell.value}
+                      </Text>
+                    )}
                     {cell.subvalue ? (
-                      <Text fontSize="xs" color="var(--text-muted)">{cell.subvalue}</Text>
+                      <Text fontSize="11px" color="var(--text-muted)">{cell.subvalue}</Text>
                     ) : null}
                   </Box>
                 );
@@ -779,9 +857,9 @@ export function TemplateAccordionList({
                 transition="background 0.1s"
               >
                 <Flex justify="space-between" align="center" gap="3">
-                  <HStack gap="2" align="center" minW={0}>
+                  <HStack gap="2.5" align="center" minW={0}>
                     {item.tone ? (
-                      <Box w="2" h="2" rounded="full" bg={tone.color} _dark={{ bg: tone.darkColor }} flexShrink={0} />
+                      <Box w="2.5" h="2.5" rounded="full" bg={tone.color} _dark={{ bg: tone.darkColor }} flexShrink={0} />
                     ) : null}
                     <VStack align="start" gap="0.5" minW={0}>
                       <Text fontWeight="600" color="var(--text-primary)" fontSize="sm">
@@ -796,9 +874,19 @@ export function TemplateAccordionList({
                   </HStack>
                   <HStack gap="2" flexShrink={0}>
                     {item.count ? (
-                      <Text fontSize="xs" fontWeight="600" color="var(--text-muted)">
-                        {item.count}
-                      </Text>
+                      <Box
+                        px="2"
+                        py="0.5"
+                        rounded="full"
+                        bg={tone.bg}
+                        border="1px solid"
+                        borderColor={tone.border}
+                        _dark={{ bg: tone.darkBg, borderColor: tone.darkBorder }}
+                      >
+                        <Text fontSize="10px" fontWeight="700" color={tone.color} _dark={{ color: tone.darkColor }} textTransform="uppercase" letterSpacing="0.04em">
+                          {item.count}
+                        </Text>
+                      </Box>
                     ) : null}
                     <Text fontSize="xs" color="var(--text-muted)">
                       {isExpanded ? '▲' : '▼'}
@@ -919,10 +1007,11 @@ export function TemplateSelectableTable({
                   <Checkbox.Root
                     checked={allSelected ? true : someSelected ? 'indeterminate' : false}
                     onCheckedChange={toggleAll}
-                    size="sm"
+                    cursor="pointer"
+                    position="relative"
                   >
                     <Checkbox.HiddenInput />
-                    <Checkbox.Control />
+                    <Checkbox.Control w="4" h="4" />
                   </Checkbox.Root>
                 </Table.ColumnHeader>
                 <Table.ColumnHeader>Item</Table.ColumnHeader>
@@ -948,11 +1037,12 @@ export function TemplateSelectableTable({
                       <Checkbox.Root
                         checked={isSelected}
                         onCheckedChange={() => toggleRow(row.id)}
-                        size="sm"
                         onClick={(e) => e.stopPropagation()}
+                        cursor="pointer"
+                        position="relative"
                       >
                         <Checkbox.HiddenInput />
-                        <Checkbox.Control />
+                        <Checkbox.Control w="4" h="4" />
                       </Checkbox.Root>
                     </Table.Cell>
                     <Table.Cell>
@@ -1009,6 +1099,568 @@ export function TemplateSelectableTable({
             <TemplateActionButton action={{ label: secondaryAction }} />
           ) : null}
         </Flex>
+      </VStack>
+    </TemplateSurface>
+  );
+}
+
+export function TemplateInteractiveGuestList({
+  title,
+  guests: initialGuests
+}: Extract<RecipeTemplatePreviewSection, { kind: 'interactive-guest-list' }>) {
+  const [guests, setGuests] = useState(initialGuests);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [newName, setNewName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function startEdit(guest: typeof guests[number]) {
+    setEditingId(guest.id);
+    setEditValue(guest.name);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function commitEdit(id: string) {
+    const trimmed = editValue.trim();
+    if (trimmed) setGuests((prev) => prev.map((g) => g.id === id ? { ...g, name: trimmed } : g));
+    setEditingId(null);
+  }
+
+  function removeGuest(id: string) {
+    setGuests((prev) => prev.filter((g) => g.id !== id));
+  }
+
+  function addGuest() {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setGuests((prev) => [...prev, { id: `guest-${Date.now()}`, name: trimmed }]);
+    setNewName('');
+  }
+
+  return (
+    <TemplateSurface>
+      <VStack align="stretch" gap="4">
+        <TemplateSectionHeader title={title} />
+        <VStack align="stretch" gap="0">
+          {guests.map((guest) => (
+            <HStack key={guest.id} py="2.5" borderBottom="1px solid var(--border-subtle)" justify="space-between" gap="3">
+              {editingId === guest.id ? (
+                <Input
+                  ref={inputRef}
+                  size="sm"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => commitEdit(guest.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(guest.id); if (e.key === 'Escape') setEditingId(null); }}
+                  flex="1"
+                  fontSize="sm"
+                />
+              ) : (
+                <VStack align="start" gap="0" minW={0} flex="1">
+                  <Text fontSize="sm" fontWeight="500" color="var(--text-primary)">{guest.name}</Text>
+                  {guest.meta ? <Text fontSize="xs" color="var(--text-muted)">{guest.meta}</Text> : null}
+                </VStack>
+              )}
+              <HStack gap="1" flexShrink={0}>
+                <Button size="xs" variant="ghost" color="var(--text-muted)" px="1.5" onClick={() => startEdit(guest)}>Edit</Button>
+                <Button size="xs" variant="ghost" color="red.500" px="1.5" onClick={() => removeGuest(guest.id)}>Remove</Button>
+              </HStack>
+            </HStack>
+          ))}
+        </VStack>
+        <HStack gap="2">
+          <Input
+            size="sm"
+            placeholder="Add guest name…"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addGuest(); }}
+            flex="1"
+            fontSize="sm"
+          />
+          <Button size="sm" variant="outline" onClick={addGuest} disabled={!newName.trim()}>Add</Button>
+        </HStack>
+      </VStack>
+    </TemplateSurface>
+  );
+}
+
+export function TemplateInteractiveChecklist({
+  title,
+  items: initialItems
+}: Extract<RecipeTemplatePreviewSection, { kind: 'interactive-checklist' }>) {
+  const [items, setItems] = useState(initialItems);
+  const [newLabel, setNewLabel] = useState('');
+
+  function toggleItem(id: string) {
+    setItems((prev) => prev.map((item) => item.id === id ? { ...item, checked: !item.checked } : item));
+  }
+
+  function addItem() {
+    const trimmed = newLabel.trim();
+    if (!trimmed) return;
+    setItems((prev) => [...prev, { id: `item-${Date.now()}`, label: trimmed, checked: false }]);
+    setNewLabel('');
+  }
+
+  return (
+    <TemplateSurface>
+      <VStack align="stretch" gap="4">
+        <TemplateSectionHeader title={title} />
+        <VStack align="stretch" gap="0">
+          {items.map((item) => (
+            <HStack
+              key={item.id}
+              py="2.5"
+              borderBottom="1px solid var(--border-subtle)"
+              gap="3"
+              cursor="pointer"
+              onClick={() => toggleItem(item.id)}
+            >
+              <Checkbox.Root
+                checked={item.checked}
+                onCheckedChange={() => toggleItem(item.id)}
+                flexShrink={0}
+                onClick={(e) => e.stopPropagation()}
+                cursor="pointer"
+                position="relative"
+              >
+                <Checkbox.HiddenInput />
+                <Checkbox.Control w="4" h="4" rounded="4px" />
+              </Checkbox.Root>
+              <Text
+                fontSize="sm"
+                color={item.checked ? 'var(--text-muted)' : 'var(--text-primary)'}
+                textDecoration={item.checked ? 'line-through' : 'none'}
+                flex="1"
+              >
+                {item.label}
+              </Text>
+            </HStack>
+          ))}
+        </VStack>
+        <HStack gap="2">
+          <Input
+            size="sm"
+            placeholder="Add item…"
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
+            flex="1"
+            fontSize="sm"
+          />
+          <Button size="sm" variant="outline" onClick={addItem} disabled={!newLabel.trim()}>Add</Button>
+        </HStack>
+      </VStack>
+    </TemplateSurface>
+  );
+}
+
+export function TemplateEditableNotes({
+  title,
+  notes: initialNotes
+}: Extract<RecipeTemplatePreviewSection, { kind: 'editable-notes' }>) {
+  const [notes, setNotes] = useState(initialNotes);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [newNote, setNewNote] = useState('');
+
+  function startEdit(index: number) {
+    setEditingIndex(index);
+    setEditValue(notes[index] ?? '');
+  }
+
+  function commitEdit(index: number) {
+    const trimmed = editValue.trim();
+    if (trimmed) setNotes((prev) => prev.map((n, i) => i === index ? trimmed : n));
+    setEditingIndex(null);
+  }
+
+  function deleteNote(index: number) {
+    setNotes((prev) => prev.filter((_, i) => i !== index));
+    if (editingIndex === index) setEditingIndex(null);
+  }
+
+  function addNote() {
+    const trimmed = newNote.trim();
+    if (!trimmed) return;
+    setNotes((prev) => [...prev, trimmed]);
+    setNewNote('');
+  }
+
+  return (
+    <TemplateSurface>
+      <VStack align="stretch" gap="4">
+        <TemplateSectionHeader title={title} />
+        <VStack align="stretch" gap="0">
+          {notes.map((note, index) => (
+            <Box key={index} py="2.5" borderBottom="1px solid var(--border-subtle)">
+              {editingIndex === index ? (
+                <HStack gap="2">
+                  <Input
+                    size="sm"
+                    value={editValue}
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => commitEdit(index)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(index); if (e.key === 'Escape') setEditingIndex(null); }}
+                    flex="1"
+                    fontSize="sm"
+                  />
+                </HStack>
+              ) : (
+                <HStack justify="space-between" align="start" gap="3">
+                  <Text fontSize="sm" color="var(--text-secondary)" flex="1">{note}</Text>
+                  <HStack gap="1" flexShrink={0}>
+                    <Button size="xs" variant="ghost" color="var(--text-muted)" px="1.5" onClick={() => startEdit(index)}>Edit</Button>
+                    <Button size="xs" variant="ghost" color="red.500" px="1.5" onClick={() => deleteNote(index)}>Delete</Button>
+                  </HStack>
+                </HStack>
+              )}
+            </Box>
+          ))}
+        </VStack>
+        <HStack gap="2">
+          <Input
+            size="sm"
+            placeholder="Add note…"
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addNote(); }}
+            flex="1"
+            fontSize="sm"
+          />
+          <Button size="sm" variant="outline" onClick={addNote} disabled={!newNote.trim()}>Add</Button>
+        </HStack>
+      </VStack>
+    </TemplateSurface>
+  );
+}
+
+function StepCodeBlock({ code, dimmed }: { code: string; dimmed: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Box position="relative" mt="2" opacity={dimmed ? 0.55 : 1}>
+      <Box
+        as="pre"
+        rounded="8px"
+        bg={dimmed ? 'var(--surface-2)' : 'rgba(0,0,0,0.06)'}
+        border="1px solid var(--border-subtle)"
+        px="3.5"
+        py="3"
+        overflowX="auto"
+        _dark={{ bg: dimmed ? 'var(--surface-2)' : 'rgba(255,255,255,0.05)' }}
+      >
+        <Box as="code" fontFamily="mono" fontSize="xs" color="var(--text-primary)" whiteSpace="pre">
+          {code}
+        </Box>
+      </Box>
+      <Button
+        size="xs"
+        position="absolute"
+        top="2"
+        right="2"
+        rounded="6px"
+        bg="var(--surface-1)"
+        border="1px solid var(--border-subtle)"
+        color="var(--text-secondary)"
+        _hover={{ bg: 'var(--surface-2)' }}
+        onClick={() => {
+          void navigator.clipboard.writeText(code).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </Button>
+    </Box>
+  );
+}
+
+export function TemplateStepByStepPreview({
+  prerequisites = [],
+  steps
+}: Extract<RecipeTemplatePreviewSection, { kind: 'step-by-step-preview' }>) {
+  const [checkedPrereqs, setCheckedPrereqs] = useState<Record<string, boolean>>({});
+  const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
+
+  const markdownComponents = (dimmed: boolean) => ({
+    p: ({ children }: { children: ReactNode }) => (
+      <Text
+        as="span"
+        display="block"
+        fontSize="sm"
+        color={dimmed ? 'var(--text-muted)' : 'var(--text-secondary)'}
+        textDecoration={dimmed ? 'line-through' : undefined}
+        opacity={dimmed ? 0.7 : 1}
+      >
+        {children}
+      </Text>
+    ),
+    a: ({ children, href }: { children: ReactNode; href?: string }) => (
+      <chakra.a
+        href={href ?? '#'}
+        color="blue.600"
+        textDecoration="underline"
+        textUnderlineOffset="2px"
+        _dark={{ color: 'blue.300' }}
+        onClick={(e) => { e.preventDefault(); toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 }); }}
+      >
+        {children}
+      </chakra.a>
+    ),
+    code: ({ children }: { children: ReactNode }) => (
+      <Box as="code" fontFamily="mono" fontSize="0.82em" bg="var(--surface-2)" border="1px solid var(--border-subtle)" px="1" py="0.5" rounded="3px" color="var(--accent)">
+        {children}
+      </Box>
+    ),
+    strong: ({ children }: { children: ReactNode }) => <Text as="strong" fontWeight="700" color="inherit">{children}</Text>,
+    li: ({ children }: { children: ReactNode }) => (
+      <HStack as="li" align="start" gap="2" mb="0.5">
+        <Box mt="2" w="1.5" h="1.5" rounded="full" bg="var(--text-muted)" flexShrink={0} />
+        <Text fontSize="sm" color={dimmed ? 'var(--text-muted)' : 'var(--text-secondary)'}>{children}</Text>
+      </HStack>
+    ),
+    ul: ({ children }: { children: ReactNode }) => <Box as="ul" listStyleType="none" mt="1.5" mb="1">{children}</Box>
+  });
+
+  return (
+    <TemplateSurface>
+      <VStack align="stretch" gap="4">
+        {prerequisites.length > 0 ? (
+          <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+            <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0.04em" color="var(--text-muted)" mb="2.5">
+              Prerequisites
+            </Text>
+            <VStack align="stretch" gap="2">
+              {prerequisites.map((prereq) => {
+                const isChecked = checkedPrereqs[prereq.id] ?? false;
+                return (
+                  <HStack
+                    key={prereq.id}
+                    gap="2.5"
+                    cursor="pointer"
+                    onClick={() => setCheckedPrereqs((p) => ({ ...p, [prereq.id]: !p[prereq.id] }))}
+                  >
+                    <Checkbox.Root
+                      checked={isChecked}
+                      onCheckedChange={() => setCheckedPrereqs((p) => ({ ...p, [prereq.id]: !p[prereq.id] }))}
+                      flexShrink={0}
+                      onClick={(e) => e.stopPropagation()}
+                      cursor="pointer"
+                      position="relative"
+                    >
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control w="4" h="4" rounded="4px" />
+                    </Checkbox.Root>
+                    <Text
+                      fontSize="sm"
+                      color={isChecked ? 'var(--text-muted)' : 'var(--text-secondary)'}
+                      textDecoration={isChecked ? 'line-through' : undefined}
+                      opacity={isChecked ? 0.7 : 1}
+                    >
+                      {prereq.label}
+                    </Text>
+                  </HStack>
+                );
+              })}
+            </VStack>
+          </Box>
+        ) : null}
+
+        <VStack align="stretch" gap="2">
+          {steps.map((step, index) => {
+            const isChecked = checkedSteps[step.id] ?? false;
+            const prevChecked = index === 0 || (checkedSteps[steps[index - 1]?.id ?? ''] ?? false);
+            const hasContent = Boolean(step.detail) || Boolean(step.code);
+            const showAskHermes = !isChecked && prevChecked;
+
+            return (
+              <Box
+                key={step.id}
+                rounded="8px"
+                border="1px solid var(--border-subtle)"
+                bg={isChecked && hasContent ? 'var(--surface-2)' : 'var(--surface-1)'}
+                px="3.5"
+                py="3"
+                transition="background 150ms ease"
+              >
+                <HStack align="start" gap="3">
+                  <Box
+                    pt="0.5"
+                    flexShrink={0}
+                    cursor="pointer"
+                    p="2"
+                    m="-2"
+                    onClick={() => setCheckedSteps((p) => ({ ...p, [step.id]: !p[step.id] }))}
+                  >
+                    <Checkbox.Root
+                      checked={isChecked}
+                      onCheckedChange={() => setCheckedSteps((p) => ({ ...p, [step.id]: !p[step.id] }))}
+                      onClick={(e) => e.stopPropagation()}
+                      cursor="pointer"
+                      position="relative"
+                    >
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control w="4" h="4" rounded="4px" />
+                    </Checkbox.Root>
+                  </Box>
+                  <Box flex="1" minW={0}>
+                    <HStack align="baseline" gap="1.5">
+                      <Text as="span" fontSize="xs" fontWeight="700" color={isChecked ? 'var(--text-muted)' : 'var(--accent)'} flexShrink={0}>
+                        {index + 1}.
+                      </Text>
+                      <Box flex="1">
+                        <ReactMarkdown
+                          urlTransform={(url) => safeMarkdownUrlTransform(url) ?? ''}
+                          remarkPlugins={[remarkGfm]}
+                          components={markdownComponents(isChecked && !hasContent) as never}
+                        >
+                          {step.label}
+                        </ReactMarkdown>
+                      </Box>
+                    </HStack>
+                    {step.detail ? (
+                      <Box mt="1.5" opacity={isChecked ? 0.6 : 1}>
+                        <ReactMarkdown
+                          urlTransform={(url) => safeMarkdownUrlTransform(url) ?? ''}
+                          remarkPlugins={[remarkGfm]}
+                          components={markdownComponents(false) as never}
+                        >
+                          {step.detail}
+                        </ReactMarkdown>
+                      </Box>
+                    ) : null}
+                    {step.code ? <StepCodeBlock code={step.code} dimmed={isChecked} /> : null}
+                    {showAskHermes ? (
+                      <Button
+                        mt="2.5"
+                        size="xs"
+                        variant="outline"
+                        fontSize="xs"
+                        color="var(--accent)"
+                        borderColor="var(--accent)"
+                        _hover={{ bg: 'var(--accent-soft)' }}
+                        onClick={() => toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 })}
+                      >
+                        Ask Hermes for help
+                      </Button>
+                    ) : null}
+                  </Box>
+                </HStack>
+              </Box>
+            );
+          })}
+        </VStack>
+      </VStack>
+    </TemplateSurface>
+  );
+}
+
+export function TemplateReportSection({
+  title,
+  body,
+  footnotes = []
+}: Extract<RecipeTemplatePreviewSection, { kind: 'report' }>) {
+  const [highlightedFn, setHighlightedFn] = useState<string | null>(null);
+
+  function handleFootnoteClick(id: string) {
+    setHighlightedFn(id);
+    document.getElementById(`fn-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => setHighlightedFn(null), 2000);
+  }
+
+  return (
+    <TemplateSurface>
+      <VStack align="stretch" gap="5">
+        <TemplateSectionHeader title={title} />
+        <Box
+          color="var(--text-primary)"
+          css={{
+            '& h1': { fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '1.5rem', marginBottom: '0.4rem', lineHeight: 1.25 },
+            '& h2': { fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '1.25rem', marginBottom: '0.35rem', lineHeight: 1.25 },
+            '& h3': { fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '1rem', marginBottom: '0.3rem', lineHeight: 1.3 },
+            '& p': { fontSize: '0.875rem', lineHeight: 1.75, color: 'var(--text-secondary)', marginBottom: '0.75rem' },
+            '& p:last-child': { marginBottom: 0 },
+            '& ul, & ol': { paddingInlineStart: '1.4rem', marginBottom: '0.75rem' },
+            '& ul': { listStyleType: 'disc' },
+            '& ol': { listStyleType: 'decimal' },
+            '& li': { fontSize: '0.875rem', lineHeight: 1.7, color: 'var(--text-secondary)', marginBottom: '0.2rem' },
+            '& strong': { fontWeight: 600, color: 'var(--text-primary)' },
+            '& h1:first-child, & h2:first-child, & h3:first-child': { marginTop: 0 }
+          }}
+        >
+          <ReactMarkdown
+            urlTransform={(url) => safeMarkdownUrlTransform(url) ?? ''}
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeRaw]}
+            components={{
+              sup({ children }) {
+                const id = String(children);
+                return (
+                  <chakra.a
+                    href={`#fn-${id}`}
+                    fontSize="0.6em"
+                    fontWeight="700"
+                    color="var(--accent)"
+                    verticalAlign="super"
+                    lineHeight={1}
+                    textDecoration="none"
+                    position="relative"
+                    top="-0.1em"
+                    cursor="pointer"
+                    _hover={{ textDecoration: 'underline' }}
+                    onClick={(e) => { e.preventDefault(); handleFootnoteClick(id); }}
+                  >
+                    {children}
+                  </chakra.a>
+                );
+              }
+            }}
+          >
+            {body}
+          </ReactMarkdown>
+        </Box>
+        {footnotes.length > 0 ? (
+          <Box borderTop="1px solid var(--border-subtle)" pt="3">
+            <VStack align="stretch" gap="1.5">
+              {footnotes.map((fn) => (
+                <HStack
+                  key={fn.id}
+                  id={`fn-${fn.id}`}
+                  align="start"
+                  gap="2"
+                  px="2"
+                  py="1"
+                  rounded="6px"
+                  bg={highlightedFn === fn.id ? 'var(--accent-soft)' : 'transparent'}
+                  transition="background 300ms ease"
+                >
+                  <Text fontSize="10px" fontWeight="700" color="var(--accent)" flexShrink={0} minW="16px">
+                    {fn.id}
+                  </Text>
+                  {fn.url ? (
+                    <chakra.a
+                      fontSize="xs"
+                      color="var(--text-muted)"
+                      textDecoration="underline"
+                      textUnderlineOffset="2px"
+                      cursor="pointer"
+                      _hover={{ color: 'var(--text-secondary)' }}
+                      onClick={(e) => { e.preventDefault(); toaster.create({ title: 'Clicked!', type: 'info', duration: 1500 }); }}
+                    >
+                      {fn.label}
+                    </chakra.a>
+                  ) : (
+                    <Text fontSize="xs" color="var(--text-muted)">{fn.label}</Text>
+                  )}
+                </HStack>
+              ))}
+            </VStack>
+          </Box>
+        ) : null}
       </VStack>
     </TemplateSurface>
   );

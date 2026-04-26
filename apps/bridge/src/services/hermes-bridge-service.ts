@@ -1131,7 +1131,7 @@ const INTENT_LABEL_TO_TEMPLATE_ID: Partial<Record<string, RecipeTemplateId>> = {
   'flight comparison': 'flight-comparison',
   'travel planner': 'travel-itinerary-planner',
   'event planner': 'event-planner',
-  'campaign planner': 'content-campaign-planner',
+
   'price comparison': 'price-comparison-grid',
   'restaurant shortlist': 'restaurant-finder',
   'hotel shortlist': 'hotel-shortlist',
@@ -1161,7 +1161,7 @@ function synthesizeIntentFromMutation(
         'flight-comparison': 'flight comparison',
         'travel-itinerary-planner': 'travel planner',
         'event-planner': 'event planner',
-        'content-campaign-planner': 'campaign planner',
+
         'price-comparison-grid': 'price comparison',
         'restaurant-finder': 'restaurant shortlist',
         'hotel-shortlist': 'hotel shortlist',
@@ -7668,7 +7668,7 @@ Emit one corrected TSX module now.`;
       'flight-comparison': 'flight comparison',
       'travel-itinerary-planner': 'travel planner',
       'event-planner': 'event planner',
-      'content-campaign-planner': 'campaign planner',
+
       'price-comparison-grid': 'price comparison',
       'restaurant-finder': 'restaurant shortlist',
       'hotel-shortlist': 'hotel shortlist',
@@ -7679,7 +7679,7 @@ Emit one corrected TSX module now.`;
       'step-by-step-instructions': 'step by step'
     };
     const CATEGORY_PRIORITY: Record<string, string[]> = {
-      plan: ['step-by-step-instructions', 'research-notebook', 'vendor-evaluation-matrix', 'event-planner', 'content-campaign-planner'],
+      plan: ['step-by-step-instructions', 'research-notebook', 'vendor-evaluation-matrix', 'event-planner'],
       shopping: ['shopping-shortlist', 'price-comparison-grid', 'vendor-evaluation-matrix'],
       places: ['restaurant-finder', 'hotel-shortlist', 'local-discovery-comparison', 'travel-itinerary-planner', 'flight-comparison'],
       research: ['research-notebook', 'step-by-step-instructions', 'vendor-evaluation-matrix'],

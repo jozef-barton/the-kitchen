@@ -56,7 +56,7 @@ afterEach(() => {
 
 describe('RecipesPage', () => {
   it('ships the gallery recipes with required metadata and preview specs', () => {
-    expect(RECIPE_TEMPLATE_REGISTRY.length).toBeGreaterThanOrEqual(14);
+    expect(RECIPE_TEMPLATE_REGISTRY.length).toBeGreaterThanOrEqual(13);
 
     for (const template of RECIPE_TEMPLATE_REGISTRY) {
       expect(template.name.length).toBeGreaterThan(3);
@@ -143,7 +143,7 @@ describe('RecipesPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Research & Review' }));
     await userEvent.click(screen.getByTestId('spaces-template-card-research-notebook'));
-    expect(within(inspector).getAllByText('Sources').length).toBeGreaterThan(0);
+    expect(within(inspector).getByText('Findings')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Pipelines & Planning' }));
     await userEvent.click(screen.getByTestId('spaces-template-card-job-search-pipeline'));

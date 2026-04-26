@@ -5,15 +5,15 @@ const action = (label: string, tone: TemplateAction['tone'] = 'neutral', helper?
 
 export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePreviewSpec> = {
   'price-comparison-grid': {
-    headline: 'Compare each item across up to four stores — every row carries a direct link.',
-    summary: 'A focused price-first grid: one row per item, up to four store columns, and a hyperlinked Link column.',
+    headline: 'Compare each item across up to four stores — prices are hyperlinked directly to the listing.',
+    summary: 'A focused price-first grid: one row per item, up to four store columns, with prices that link straight to each listing.',
     sections: [
       {
         kind: 'hero',
         eyebrow: 'Commerce template',
         title: '27" 4K monitor and laptop stand price check',
-        summary: 'Two items compared across four stores. Every row links straight to the listing.',
-        chips: [chip('Multiple items allowed', 'accent'), chip('Max 4 store columns'), chip('Link per row')],
+        summary: 'Three items compared across four stores. Prices link straight to the listing.',
+        chips: [chip('Multiple items allowed', 'accent'), chip('Max 4 store columns'), chip('Prices are links')],
         actions: []
       },
       {
@@ -24,40 +24,36 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
           { id: 'bestbuy', label: 'Best Buy', align: 'end' },
           { id: 'bh', label: 'B&H', align: 'end' },
           { id: 'newegg', label: 'Newegg', align: 'end' },
-          { id: 'link', label: 'Link' }
         ],
         rows: [
           {
             id: 'dell-s2722qc',
             label: 'Dell S2722QC',
             cells: [
-              { value: '$349' },
-              { value: '$359' },
-              { value: '$329', tone: 'success', emphasis: true },
-              { value: '$341' },
-              { value: 'Link', tone: 'accent' }
+              { value: '$349', href: '#' },
+              { value: '$359', href: '#' },
+              { value: '$329', tone: 'success', emphasis: true, href: '#' },
+              { value: '$341', href: '#' },
             ]
           },
           {
             id: 'lg-27up650',
             label: 'LG 27UP650',
             cells: [
-              { value: '$319', tone: 'success', emphasis: true },
-              { value: '$338' },
-              { value: '$334' },
-              { value: '$329' },
-              { value: 'Link', tone: 'accent' }
+              { value: '$319', tone: 'success', emphasis: true, href: '#' },
+              { value: '$338', href: '#' },
+              { value: '$334', href: '#' },
+              { value: '$329', href: '#' },
             ]
           },
           {
             id: 'rain-laptop-stand',
             label: 'Rain Design mStand',
             cells: [
-              { value: '$54' },
-              { value: '$59' },
-              { value: '$49', tone: 'success', emphasis: true },
-              { value: '$56' },
-              { value: 'Link', tone: 'accent' }
+              { value: '$54', href: '#' },
+              { value: '$59', href: '#' },
+              { value: '$49', tone: 'success', emphasis: true, href: '#' },
+              { value: '$56', href: '#' },
             ]
           }
         ]
@@ -79,43 +75,37 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
       {
         kind: 'card-grid',
         title: 'Results',
-        columns: 3,
+        columns: 2,
         cards: [
           {
             title: 'Fellow Stagg EKG Kettle',
             imageLabel: 'Matte black kettle',
-            price: '$165',
-            footer: 'Link',
+            price: '$165'
           },
           {
             title: 'Baratza Encore Grinder',
             imageLabel: 'Burr grinder',
-            price: '$179',
-            footer: 'Link',
+            price: '$179'
           },
           {
             title: 'Hario V60 Pour-Over Kit',
             imageLabel: 'Ceramic dripper',
-            price: '$42',
-            footer: 'Link',
+            price: '$42'
           },
           {
             title: 'Chemex 6-Cup Classic',
             imageLabel: 'Glass carafe',
-            price: '$48',
-            footer: 'Link',
+            price: '$48'
           },
           {
             title: 'Acaia Pearl Scale',
             imageLabel: 'Black scale',
-            price: '$175',
-            footer: 'Link',
+            price: '$175'
           },
           {
             title: 'Origin Espresso Sampler',
             imageLabel: 'Bean sampler',
-            price: '$38',
-            footer: 'Link',
+            price: '$38'
           }
         ]
       }
@@ -289,7 +279,7 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
             price: '$248/night',
             imageLabel: 'Warm terrace view',
             chips: [chip('Best fit', 'success'), chip('Rooftop')],
-            bullets: ['Quiet block', 'Strong breakfast', 'Walkable to central sights', '\u{1F310} Link', '\u{1F4DE} +351 21 901 6800']
+            bullets: ['Quiet block', 'Strong breakfast', 'Walkable to central sights', '\u{1F4DE} +351 21 901 6800']
           },
           {
             title: 'The Lumiares',
@@ -297,7 +287,7 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
             price: '$226/night',
             imageLabel: 'Suite interior',
             chips: [chip('Work-friendly', 'accent'), chip('Kitchenette')],
-            bullets: ['Good for longer stay', 'Liveliest nightlife nearby', '\u{1F310} Link', '\u{1F4DE} +351 21 116 0200']
+            bullets: ['Good for longer stay', 'Liveliest nightlife nearby', '\u{1F4DE} +351 21 116 0200']
           },
           {
             title: 'Lisboa Pessoa',
@@ -305,7 +295,7 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
             price: '$189/night',
             imageLabel: 'Classic room',
             chips: [chip('Best value', 'accent')],
-            bullets: ['Central location', 'Slightly smaller rooms', '\u{1F310} Link', '\u{1F4DE} +351 21 140 1600']
+            bullets: ['Central location', 'Slightly smaller rooms', '\u{1F4DE} +351 21 140 1600']
           }
         ]
       }
@@ -344,11 +334,11 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
               kind: 'comparison-table',
               title: 'Outbound options',
               columns: [
-                { id: 'price', label: 'Price', align: 'end' },
-                { id: 'stops', label: 'Stops' },
-                { id: 'duration', label: 'Duration' },
-                { id: 'airline', label: 'Airline' },
-                { id: 'action', label: '' }
+                { id: 'price', label: 'Price', align: 'center' },
+                { id: 'stops', label: 'Stops', align: 'center' },
+                { id: 'duration', label: 'Duration', align: 'center' },
+                { id: 'airline', label: 'Airline', align: 'center' },
+                { id: 'action', label: '', align: 'center' }
               ],
               rows: [
                 {
@@ -359,13 +349,13 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
                     { value: 'Nonstop', tone: 'success' },
                     { value: '6h 35m' },
                     { value: 'TAP Air Portugal' },
-                    { value: 'Continue booking', tone: 'accent' }
+                    { value: '↗', href: '#' }
                   ]
                 },
                 {
                   id: 'delta-one-stop',
                   label: '5:10 PM → 8:55 AM',
-                  cells: [{ value: '$355' }, { value: '1 stop' }, { value: '11h 45m' }, { value: 'Delta + KLM' }, { value: 'Continue booking', tone: 'accent' }]
+                  cells: [{ value: '$355' }, { value: '1 stop' }, { value: '11h 45m' }, { value: 'Delta + KLM' }, { value: '↗', href: '#' }]
                 }
               ]
             }
@@ -375,11 +365,11 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
               kind: 'comparison-table',
               title: 'Return options',
               columns: [
-                { id: 'price', label: 'Price', align: 'end' },
-                { id: 'stops', label: 'Stops' },
-                { id: 'duration', label: 'Duration' },
-                { id: 'airline', label: 'Airline' },
-                { id: 'action', label: '' }
+                { id: 'price', label: 'Price', align: 'center' },
+                { id: 'stops', label: 'Stops', align: 'center' },
+                { id: 'duration', label: 'Duration', align: 'center' },
+                { id: 'airline', label: 'Airline', align: 'center' },
+                { id: 'action', label: '', align: 'center' }
               ],
               rows: [
                 {
@@ -390,7 +380,7 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
                     { value: 'Nonstop', tone: 'success' },
                     { value: '7h 45m' },
                     { value: 'TAP Air Portugal' },
-                    { value: 'Continue booking', tone: 'accent' }
+                    { value: '↗', href: '#' }
                   ]
                 }
               ]
@@ -469,58 +459,26 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
     ]
   },
   'research-notebook': {
-    headline: 'A structured notebook for evidence, notes, and extracted points that stays stable over many turns.',
-    summary: 'Source gathering and follow-up actions stay separate so the notebook can accumulate rather than reset.',
+    headline: 'A formal research report with section headers, prose paragraphs, and numbered footnotes linking to sources.',
+    summary: 'Rendered as a readable document — headers, subheaders, flowing paragraphs, and a footnote list at the bottom.',
     sections: [
       {
         kind: 'hero',
         eyebrow: 'Research template',
-        title: 'AI browser agents research notebook',
-        summary: 'Sources, notes, claims, and follow-up prompts split into distinct tabs with clear operator ownership.',
-        chips: [chip('Sources tab', 'accent'), chip('Extracted points'), chip('Follow-up actions')],
-        actions: [action('Ask follow-up', 'accent'), action('Pin claim'), action('Add research note')]
+        title: 'AI browser agents — state of the field',
+        summary: 'Synthesized findings rendered as a formal report with inline citations and source footnotes.',
+        chips: [chip('Formal report', 'accent'), chip('Inline citations'), chip('Source footnotes')],
+        actions: [action('Ask follow-up', 'accent'), action('Export as PDF'), action('Add research note')]
       },
       {
-        kind: 'tabs',
-        tabs: [
-          { id: 'sources', label: 'Sources' },
-          { id: 'points', label: 'Extracted points' }
-        ],
-        activeTabId: 'sources',
-        panes: {
-          sources: [
-            {
-              kind: 'grouped-list',
-              title: 'Sources',
-              groups: [
-                {
-                  id: 'papers',
-                  label: 'Primary sources',
-                  items: [
-                    { title: 'WebArena paper', subtitle: 'Benchmark design and tasks', meta: 'Key evaluation reference' },
-                    { title: 'AgentLab report', subtitle: 'Failure modes and orchestration', meta: 'Useful for system design' }
-                  ]
-                }
-              ]
-            }
-          ],
-          points: [
-            {
-              kind: 'grouped-list',
-              title: 'Extracted points',
-              groups: [
-                {
-                  id: 'claims',
-                  label: 'Claims',
-                  items: [
-                    { title: 'Agents fail more from brittle recovery than initial navigation', chips: [chip('High signal', 'success')] },
-                    { title: 'Small prompt changes can distort long-horizon planning behavior' }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
+        kind: 'report',
+        title: 'Findings',
+        body: `## Overview\n\nAutonomous browser agents have advanced rapidly since 2023, driven by improvements in multimodal reasoning and tool-use capabilities in large language models.<sup>1</sup> Current systems can complete multi-step web tasks — form filling, navigation, and information extraction — with meaningful success rates on established benchmarks.<sup>2</sup>\n\n## Key findings\n\n### Recovery behavior is the primary bottleneck\n\nAgents fail more often due to brittle error recovery than initial navigation errors. When an unexpected state is encountered mid-task, most systems either retry the same action or abort entirely rather than re-planning.<sup>1</sup>\n\n### Prompt sensitivity affects long-horizon tasks\n\nSmall variations in system prompt phrasing can materially distort agent behavior across multi-step tasks, suggesting that current models have not fully internalized robust planning priors.<sup>3</sup>\n\n## Outlook\n\nNear-term gains are expected from better grounding signals and memory architectures that allow agents to reference prior session context across task boundaries.`,
+        footnotes: [
+          { id: '1', label: 'AgentLab: Benchmarking LLM Agents on Real-World Tasks (2024)', url: 'https://example.com/agentlab' },
+          { id: '2', label: 'WebArena: A Realistic Web Environment for Building Autonomous Agents (2023)', url: 'https://example.com/webarena' },
+          { id: '3', label: 'Prompt Sensitivity in Long-Horizon Planning, NeurIPS Workshop (2024)', url: 'https://example.com/prompt-sensitivity' }
+        ]
       }
     ]
   },
@@ -539,9 +497,10 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
       {
         kind: 'stats',
         items: [
-          { label: 'Critical', value: '1', tone: 'danger' },
-          { label: 'Medium', value: '2', tone: 'warning' },
-          { label: 'Low', value: '1', tone: 'neutral' }
+          { label: 'Total risks', value: '4', action: 'Remediate all' },
+          { label: 'Critical', value: '1', tone: 'danger', action: 'Remediate all' },
+          { label: 'Medium', value: '2', tone: 'warning', action: 'Remediate all' },
+          { label: 'Low', value: '1', tone: 'neutral', action: 'Remediate all' }
         ]
       },
       {
@@ -665,15 +624,15 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
   },
   'event-planner': {
     headline: 'A persistent multi-tab planner for events that need venues, guests, logistics, and notes to stay separate.',
-    summary: 'The template is notebook-like, but with stronger operational structure and checklist persistence.',
+    summary: 'Stateful tabs: add/remove/rename guests, check off tasks, prompt Hermes for itinerary, and edit notes inline.',
     sections: [
       {
         kind: 'hero',
         eyebrow: 'Planning template',
         title: 'Team offsite planner',
-        summary: 'Venue shortlist, guest prep, checklist items, itinerary, and notes organized into stable tabs.',
-        chips: [chip('Planning tabs', 'accent'), chip('Checklist persistence'), chip('Venue shortlist')],
-        actions: [action('Add guest', 'accent'), action('Adjust itinerary'), action('Save planning note')]
+        summary: 'Venue shortlist, interactive guest list, live checklist, Hermes-generated itinerary, and editable notes.',
+        chips: [chip('Stateful tabs', 'accent'), chip('Interactive checklist'), chip('Editable guests')],
+        actions: []
       },
       {
         kind: 'tabs',
@@ -698,8 +657,7 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
                   price: '$4,800',
                   imageLabel: 'Industrial loft',
                   chips: [chip('Best fit', 'success')],
-                  bullets: ['Great for workshop breakout rooms', 'Catering flexibility'],
-                  footer: 'Need AV confirmation.'
+                  bullets: ['Great for workshop breakout rooms', 'Catering flexibility', 'Need AV confirmation']
                 },
                 {
                   title: 'Rooftop Union',
@@ -710,41 +668,27 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
                   bullets: ['Weather risk', 'Excellent transit access']
                 }
               ]
-            },
-            {
-              kind: 'action-bar',
-              title: 'Venue actions',
-              actions: [action('Select venue', 'accent'), action('Open venue page'), action('Ask Hermes to compare backup venues')]
             }
           ],
           guests: [
             {
-              kind: 'grouped-list',
-              title: 'Guest notes',
-              groups: [
-                {
-                  id: 'travelers',
-                  label: 'Travelers',
-                  items: [{ title: 'SF team', meta: 'Needs hotel block and evening arrival note', actions: ['Add guest'] }]
-                }
+              kind: 'interactive-guest-list',
+              title: 'Guests',
+              guests: [
+                { id: 'g1', name: 'Alex Rivera', meta: 'Needs hotel block' },
+                { id: 'g2', name: 'Jordan Kim', meta: 'Evening arrival' },
+                { id: 'g3', name: 'Sam Patel' }
               ]
-            },
-            {
-              kind: 'action-bar',
-              title: 'Guest actions',
-              actions: [action('Add guest', 'accent'), action('Draft invite message')]
             }
           ],
           checklist: [
             {
-              kind: 'grouped-list',
+              kind: 'interactive-checklist',
               title: 'Checklist',
-              groups: [
-                {
-                  id: 'open',
-                  label: 'Open',
-                  items: [{ title: 'Confirm AV quote', actions: ['Mark done'] }, { title: 'Send dietary form', actions: ['Mark done'] }]
-                }
+              items: [
+                { id: 'c1', label: 'Confirm AV quote', checked: false },
+                { id: 'c2', label: 'Send dietary form', checked: true },
+                { id: 'c3', label: 'Book hotel block', checked: false }
               ]
             }
           ],
@@ -757,19 +701,16 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
                 { title: 'Team arrival', time: '10:00 AM', summary: 'Welcome desk and breakfast setup.' },
                 { title: 'Afternoon breakout sessions', time: '1:30 PM', summary: 'Need room assignment confirmation.' }
               ]
-            },
-            {
-              kind: 'action-bar',
-              title: 'Itinerary actions',
-              actions: [action('Adjust itinerary', 'accent'), action('Add travel buffer'), action('Ask Hermes to tighten the run-of-show')]
             }
           ],
           notes: [
             {
-              kind: 'notes',
+              kind: 'editable-notes',
               title: 'Planning notes',
-              lines: ['Prefer venue that handles breakout tables well.', 'Keep catering flexible for dietary changes.'],
-              actions: [action('Add note', 'accent')]
+              notes: [
+                'Prefer venue that handles breakout tables well.',
+                'Keep catering flexible for dietary changes.'
+              ]
             }
           ]
         }
@@ -777,15 +718,15 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
     ]
   },
   'job-search-pipeline': {
-    headline: 'Job listings as a card grid with per-card Apply links and Find more.',
-    summary: 'Each card shows a company photo or logo, role title, pay range, and a direct Apply link. No pipeline or kanban.',
+    headline: 'Job listings as a card grid — click any card to apply directly. Find more via Hermes.',
+    summary: 'Each card shows a company photo or logo, role title, pay range, and location chips. The whole card is the Apply link.',
     sections: [
       {
         kind: 'hero',
         eyebrow: 'Jobs template',
         title: 'Senior product design openings',
-        summary: 'Browse curated roles, apply directly, or ask Hermes to find more.',
-        chips: [chip('Card grid', 'accent'), chip('Per-card Apply link'), chip('Find more')],
+        summary: 'Click any card to apply. Ask Hermes to find more roles.',
+        chips: [chip('Clickable cards', 'accent'), chip('Card = Apply link'), chip('Find more')],
         actions: []
       },
       {
@@ -798,117 +739,30 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
             subtitle: 'Horizon Health',
             price: '$195k \u2013 $215k',
             imageLabel: 'Horizon Health',
-            chips: [chip('Remote', 'accent'), chip('Full-time')],
-            bullets: ['\u{1F517} Apply → direct posting link']
+            chips: [chip('Remote', 'accent'), chip('Full-time')]
           },
           {
             title: 'Staff Product Designer',
             subtitle: 'Northlane',
             price: '$180k \u2013 $195k',
             imageLabel: 'Northlane',
-            chips: [chip('Hybrid'), chip('Full-time')],
-            bullets: ['\u{1F517} Apply → direct posting link']
+            chips: [chip('Hybrid'), chip('Full-time')]
           },
           {
             title: 'Product Designer — Growth',
             subtitle: 'Aster',
             price: '$175k \u2013 $190k',
             imageLabel: 'Aster',
-            chips: [chip('Remote', 'accent'), chip('Full-time')],
-            bullets: ['\u{1F517} Apply → direct posting link']
+            chips: [chip('Remote', 'accent'), chip('Full-time')]
           },
           {
             title: 'Product Designer',
             subtitle: 'Beacon',
             price: '$160k \u2013 $180k',
             imageLabel: 'Beacon',
-            chips: [chip('SF / Remote'), chip('Full-time')],
-            bullets: ['\u{1F517} Apply → direct posting link']
+            chips: [chip('SF / Remote'), chip('Full-time')]
           }
         ]
-      }
-    ]
-  },
-    'content-campaign-planner': {
-    headline: 'A content-ops template with workflow tabs for ideas, drafts, schedule, and email execution.',
-    summary: 'The goal is to make status progression, idea expansion, and launch writing feel stable instead of rewrite-prone.',
-    sections: [
-      {
-        kind: 'hero',
-        eyebrow: 'Planning template',
-        title: 'Q3 product launch campaign',
-        summary: 'Campaign ideas, draft work, schedule commitments, and launch email execution organized into workflow tabs.',
-        chips: [chip('Workflow tabs', 'accent'), chip('Status chips'), chip('Email write')],
-        actions: [action('Flesh out idea', 'accent'), action('Write email'), action('Add note')]
-      },
-      {
-        kind: 'tabs',
-        tabs: [
-          { id: 'ideas', label: 'Ideas' },
-          { id: 'drafts', label: 'Drafts' },
-          { id: 'schedule', label: 'Schedule' }
-        ],
-        activeTabId: 'ideas',
-        panes: {
-          ideas: [
-            {
-              kind: 'grouped-list',
-              title: 'Ideas',
-              groups: [
-                {
-                  id: 'ideas',
-                  label: 'Ideas',
-                  items: [
-                    {
-                      title: 'Launch diary thread',
-                      subtitle: 'Founder-led social story',
-                      chips: [chip('High voice fit', 'success')],
-                      meta: 'Note: strong founder voice, needs lighter CTA.'
-                    },
-                    {
-                      title: 'Before/after workflow carousel',
-                      subtitle: 'Product demo angle',
-                      meta: 'Note: clarify the one-screen narrative before writing.'
-                    },
-                    {
-                      title: 'Customer quote montage',
-                      subtitle: 'Need permissions',
-                      meta: 'Note: permissions and proof are both incomplete.'
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              kind: 'action-bar',
-              title: 'Idea actions',
-              actions: [action('Flesh out idea', 'accent'), action('Add note'), action('Ask Hermes for another angle')]
-            }
-          ],
-          drafts: [
-            {
-              kind: 'grouped-list',
-              title: 'Drafts',
-              groups: [
-                {
-                  id: 'in-progress',
-                  label: 'In progress',
-                  items: [{ title: 'Launch email v2', meta: 'Needs CTA rewrite', chips: [chip('Drafting', 'accent')] }]
-                }
-              ]
-            }
-          ],
-          schedule: [
-            {
-              kind: 'timeline',
-              title: 'Schedule',
-              items: [
-                { title: 'Press teaser goes live', time: 'Jul 10', summary: 'Owned by comms' },
-                { title: 'Launch email send', time: 'Jul 17', summary: 'Morning ET window', chips: [chip('Locked', 'success')] }
-              ]
-            }
-          ]
-        }
       }
     ]
   },
@@ -987,67 +841,62 @@ export const RECIPE_TEMPLATE_FIXTURES: Record<RecipeTemplateId, RecipeTemplatePr
     ]
   },
   'step-by-step-instructions': {
-    headline: 'A compact checklist with markdown, checkable steps that strike through when done, and code blocks with copy buttons.',
-    summary: 'Use this whenever the user asks how to do something or how to troubleshoot something.',
+    headline: 'Checkable steps with code blocks, hyperlinks, and an Ask Hermes button that unlocks sequentially.',
+    summary: 'Check off each step to mark it done. Steps with content highlight in gray; text-only steps strike through.',
     sections: [
       {
         kind: 'hero',
         eyebrow: 'How-to template',
-        title: 'Deploy a Node.js app to production',
-        summary: 'Numbered steps. Check one off and it gets struck through. Code blocks include a copy button.',
-        chips: [chip('Markdown', 'accent'), chip('Strikethrough on check'), chip('Copy buttons on code')],
+        title: 'Connect Google Workspace to Hermes',
+        summary: 'Set up OAuth credentials, run the auth flow, and verify the connection — all with checkable steps.',
+        chips: [chip('Stateful checkboxes', 'accent'), chip('Code blocks'), chip('Sequential unlock')],
         actions: []
       },
       {
-        kind: 'grouped-list',
-        title: 'Checklist',
-        groups: [
+        kind: 'step-by-step-preview',
+        prerequisites: [
+          { id: 'p1', label: 'Hermes Bridge running on localhost:4000' },
+          { id: 'p2', label: 'Google account with Workspace admin access' },
+          { id: 'p3', label: 'Node.js 18+ installed' }
+        ],
+        steps: [
           {
-            id: 'prereqs',
-            label: 'Prerequisites',
-            tone: 'warning',
-            items: [
-              { title: 'Node.js 18+ installed', chips: [chip('Required', 'danger')] },
-              { title: 'Docker CLI available', chips: [chip('Required', 'danger')] },
-              { title: 'Access to container registry', chips: [chip('Required', 'danger')] }
-            ]
+            id: 's1',
+            label: 'Create a Google Cloud project',
+            detail: 'Open the [Google Cloud Console](https://console.cloud.google.com) and create a new project named **Hermes Workspace**. Copy the **Project ID** — you\'ll need it in the next step.'
           },
           {
-            id: 'steps',
-            label: 'Steps',
-            tone: 'accent',
-            items: [
-              {
-                title: '1. Build the image',
-                subtitle: 'docker build -t myapp:$(git rev-parse --short HEAD) .',
-                chips: [chip('code', 'accent'), chip('copy')]
-              },
-              {
-                title: '2. Run tests against the image',
-                subtitle: 'docker run --rm myapp:$(git rev-parse --short HEAD) npm test',
-                chips: [chip('code', 'accent'), chip('copy')]
-              },
-              {
-                title: '3. Push to the registry',
-                subtitle: 'docker push ghcr.io/acme/myapp:$(git rev-parse --short HEAD)',
-                chips: [chip('code', 'accent'), chip('copy')]
-              },
-              {
-                title: '4. Update the k8s manifest',
-                subtitle: 'Bump `spec.template.spec.containers[0].image` to the new tag.',
-                chips: [chip('markdown', 'accent')]
-              },
-              {
-                title: '5. Apply and verify',
-                subtitle: 'kubectl apply -f deploy.yaml && kubectl rollout status deployment/myapp',
-                chips: [chip('code', 'accent'), chip('copy')]
-              },
-              {
-                title: '6. Smoke test',
-                subtitle: 'curl https://api.example.com/healthz',
-                chips: [chip('code', 'accent'), chip('copy'), chip('Critical', 'danger')]
-              }
-            ]
+            id: 's2',
+            label: 'Enable the required APIs',
+            detail: 'In the console, go to **APIs & Services → Library** and enable the following APIs:\n\n- Gmail API\n- Google Calendar API\n- Google Drive API'
+          },
+          {
+            id: 's3',
+            label: 'Create OAuth 2.0 credentials',
+            detail: 'Navigate to **APIs & Services → Credentials → Create Credentials → OAuth Client ID**. Set application type to **Web application** and add this authorized redirect URI:',
+            code: 'http://localhost:4000/auth/google/callback'
+          },
+          {
+            id: 's4',
+            label: 'Add credentials to your environment',
+            detail: 'Copy the Client ID and Client Secret from the credentials page into your `.env` file:',
+            code: 'GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com\nGOOGLE_CLIENT_SECRET=your-client-secret'
+          },
+          {
+            id: 's5',
+            label: 'Run the authorization command',
+            code: 'hermes auth google'
+          },
+          {
+            id: 's6',
+            label: 'Complete the browser authorization',
+            detail: 'A browser window will open automatically. Sign in with your Google Workspace account and grant Hermes the requested permissions. You will be redirected back to the bridge on success.'
+          },
+          {
+            id: 's7',
+            label: 'Verify the connection',
+            detail: 'Confirm Hermes can reach your Google Workspace by running:',
+            code: 'hermes workspace test --provider google'
           }
         ]
       }

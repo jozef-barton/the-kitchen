@@ -22,12 +22,12 @@ export function templateToneStyles(tone: TemplateTone = 'neutral') {
       };
     case 'warning':
       return {
-        bg: 'orange.50',
-        border: 'orange.200',
-        color: 'orange.700',
-        darkBg: 'rgba(245, 158, 11, 0.2)',
-        darkBorder: 'rgba(251, 191, 36, 0.24)',
-        darkColor: 'orange.100'
+        bg: 'yellow.50',
+        border: 'yellow.300',
+        color: 'yellow.700',
+        darkBg: 'rgba(234, 179, 8, 0.2)',
+        darkBorder: 'rgba(250, 204, 21, 0.3)',
+        darkColor: 'yellow.200'
       };
     case 'danger':
       return {

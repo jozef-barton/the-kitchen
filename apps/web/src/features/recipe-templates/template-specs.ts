@@ -26,17 +26,17 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
     smallPaneAdaptationNotes: ['Keep item name and cheapest price column pinned first.', 'Collapse the lowest-priority store column before truncating item identity.'],
     references: ['Google Shopping comparison tables', 'Amazon compare surfaces', 'Booking price grids'],
     populationInstructions: {
-      summary: 'Populate one row per compared item across no more than four stable store columns, always including a direct link to each item.',
+      summary: 'Populate one row per compared item across no more than four stable store columns. Prices themselves are the links — no separate link column.',
       steps: [
         'Use the title to list the items being compared (it is okay to include multiple items).',
         'Create one row per distinct item and one column per store, capped at four stores.',
-        'Include a direct link to the item or listing in every row so the user can jump straight to it.',
+        'Set href on every price cell to the direct listing URL for that item at that store. This makes the price itself a clickable link — do not add a separate Link column.',
         'Include a leadingImage on each row pointing to a product photo or merchant thumbnail so users can visually confirm the item before clicking through.'
       ],
       guardrails: [
-        'Never exceed four store columns including the item identity column.',
+        'Never exceed four store columns — there is no link column.',
         'Do not add operator notes, quick action bars, or advisory footers — this recipe is price-first only.',
-        'Never render a row without a direct link to the item.',
+        'Every price cell must have an href — a price with no link defeats the purpose.',
         'Every row should include a leadingImage — an unreadable price grid without product identity fails the core scanning task.'
       ]
     },
@@ -72,17 +72,18 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
     smallPaneAdaptationNotes: ['Collapse to one or two columns.', 'Keep photo, name, and price visible on every tile.'],
     references: ['Pinterest-style result grids', 'Search result tiles', 'Marketplace card feeds'],
     populationInstructions: {
-      summary: 'Fill small tiles with just the item name, a photo (or descriptive image label), and a price, each with a button linking to the item listing.',
+      summary: 'Fill tiles with the item name, a product photo, and a price, each with a button linking to the item listing.',
       steps: [
         'Use one compact tile per item.',
-        'Include an image label or photo hint if a real image is unavailable.',
+        'Always populate the image field on every card: set image.src to a direct product image URL (e.g. from Amazon CDN, retailer image host, or a reliable public image URL), image.alt to a short description of the product, image.aspect to "square", and image.fit to "cover". Only omit image.src (set to null) if no image URL is available — the tile will render a skeleton placeholder.',
         'Show the price directly on the tile.',
-        'Add a link action to every card\'s actions array — use label "View on Amazon" (or the appropriate retailer) and set href to the item URL. This produces the button that appears on the tile.'
+        'Add exactly one link action to every card\'s actions array — use label "View on Amazon" (or the appropriate retailer) and set href to the item URL. This makes the entire card clickable; no button is rendered.'
       ],
       guardrails: [
         'Do not add bullets, comparison tables, or operator notes — keep tiles minimal.',
         'Do not duplicate items.',
-        'Every card MUST have at least one entry in its actions array. A tile with an empty actions array will render no button — this is a bug.'
+        'Every card MUST have at least one entry in its actions array. A tile with an empty actions array will render no button — this is a bug.',
+        'Every card SHOULD have an image field. A tile without an image looks incomplete.'
       ]
     },
     updateRules: {
@@ -225,7 +226,8 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       summary: 'Render hotels as stacked cards only — no header bar, no recipe tabs, no Hotels/Notes tabs, and no "Hotel shortlist" section header. Each card carries price, amenities, a website icon, and a phone icon.',
       steps: [
         'Use one distinct card per hotel.',
-        'Include a website icon with a hyperlinked "Link" and a phone icon with the phone number on every card.',
+        'Add exactly one link action to card.actions with the booking or hotel website URL — this makes the entire card clickable. Do not add a 🌐 Link bullet; the card itself is the link.',
+        'Include the phone number as a bullet (📞 +X XXX XXX XXXX).',
         'Highlight the most decision-relevant amenities and neighborhood context directly on the card.',
         'Include an image on every card — a hotel exterior or primary room photo. Use the card.image field.'
       ],
@@ -270,10 +272,11 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
     populationInstructions: {
       summary: 'Populate outbound and return results separately so flight decisions remain leg-aware. Outbound is the default selected tab and there is no Notes tab.',
       steps: [
-        'Use stable itinerary rows with price, stops, duration, and carrier.',
+        'Use stable itinerary rows with price, stops, duration, and carrier. All columns should use align: "center".',
         'Keep outbound and return data in separate tabs.',
         'Always render Outbound as the active tab on first load.',
-        'Include a small airline logo as leadingImage on each itinerary row so users can scan carriers visually.'
+        'Include a small airline logo as leadingImage on each itinerary row so users can scan carriers visually.',
+        'Add a final column with id "action" and an empty label. For each row\'s last cell, set value to "↗" and href to the direct booking URL. This renders as a circular icon button.'
       ],
       guardrails: [
         'Never render a Notes tab on this recipe.',
@@ -337,43 +340,47 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
     id: 'research-notebook',
     name: 'Research Notebook',
     category: 'research',
-    useCase: 'Gather sources, claims, notes, and follow-up questions around a research topic.',
-    purpose: 'A notebook-style workspace that separates sources, extracted points, and operator notes.',
-    primaryUserGoal: 'Keep evidence and thoughts organized so follow-up work can build instead of starting over.',
+    useCase: 'Synthesize research into a formal written report with headers, prose paragraphs, and footnoted sources.',
+    purpose: 'A document-style surface that renders research as a readable report rather than a list of raw sources.',
+    primaryUserGoal: 'Read synthesized findings in a clean, citable document format instead of scanning a source list.',
     whenHermesShouldChoose:
-      'Choose this when the user is collecting sources, claims, or references over multiple turns.',
-    selectionSignals: ['research sources', 'gather notes', 'extract claims', 'follow-up questions'],
-    goodFor: ['Source review', 'Competitive research', 'Reading notes'],
-    supports: ['Sources tab', 'Extracted points tab'],
+      'Choose this when the user wants research presented as a formal report, essay, or written summary with citations.',
+    selectionSignals: ['research sources', 'gather notes', 'extract claims', 'write a report', 'summarize findings', 'cite sources'],
+    goodFor: ['Literature review', 'Competitive research', 'Policy briefs', 'Topic summaries'],
+    supports: ['Markdown body with headers and prose', 'Inline superscript citations', 'Numbered footnote list with source links'],
     preferredLayout: 'research-notebook',
-    supportedTabs: ['Sources', 'Extracted points'],
-    idealDataShape: ['Source list', 'Extracted claims or findings'],
-    requiredSections: ['Tab rail', 'Sources list', 'Extracted points'],
-    optionalSections: ['Source quality chips'],
-    requiredActions: ['Open source', 'Pin claim'],
-    optionalActions: ['Mark source reviewed', 'Group by theme', 'Copy citation'],
-    emptyStateBehavior: 'Start with a notebook shell that explains how sources and extracted points stay separate.',
-    loadingStateBehavior: 'Keep existing tabs fixed while new sources or extracted points arrive.',
-    errorStateBehavior: 'Preserve already captured research material and show which extraction lane failed.',
-    smallPaneAdaptationNotes: ['Use tab-first navigation on narrow widths.', 'Keep source title, publication, and one relevance line visible.'],
-    references: ['Notion research pages', 'Obsidian note collections', 'Apple Notes source stacks'],
+    supportedTabs: [],
+    idealDataShape: ['Report body in markdown', 'Numbered footnotes with label and optional URL'],
+    requiredSections: ['Report section'],
+    optionalSections: ['Stat strip', 'Action bar'],
+    requiredActions: [],
+    optionalActions: ['Ask follow-up', 'Export'],
+    emptyStateBehavior: 'Show a placeholder report shell inviting the user to describe the topic.',
+    loadingStateBehavior: 'Stream the report body progressively as findings are synthesized.',
+    errorStateBehavior: 'Preserve any completed sections and annotate failed extraction inline.',
+    smallPaneAdaptationNotes: ['Report renders full-width at all sizes — no adaptation needed.'],
+    references: ['Academic papers', 'Policy reports', 'Analyst briefs', 'Long-form journalism'],
     populationInstructions: {
-      summary: 'Populate evidence and extracted points as separate but connected surfaces.',
+      summary: 'Write a formal report using a single "report" section. Use markdown headers (##, ###), prose paragraphs, and inline superscript citations that map to numbered footnotes.',
       steps: [
-        'Add one source item per document, article, or page.',
-        'Store synthesized findings in extracted points rather than mixing them into raw source rows.'
+        'Use a "report" section with a title (e.g. "Findings" or the topic name).',
+        'Write the body as markdown with ## for top-level sections and ### for subsections. Use flowing prose, not bullet dumps.',
+        'Add inline citations as superscripts: <sup>1</sup>, <sup>2</sup>, etc. wherever a claim comes from a source.',
+        'Populate footnotes as an array of { id, label, url } objects. id must match the superscript number. label is the full citation. url is optional but should be included when available.',
+        'Keep the tone formal and concise — this is a document, not a chat reply.'
       ],
       guardrails: [
-        'Never render a Notes tab or a Follow-ups tab on this recipe.',
-        'Do not collapse all information into a single markdown wall.',
-        'Keep source identity stable across updates.'
+        'Do not render source lists, tabs, or extracted-points grids — the report section is the only content surface.',
+        'Do not write bullet-only sections — use prose paragraphs with headers.',
+        'Every superscript in the body must have a matching footnote id.',
+        'Do not exceed five top-level sections unless the topic genuinely requires it.'
       ]
     },
     updateRules: {
-      patchPrefer: ['Append sources and extracted points.', 'Patch existing source summaries rather than replacing the whole notebook.'],
-      replaceTriggers: ['Replace the notebook only when the research topic changes completely.'],
-      persistAcrossUpdates: ['Selected tab', 'Pinned claims', 'Reviewed markers'],
-      stableRegions: ['Tab rail', 'Source ordering']
+      patchPrefer: ['Append new sections to the body rather than rewriting existing ones.', 'Add new footnotes without renumbering existing ones when possible.'],
+      replaceTriggers: ['Replace the whole report only when the research topic changes completely.'],
+      persistAcrossUpdates: ['Existing section headers', 'Footnote numbering'],
+      stableRegions: ['Report body structure']
     }
   },
   'security-review-board': {
@@ -550,18 +557,19 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
     smallPaneAdaptationNotes: ['Collapse to a single-column grid on narrow panes.', 'Keep image, title, and price visible at the smallest widths.'],
     references: ['LinkedIn jobs feed', 'Wellfound job cards', 'Lever job boards'],
     populationInstructions: {
-      summary: 'Render a card grid of job listings. Each card has a photo or logo, role title, company, pay range, location chips, and an Apply link.',
+      summary: 'Render a card grid of job listings. Each card has a photo or logo, role title, company, pay range, and location chips. The card itself is the Apply link.',
       steps: [
         'Use one card per job listing in a single card-grid section.',
         'Every card must include an image — prefer a company logo; fall back to a role-appropriate photo from unsplash.com.',
         'Set the card title to the role, subtitle to the company, price to the estimated pay range, and add location or remote chips.',
-        'Every card must have an Apply link action pointing directly to the job posting URL.',
-        'Render a "Find more" action that asks Hermes for additional listings.'
+        'Add exactly one link action to every card\'s actions array — set label to "Apply" and href to the direct job posting URL. This makes the entire card clickable; no separate Apply button or bullet is rendered.',
+        'After the card-grid section, add a single action-bar section with a "Find more like these" action that asks Hermes for additional listings. This is a section-level action, not a card-level action.'
       ],
       guardrails: [
         'Never render a kanban, pipeline, or table for this recipe — it is a card grid.',
         'Every card must have a photo or logo — no image, no card.',
-        'Every card must have an Apply link action — a job card without a way to apply is a bug.'
+        'Every card must have exactly one link action in its actions array — a job card without one is a bug.',
+        'Do not add Apply bullets or footer text to cards — the card click handles navigation.'
       ]
     },
     updateRules: {
@@ -569,52 +577,6 @@ export const RECIPE_TEMPLATE_SPECS: Record<RecipeTemplateId, RecipeTemplateSpec>
       replaceTriggers: ['Replace the whole grid only when the user redefines the job search entirely.'],
       persistAcrossUpdates: ['Card order', 'Existing cards'],
       stableRegions: ['Card grid', 'Action bar']
-    }
-  },
-  'content-campaign-planner': {
-    id: 'content-campaign-planner',
-    name: 'Content / Campaign Planner',
-    category: 'operations',
-    useCase: 'Manage ideas, drafts, schedule, and email output for a content or campaign workflow.',
-    purpose: 'A lightweight editorial workflow with stable tabs, idea expansion, and launch-email support.',
-    primaryUserGoal: 'Keep creative work moving from idea to scheduled output without losing idea notes or launch context.',
-    whenHermesShouldChoose:
-      'Choose this when the user is organizing a content plan, campaign calendar, or editorial workflow.',
-    selectionSignals: ['content plan', 'campaign planner', 'editorial schedule', 'draft pipeline'],
-    goodFor: ['Editorial calendars', 'Launch campaigns', 'Content ops'],
-    supports: ['Workflow tabs', 'Status chips', 'Idea notes', 'Email writing', 'Asset previews', 'Published-URL links'],
-    preferredLayout: 'kanban',
-    supportedTabs: ['Ideas', 'Drafts', 'Schedule', 'Email'],
-    idealDataShape: ['Idea list', 'Draft summaries', 'Scheduled items', 'Email draft context', 'Status chips'],
-    requiredSections: ['Tab rail', 'Idea list', 'Draft list', 'Schedule timeline', 'Email write panel'],
-    optionalSections: ['Brief note', 'Owner chips', 'Launch reminders'],
-    requiredActions: ['Flesh out idea', 'Add note', 'Write email', 'Open published URL'],
-    optionalActions: ['Pin campaign', 'Duplicate draft', 'Ask Hermes for another angle'],
-    emptyStateBehavior: 'Provide a clean campaign shell with idea, draft, schedule, and email tabs.',
-    loadingStateBehavior: 'Keep the workflow tabs and stage layout stable while items populate.',
-    errorStateBehavior: 'Preserve existing cards and label incomplete schedule or asset updates per tab.',
-    smallPaneAdaptationNotes: ['Use tab-first navigation and keep status chips compact.', 'Favor one-column card stacks for draft-heavy views.'],
-    references: ['Editorial planners', 'Kanban content boards', 'Marketing ops dashboards'],
-    populationInstructions: {
-      summary: 'Populate a stable workflow from ideas through schedule, using a simple list for Ideas rather than a kanban of lanes.',
-      steps: [
-        'Use a flat list (not a kanban board) for ideas.',
-        'Keep status transitions explicit.',
-        'Preserve short operator notes on each idea so half-formed concepts can be expanded later.',
-        'For scheduled or published items, include a link action pointing to the published URL (social post, landing page, article).',
-        'Attach a preview image (mockup, social card, hero asset) to drafts and scheduled items when the asset exists.'
-      ],
-      guardrails: [
-        'Never render an "Idea lanes" kanban on this recipe — the Ideas tab is a simple list.',
-        'Do not flatten the workflow into one generic to-do list.',
-        'Do not drop scheduled items when draft details change.'
-      ]
-    },
-    updateRules: {
-      patchPrefer: ['Patch cards and status changes in place.', 'Append idea notes and email draft context without replacing tabs.'],
-      replaceTriggers: ['Replace the planner only when the campaign scope changes entirely.'],
-      persistAcrossUpdates: ['Selected tab', 'Manual notes', 'Pinned campaigns', 'Card ordering where user-curated'],
-      stableRegions: ['Tabs', 'Workflow status model', 'Email tab']
     }
   },
   'local-discovery-comparison': {

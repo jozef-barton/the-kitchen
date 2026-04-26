@@ -1379,6 +1379,34 @@ export function SessionRecipePanel({
 
   return (
     <VStack align="stretch" gap="3" h="100%" minH={0} minW={0} maxW="100%" data-testid="attached-recipe-panel">
+      {alternatives.length > 0 && onSwitchTemplate ? (
+        <Box flexShrink={0} pl="2" pt="1">
+          <HStack gap="1.5" align="center" wrap="wrap">
+            <Text fontSize="xs" color="var(--text-muted)" fontWeight="500" flexShrink={0}>
+              Similar:
+            </Text>
+            {alternatives.map((alt) => (
+              <Button
+                key={alt.id}
+                size="xs"
+                variant="outline"
+                border="1px dashed var(--border-default)"
+                borderRadius="full"
+                fontSize="xs"
+                fontWeight="450"
+                color="var(--text-secondary)"
+                bg="transparent"
+                px="2.5"
+                _hover={{ color: 'var(--text-primary)', borderColor: 'var(--border-strong)', borderStyle: 'solid' }}
+                onClick={() => void onSwitchTemplate(recipe, alt.id, alt.intentLabel)}
+              >
+                Switch to {alt.name}
+              </Button>
+            ))}
+          </HStack>
+        </Box>
+      ) : null}
+
       <Box
         flex="1"
         minH={0}
@@ -1425,34 +1453,6 @@ export function SessionRecipePanel({
           </>
         )}
       </Box>
-
-      {alternatives.length > 0 && onSwitchTemplate ? (
-        <Box flexShrink={0} px="0.5">
-          <HStack gap="1.5" align="center" wrap="wrap">
-            <Text fontSize="xs" color="var(--text-muted)" fontWeight="500" flexShrink={0}>
-              Similar:
-            </Text>
-            {alternatives.map((alt) => (
-              <Button
-                key={alt.id}
-                size="xs"
-                variant="outline"
-                border="1px dashed var(--border-default)"
-                borderRadius="full"
-                fontSize="xs"
-                fontWeight="450"
-                color="var(--text-secondary)"
-                bg="transparent"
-                px="2.5"
-                _hover={{ color: 'var(--text-primary)', borderColor: 'var(--border-strong)', borderStyle: 'solid' }}
-                onClick={() => void onSwitchTemplate(recipe, alt.id, alt.intentLabel)}
-              >
-                Switch to {alt.name}
-              </Button>
-            ))}
-          </HStack>
-        </Box>
-      ) : null}
     </VStack>
   );
 }

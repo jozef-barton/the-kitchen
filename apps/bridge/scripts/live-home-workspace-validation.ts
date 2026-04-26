@@ -1031,46 +1031,6 @@ Medium:
       }
     }
 
-    if (shouldRun('campaign')) {
-      try {
-        logCaseStart('campaign', 'content campaign planner Home recipe');
-        const campaignRun = await runPrompt(
-          standardServer,
-          profileId,
-          `Use only the campaign details in this request and do not browse externally.
-Build a compact content campaign planner Home recipe for Q2 product launch.
-
-Ideas:
-- Blog post: "AI-Powered Recipe Generation" — thought leadership, target dev audience
-- Video tutorial: "Getting Started with Hermes Home" — onboarding content
-- Twitter thread: key features highlight — social engagement
-
-Drafts in progress:
-- Blog outline: Introduction, key problems, our approach, results, next steps
-- Video script: 3-minute walkthrough of main features
-
-Schedule:
-- April 21: Publish blog post
-- April 25: Release video tutorial
-- April 28: Post Twitter thread`
-        );
-        ensureTemplateReadyWithSchemaIntegrity(standardServer, campaignRun.recipe, campaignRun.telemetry, 'content-campaign-planner');
-        results.push({
-          id: 'campaign',
-          status: 'passed',
-          detail: `Content campaign planner completed with schema integrity verified.`,
-          sessionId: campaignRun.session.id,
-          recipeId: campaignRun.recipe.id,
-          renderMode: campaignRun.recipe.renderMode
-        });
-      } catch (error) {
-        results.push({
-          id: 'campaign',
-          status: 'failed',
-          detail: error instanceof Error ? error.message : 'Unknown campaign planner validation failure.'
-        });
-      }
-    }
 
     if (shouldRun('jobsearch')) {
       try {
