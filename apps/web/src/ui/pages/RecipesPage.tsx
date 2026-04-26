@@ -93,7 +93,6 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
                 activeCategory={category}
                 selectedTemplateId={selectedTemplate.id}
                 onCategoryChange={setCategory}
-                omitPreviews
                 onSelectTemplate={(templateId) => setSelectedTemplateId(templateId as RecipeTemplateId)}
                 onInspectTemplate={(templateId) => {
                   setSelectedTemplateId(templateId as RecipeTemplateId);

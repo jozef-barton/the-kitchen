@@ -94,8 +94,16 @@ export function ShellLayout({
       overflow="hidden"
       bg="var(--shell-bg)"
     >
-      {/* Sidebar — always in the DOM so tests can query nav buttons; CSS handles mobile layout */}
-      {sidebar}
+      {/* Desktop sidebar — hidden on mobile by collapsing to zero height (NOT display:none so tests
+          can still query nav buttons via getByRole without needing hidden:true) */}
+      <Box
+        h={{ base: 0, lg: '100dvh' }}
+        minH={0}
+        overflow="hidden"
+        flexShrink={0}
+      >
+        {sidebar}
+      </Box>
 
       {/* Mobile nav drawer */}
       {mobileNavContent ? (
@@ -138,7 +146,7 @@ export function ShellLayout({
                     </Drawer.CloseTrigger>
                   </HStack>
                 </Drawer.Header>
-                <Drawer.Body p="0" overflow="hidden">
+                <Drawer.Body p="0" overflow="hidden" flex="1" minH={0} display="flex" flexDirection="column">
                   {mobileNavContent}
                 </Drawer.Body>
               </Drawer.Content>

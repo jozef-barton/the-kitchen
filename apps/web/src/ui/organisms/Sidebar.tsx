@@ -132,9 +132,9 @@ export function Sidebar({
         minWidth={drawerMode ? '0' : { base: '100%', lg: sidebarWidth }}
         maxWidth={drawerMode ? '100%' : { base: '100%', lg: sidebarWidth }}
         flexShrink={0}
-        height={drawerMode ? '100dvh' : { base: '34dvh', lg: '100dvh' }}
+        height={drawerMode ? '100%' : { base: '34dvh', lg: '100dvh' }}
         minHeight={drawerMode ? '0' : { base: '200px', lg: '0' }}
-        maxHeight={drawerMode ? 'none' : { base: '34dvh', lg: 'none' }}
+        maxHeight={drawerMode ? '100%' : { base: '34dvh', lg: 'none' }}
         bg="var(--sidebar-bg)"
         minH={0}
         overflow="hidden"
