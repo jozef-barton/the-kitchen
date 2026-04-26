@@ -13,6 +13,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
+      "@hermes-recipes/protocol": ["packages/protocol/src/index.ts"],
+      "@hermes-recipes/ui": ["packages/ui/src/index.ts"],
       "@hermes-workspaces/protocol": ["packages/protocol/src/index.ts"],
       "@hermes-workspaces/ui": ["packages/ui/src/index.ts"],
       "@hermes-workspaces/config/*": ["packages/config/*"]

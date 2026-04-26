@@ -1,7 +1,41 @@
-import { Badge, Box, Button, Flex, SimpleGrid, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, HStack, SimpleGrid, Text, VStack } from '@chakra-ui/react';
 import { TemplateSurface } from './template-primitives';
 import { resolveTemplateGalleryFilterButtonStyles } from './template-style-helpers';
 import { INGREDIENT_GROUPS, type Ingredient, type IngredientGroup } from './ingredient-catalog';
+import { IngredientPreview } from './ingredient-preview';
+
+function MiniatureIngredientPreview({ ingredient }: { ingredient: Ingredient }) {
+  return (
+    <Box
+      position="relative"
+      flexShrink={0}
+      w="120px"
+      h="120px"
+      overflow="hidden"
+      rounded="6px"
+      border="1px solid var(--border-subtle)"
+      bg="var(--surface-1)"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Box
+        position="absolute"
+        top="0"
+        left="0"
+        p="4"
+        style={{
+          width: '400%',
+          height: '400%',
+          transformOrigin: 'top left',
+          transform: 'scale(0.25)',
+          pointerEvents: 'none',
+          userSelect: 'none',
+        }}
+      >
+        <IngredientPreview ingredient={ingredient} />
+      </Box>
+    </Box>
+  );
+}
 
 export function IngredientGallery({
   ingredients,
@@ -25,18 +59,21 @@ export function IngredientGallery({
               Ingredients
             </Text>
             <Text color="var(--text-secondary)">
-              The section primitives available to every recipe. Click a card to render it in the preview pane.
+              The section primitives available to every recipe. Click a card to preview it.
             </Text>
           </VStack>
 
-          <Flex gap="2" wrap="wrap">
+          <Flex gap="1.5" wrap="wrap">
             {INGREDIENT_GROUPS.map((group) => {
               const buttonStyles = resolveTemplateGalleryFilterButtonStyles(activeGroup === group.id);
               return (
                 <Button
                   key={group.id}
-                  size="sm"
+                  size="xs"
                   rounded="999px"
+                  h="6"
+                  px="3"
+                  fontSize="xs"
                   bg={buttonStyles.bg}
                   border="1px solid var(--border-subtle)"
                   color={buttonStyles.color}
@@ -66,25 +103,25 @@ export function IngredientGallery({
               h="100%"
             >
               <TemplateSurface bg={selected ? 'rgba(37, 99, 235, 0.06)' : 'var(--surface-1)'} padding="3">
-                <VStack align="stretch" gap="2.5">
-                  <Flex align="center" gap="2" wrap="wrap">
-                    <Text fontSize="10px" fontWeight="600" letterSpacing="0.12em" textTransform="uppercase" color="var(--text-muted)">
-                      {ingredient.group}
+                <HStack align="start" gap="3">
+                  <MiniatureIngredientPreview ingredient={ingredient} />
+                  <VStack align="start" gap="1.5" flex="1" minW={0}>
+                    <Flex align="center" gap="1.5" wrap="wrap">
+                      <Text fontSize="10px" fontWeight="600" letterSpacing="0.12em" textTransform="uppercase" color="var(--text-muted)">
+                        {ingredient.group}
+                      </Text>
+                      <Badge size="sm" variant="subtle" colorPalette="gray">
+                        {ingredient.kind}
+                      </Badge>
+                    </Flex>
+                    <Text fontSize="sm" fontWeight="600" color="var(--text-primary)" lineHeight="1.25">
+                      {ingredient.name}
                     </Text>
-                    <Badge size="sm" variant="subtle" colorPalette="gray">
-                      {ingredient.kind}
-                    </Badge>
-                  </Flex>
-                  <Text fontSize="md" fontWeight="600" color="var(--text-primary)" lineHeight="1.2">
-                    {ingredient.name}
-                  </Text>
-                  <Text fontSize="sm" color="var(--text-secondary)" lineClamp={2}>
-                    {ingredient.summary}
-                  </Text>
-                  <Text fontSize="xs" color="var(--text-muted)" lineClamp={2}>
-                    {ingredient.whenToUse}
-                  </Text>
-                </VStack>
+                    <Text fontSize="xs" color="var(--text-secondary)" lineClamp={3}>
+                      {ingredient.summary}
+                    </Text>
+                  </VStack>
+                </HStack>
               </TemplateSurface>
             </Box>
           );

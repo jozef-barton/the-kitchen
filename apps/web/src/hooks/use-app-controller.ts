@@ -44,6 +44,9 @@ import {
   getToolHistory,
   getTools,
   listSessions,
+  createProfile,
+  deleteProfile,
+  getProfilesMetrics,
   pollProviderAuth,
   renameSession,
   selectProfile,
@@ -180,9 +183,41 @@ function getMessageRequestId(message: ChatMessage) {
   return message.requestId ?? (message.role === 'user' ? message.id : null);
 }
 
-function sanitizeUserFacingErrorMessage(message: string) {
-  void message;
-  return 'Hermes ran into an issue. Check the logs for more information.';
+function sanitizeUserFacingErrorMessage(message: string): string {
+  if (!message?.trim()) return 'Hermes ran into an issue.';
+
+  // Model / provider errors — give actionable guidance
+  if (/\b(401|unauthorized|invalid.*api.*key|api.*key.*invalid|authentication failed)\b/i.test(message)) {
+    return 'Authentication failed — the API key for this provider may be invalid or expired. Go to Settings → provider to update credentials.';
+  }
+  if (/\b(404|model.*not.*found|does not exist|no such model|unknown model|not.*supported.*model)\b/i.test(message)) {
+    return 'The configured model was not found by the provider. Go to Settings and select a different model.';
+  }
+  if (/\b(429|rate.?limit|quota.*exceeded|too many requests)\b/i.test(message)) {
+    return 'Rate limit reached for this model. Wait a moment and try again, or switch to a different model in Settings.';
+  }
+  if (/\b(context.*length|context.*window|too.*many.*tokens|token.*limit|maximum.*context)\b/i.test(message)) {
+    return 'This conversation exceeds the model\'s context window. Start a new session or switch to a model with a larger context.';
+  }
+  if (/\b(503|service.*unavailable|overload|capacity|model.*down)\b/i.test(message)) {
+    return 'The model provider is temporarily unavailable or overloaded. Try again in a moment or switch models.';
+  }
+  if (/\bmaximum.*iterations|max.*turns|restricted.*turn.*limit\b/i.test(message)) {
+    return 'Hermes reached the maximum turn limit. Increase the turn limit in Settings or enable Unrestricted Access.';
+  }
+  if (/\btimed out|timeout\b/i.test(message)) {
+    return 'The request timed out. The model may be slow or unavailable. Try again or adjust the timeout in Settings.';
+  }
+  if (/\bauth.*scope|not fully authenticated|oauth\b/i.test(message)) {
+    return 'Authentication scope is missing for this request. Re-authenticate the provider in Settings.';
+  }
+
+  // Pass through the bridge's own user-facing messages — they're already curated
+  if (message.startsWith('Hermes')) {
+    return message;
+  }
+
+  return 'Hermes ran into an issue. Check the runtime activity panel for details.';
 }
 
 function deriveProgressMessageFromActivity(activity: ChatActivity) {
@@ -527,6 +562,7 @@ export function useAppController() {
   const [telemetryPage, setTelemetryPage] = useState(1);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [profileMetrics, setProfileMetrics] = useState<Array<{ profileId: string; sessionCount: number; messageCount: number; recipeCount: number }>>([]);
   const [modelProviderResponse, setModelProviderResponse] = useState<ModelProviderResponse | null>(null);
   const [modelProviderLoading, setModelProviderLoading] = useState(false);
   const [modelProviderError, setModelProviderError] = useState<string | null>(null);
@@ -1256,6 +1292,7 @@ export function useAppController() {
       try {
         const nextBootstrap = await getBootstrap();
         await applyBootstrapResponse(nextBootstrap, options);
+        void getProfilesMetrics().then((r) => setProfileMetrics(r.metrics)).catch(() => undefined);
       } catch (error) {
         setBootstrapStatus('error');
         setBootstrapError(getErrorMessage(error, 'The bridge could not load Hermes data.'));
@@ -1501,6 +1538,18 @@ export function useAppController() {
     },
     [applyBootstrapResponse]
   );
+
+  const handleCreateProfile = useCallback(async (name: string) => {
+    const result = await createProfile(name);
+    setBootstrap((prev) => prev ? { ...prev, profiles: result.profiles } : prev);
+    void getProfilesMetrics().then((r) => setProfileMetrics(r.metrics)).catch(() => undefined);
+  }, []);
+
+  const handleDeleteProfile = useCallback(async (profileId: string) => {
+    const result = await deleteProfile(profileId);
+    setBootstrap((prev) => prev ? { ...prev, profiles: result.profiles } : prev);
+    void getProfilesMetrics().then((r) => setProfileMetrics(r.metrics)).catch(() => undefined);
+  }, []);
 
   const handleCreateSession = useCallback(async () => {
     if (!activeProfileId) {
@@ -2117,7 +2166,7 @@ export function useAppController() {
           if (requestId) {
             appendActivityToRuntimeRequest(sessionId, requestId, {
               kind: 'status',
-              state: event.event.type === 'deleted' ? 'completed' : 'updated',
+              state: 'completed',
               label: 'Recipe event',
               detail: event.event.message,
               requestId,
@@ -2389,7 +2438,7 @@ export function useAppController() {
   );
 
   const runChatRequest = useCallback(
-    async (content: string, options: { mode?: ChatRequestMode } = {}) => {
+    async (content: string, options: { mode?: ChatRequestMode; intentContent?: string } = {}) => {
       if (!activeProfileId) {
         setChatError('Select a real Hermes profile before sending a message.');
         return;
@@ -2422,6 +2471,7 @@ export function useAppController() {
               sessionId: activeSessionId,
               recipeId: resolvedRecipeId,
               content,
+              intentContent: options.intentContent,
               mode: requestMode
             },
             onEvent
@@ -2468,6 +2518,21 @@ export function useAppController() {
 
       await runChatRequest(RECIPE_REFRESH_USER_MESSAGE, {
         mode: 'recipe_refresh'
+      });
+    },
+    [runChatRequest, sessionPayload]
+  );
+
+  const handleSwitchTemplate = useCallback(
+    async (recipe: Recipe, _targetTemplateId: string, intentLabel: string) => {
+      if (!sessionPayload || sessionPayload.attachedRecipe?.id !== recipe.id) {
+        setChatError('Open the attached workspace session before switching its template.');
+        return;
+      }
+
+      await runChatRequest(RECIPE_REFRESH_USER_MESSAGE, {
+        mode: 'recipe_refresh',
+        intentContent: intentLabel
       });
     },
     [runChatRequest, sessionPayload]
@@ -2885,6 +2950,9 @@ export function useAppController() {
     openSession,
     handleToolsTabChange,
     handleProfileChange,
+    handleCreateProfile,
+    handleDeleteProfile,
+    profileMetrics,
     handleCreateSession,
     handleSessionSearch,
     handleSessionsPageChange,
@@ -2895,6 +2963,7 @@ export function useAppController() {
     handleRenameRecipe,
     handleDeleteRecipe,
     handleRefreshRecipe,
+    handleSwitchTemplate,
     handleExecuteRecipeAction,
     handleSidebarCollapsedChange,
     handleSendMessage,

@@ -94,7 +94,9 @@ describe('RecipesPage', () => {
     expect(within(screen.getByTestId('spaces-template-inspector')).getByText('Selected venue')).toBeInTheDocument();
 
     const hotelCard = screen.getByTestId('spaces-template-card-hotel-shortlist');
-    await userEvent.click(within(hotelCard).getByRole('button', { name: 'Read more' }));
+    // The desktop gallery lives inside a display:none responsive container (hidden on base breakpoint).
+    // Use hidden:true to find elements within display:none parents.
+    await userEvent.click(within(hotelCard).getByRole('button', { name: 'Details', hidden: true }));
 
     const drawer = await screen.findByTestId('recipe-template-detail-drawer');
     expect(within(drawer).getByText('Hotel Shortlist')).toBeInTheDocument();
@@ -122,7 +124,9 @@ describe('RecipesPage', () => {
     renderRecipesPage(420);
     const inspector = screen.getByTestId('spaces-template-inspector');
 
-    expect(screen.getByText('Price grid')).toBeInTheDocument();
+    // 'Price grid' is a section title in the selected template's preview, shown in the inspector.
+    // Use getAllByText because the mobile-preview drawer may also be mounted in the DOM.
+    expect(screen.getAllByText('Price grid').length).toBeGreaterThan(0);
 
     const inboxCard = screen.getByTestId('spaces-template-card-inbox-triage-board');
     await userEvent.click(inboxCard);

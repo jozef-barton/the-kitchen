@@ -136,7 +136,7 @@ export function SkillsPage({
                   <Table.ColumnHeader>Category</Table.ColumnHeader>
                   <Table.ColumnHeader>Source</Table.ColumnHeader>
                   <Table.ColumnHeader>Trust</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Actions</Table.ColumnHeader>
+                  <Table.ColumnHeader textAlign="center">Actions</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -206,23 +206,24 @@ export function SkillsPage({
                       <Table.Cell>
                         <TrustBadge value={skill.trust} />
                       </Table.Cell>
-                      <Table.Cell textAlign="end">
-                        <Box className="table-row-actions">
-                          <Menu.Root positioning={{ placement: 'bottom-end' }}>
+                      <Table.Cell textAlign="center" w="80px" minW="80px">
+                        <Menu.Root positioning={{ placement: 'bottom-end' }}>
                             <Menu.Trigger asChild>
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
                                 minW={0}
-                                px="2"
-                                h="7"
-                                rounded="6px"
+                                px="3"
+                                h="8"
+                                rounded="7px"
                                 aria-label={`Actions for ${skill.name}`}
                                 color="var(--text-secondary)"
-                                _hover={{ bg: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                                borderColor="var(--border-subtle)"
+                                bg="var(--surface-2)"
+                                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
                               >
-                                ⋮
+                                ···
                               </Button>
                             </Menu.Trigger>
                             <Portal>
@@ -246,7 +247,6 @@ export function SkillsPage({
                               </Menu.Positioner>
                             </Portal>
                           </Menu.Root>
-                        </Box>
                       </Table.Cell>
                     </Table.Row>
                   );

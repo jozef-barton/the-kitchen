@@ -1,6 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Box, Button, CloseButton, Drawer, Flex, Grid, HStack, Portal, Text } from '@chakra-ui/react';
+import { Box, Button, CloseButton, Drawer, Flex, Grid, HStack, Portal, Text, chakra } from '@chakra-ui/react';
+
+function SpaceIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="3" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+      <path d="M3 4h4.5v4.5H3zM8.5 4H13v4.5H8.5zM3 9.5h4.5V14H3zM8.5 9.5H13V14H8.5z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function ActivityIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="3" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+      <path d="M1.5 8h2.5l2-5 3 9 2-6 1.5 2H14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function SpinnerIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="3" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}
+      style={{ animation: 'spinIcon 0.7s linear infinite' }}>
+      <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="2" strokeDasharray="22" strokeDashoffset="16" strokeLinecap="round" />
+    </Svg>
+  );
+}
 import type { ChatActivity, ChatMessage, RuntimeRequest, SessionMessagesResponse, Recipe, UpdateRecipeRequest } from '@hermes-recipes/protocol';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
@@ -36,7 +64,9 @@ export function ChatPage({
   onRefreshRecipe,
   onExecuteRecipeAction,
   onUpdateRecipe,
-  onApplyRecipeEntryAction
+  onApplyRecipeEntryAction,
+  onSwitchTemplate,
+  activeModelLabel
 }: {
   sessionPayload: SessionMessagesResponse | null;
   loading: boolean;
@@ -89,16 +119,20 @@ export function ChatPage({
       toastDescription?: string;
     }
   ) => Promise<void> | void;
+  onSwitchTemplate?: (recipe: Recipe, targetTemplateId: string, intentLabel: string) => Promise<void> | void;
+  activeModelLabel?: string | null;
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [spaceRenameOpen, setRecipeRenameOpen] = useState(false);
   const [spaceDeleteOpen, setRecipeDeleteOpen] = useState(false);
   const [spaceChatCollapsed, setRecipeChatCollapsed] = useState(false);
+  const [spaceStatus, setSpaceStatus] = useState<'idle' | 'building' | 'updated'>('idle');
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [recipePanelAnimKey, setRecipePanelAnimKey] = useState(0);
   const [runtimePanelOpen, setRuntimePanelOpen] = useState(false);
+  const [mobileSpaceDrawerOpen, setMobileSpaceDrawerOpen] = useState(false);
   const prevRecipeIdRef = useRef<string | null>(null);
   const runtimeButtonRef = useRef<HTMLButtonElement | null>(null);
   const activeSession = sessionPayload?.session ?? null;
@@ -136,7 +170,17 @@ export function ChatPage({
 
   useEffect(() => {
     setRecipeChatCollapsed(false);
+    setSpaceStatus('idle');
   }, [activeSession?.id, attachedRecipe?.id]);
+
+  useEffect(() => {
+    if (!attachedRecipe) return;
+    if (sending) {
+      setSpaceStatus('building');
+    } else {
+      setSpaceStatus(prev => prev === 'building' ? 'updated' : prev);
+    }
+  }, [sending, attachedRecipe]);
 
   useEffect(() => {
     if (sending) setRuntimePanelOpen(true);
@@ -223,9 +267,17 @@ export function ChatPage({
       {/* Session subtitle + actions — minimal, inline, no box */}
       {!attachedRecipe ? (
         <HStack px={{ base: '4', lg: '6' }} pt="2" pb="1" justify="space-between" align="center" flexShrink={0} gap="3">
-          <Text fontSize="xs" color="var(--text-muted)" minW={0} lineClamp={1} opacity={0.7}>
-            {activeSession?.summary ?? 'Choose a recent session or start a new one.'}
-          </Text>
+          <HStack gap="2" minW={0} overflow="hidden">
+            <Text fontSize="xs" color="var(--text-muted)" minW={0} lineClamp={1} opacity={0.7}>
+              {activeSession?.summary ?? 'Choose a recent session or start a new one.'}
+            </Text>
+            {activeModelLabel ? (
+              <Text fontSize="10px" color="var(--text-muted)" flexShrink={0} opacity={0.6}
+                bg="var(--surface-2)" border="1px solid var(--border-subtle)" rounded="4px" px="1.5" py="0" lineHeight="1.7">
+                {activeModelLabel.split('/').pop()}
+              </Text>
+            ) : null}
+          </HStack>
           <HStack gap="1" flexShrink={0}>
             <Button
               type="button"
@@ -290,9 +342,14 @@ export function ChatPage({
             minH={0}
             gap="3"
             templateColumns={
-            spaceChatCollapsed
-                ? { base: 'minmax(0, 1fr) 92px', xl: 'minmax(0, 1fr) 92px' }
+              spaceChatCollapsed
+                ? { base: '1fr', xl: 'minmax(0, 1fr) 92px' }
                 : { base: '1fr', xl: 'minmax(0, 1fr) 420px' }
+            }
+            templateRows={
+              spaceChatCollapsed
+                ? { base: '1fr', xl: '1fr' }
+                : { base: 'minmax(0, 1fr) auto', xl: '1fr' }
             }
             css={{ transition: 'grid-template-columns 480ms cubic-bezier(0.4, 0, 0.2, 1)' }}
             data-testid="combined-session-recipe-layout"
@@ -320,6 +377,7 @@ export function ChatPage({
                 onExecuteAction={onExecuteRecipeAction}
                 onUpdateRecipe={onUpdateRecipe}
                 onApplyRecipeEntryAction={onApplyRecipeEntryAction}
+                onSwitchTemplate={onSwitchTemplate}
               />
             </Box>
 
@@ -354,11 +412,11 @@ export function ChatPage({
                   variant="subtle"
                   w="100%"
                   minW={0}
-                  aria-label="Open runtime drawer"
-                  title="Open runtime drawer"
+                  aria-label="Open runtime activity"
+                  title="Open runtime activity"
                   onClick={() => onRuntimeDrawerOpenChange(true)}
                 >
-                  Runtime
+                  <ActivityIcon />
                 </Button>
                 <Box flex="1" minH={0} display="flex" alignItems="center" justifyContent="center">
                   <Text
@@ -369,7 +427,7 @@ export function ChatPage({
                     letterSpacing="0"
                     style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                   >
-                    Session chat
+                    Session
                   </Text>
                 </Box>
               </Flex>
@@ -381,27 +439,61 @@ export function ChatPage({
                       <Text fontSize="xs" fontWeight="700" color="var(--text-muted)" letterSpacing="0">
                         Session chat
                       </Text>
-                      <Text mt="0.5" fontSize="sm" fontWeight="700" color="var(--text-primary)" lineClamp={2}>
-                        {attachedRecipe?.title ?? activeSession?.title ?? 'Attached chat'}
-                      </Text>
+                      <HStack gap="1.5" align="center" mt="0.5" minW={0}>
+                        <Box color="var(--text-muted)" flexShrink={0}>
+                          <SpaceIcon />
+                        </Box>
+                        <Text fontSize="sm" fontWeight="700" color="var(--text-primary)" lineClamp={2} minW={0}>
+                          {attachedRecipe?.title ?? activeSession?.title ?? 'Attached chat'}
+                        </Text>
+                      </HStack>
                     </Box>
                     <HStack gap="1.5" flexShrink={0}>
                       <Button
                         size="xs"
-                        variant="ghost"
-                        aria-label="Collapse chat pane"
-                        title="Collapse chat pane"
-                        onClick={() => setRecipeChatCollapsed(true)}
+                        variant="outline"
+                        aria-label="View space"
+                        title="View space"
+                        display={{ base: 'flex', xl: 'none' }}
+                        gap="1"
+                        color={spaceStatus === 'updated' ? 'var(--status-success)' : undefined}
+                        borderColor={spaceStatus === 'updated' ? 'var(--status-success)' : undefined}
+                        style={spaceStatus === 'updated' ? { animation: 'spaceUpdatedPulse 1.4s ease-in-out infinite' } : undefined}
+                        onClick={() => {
+                          setMobileSpaceDrawerOpen(true);
+                          setSpaceStatus('idle');
+                        }}
                       >
-                        Collapse
+                        {spaceStatus === 'building' ? <SpinnerIcon /> : <SpaceIcon />}
+                        Space
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        aria-label="Collapse to space view"
+                        title="Collapse to space view"
+                        display={{ base: 'none', xl: 'flex' }}
+                        gap="1"
+                        color={spaceStatus === 'updated' ? 'var(--status-success)' : undefined}
+                        borderColor={spaceStatus === 'updated' ? 'var(--status-success)' : undefined}
+                        style={spaceStatus === 'updated' ? { animation: 'spaceUpdatedPulse 1.4s ease-in-out infinite' } : undefined}
+                        onClick={() => {
+                          setRecipeChatCollapsed(true);
+                          setSpaceStatus('idle');
+                        }}
+                      >
+                        {spaceStatus === 'building' ? <SpinnerIcon /> : <SpaceIcon />}
+                        Space
                       </Button>
                       <Button
                         ref={runtimeButtonRef}
                         size="xs"
                         variant="outline"
+                        gap="1"
                         onClick={() => onRuntimeDrawerOpenChange(true)}
                       >
-                        Runtime
+                        <ActivityIcon />
+                        Activity
                       </Button>
                       {activeSession ? (
                         <SessionActionMenu
@@ -477,6 +569,170 @@ export function ChatPage({
                   </Drawer.Header>
                   <Drawer.Body overflowX="hidden" minW={0}>
                     <ChatActivityFeed
+                      hideTestId
+                      activities={activities}
+                      sending={sending}
+                      progress={progress}
+                      requestPreview={selectedActivityPreview}
+                      requestStatus={selectedActivityStatus}
+                    />
+                  </Drawer.Body>
+                </Drawer.Content>
+              </Drawer.Positioner>
+            </Portal>
+          </Drawer.Root>
+
+          {/* Mobile space drawer — full-screen recipe view on small viewports */}
+          <Drawer.Root
+            lazyMount
+            unmountOnExit
+            open={mobileSpaceDrawerOpen}
+            onOpenChange={(e) => setMobileSpaceDrawerOpen(e.open)}
+            size="full"
+            placement="bottom"
+          >
+            <Portal>
+              <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
+              <Drawer.Positioner display={{ base: 'block', xl: 'none' }}>
+                <Drawer.Content
+                  bg="var(--surface-elevated)"
+                  borderTop="1px solid var(--border-subtle)"
+                  rounded={{ base: '16px 16px 0 0' }}
+                  maxH="92dvh"
+                  overflow="hidden"
+                >
+                  <Drawer.Header px="4" pt="4" pb="3" borderBottom="1px solid var(--border-subtle)">
+                    <HStack justify="space-between" align="center" gap="3" minW={0}>
+                      <HStack gap="2" minW={0}>
+                        <SpaceIcon />
+                        <Drawer.Title color="var(--text-primary)" fontSize="sm" truncate>
+                          {attachedRecipe?.title ?? 'Space'}
+                        </Drawer.Title>
+                      </HStack>
+                      <Drawer.CloseTrigger asChild>
+                        <CloseButton size="sm" />
+                      </Drawer.CloseTrigger>
+                    </HStack>
+                  </Drawer.Header>
+                  <Drawer.Body p="0" overflow="hidden" display="flex" flexDirection="column">
+                    {attachedRecipe ? (
+                      <SessionRecipePanel
+                        recipe={attachedRecipe}
+                        onRename={() => {
+                          setMobileSpaceDrawerOpen(false);
+                          setActionError(null);
+                          setRecipeRenameOpen(true);
+                        }}
+                        onDelete={() => {
+                          setMobileSpaceDrawerOpen(false);
+                          setActionError(null);
+                          setRecipeDeleteOpen(true);
+                        }}
+                        onRefresh={onRefreshRecipe}
+                        onExecuteAction={onExecuteRecipeAction}
+                        onUpdateRecipe={onUpdateRecipe}
+                        onApplyRecipeEntryAction={onApplyRecipeEntryAction}
+                        onSwitchTemplate={onSwitchTemplate}
+                      />
+                    ) : null}
+                  </Drawer.Body>
+                </Drawer.Content>
+              </Drawer.Positioner>
+            </Portal>
+          </Drawer.Root>
+        </>
+      ) : (
+        <>
+          {/* Desktop: side-by-side grid with activity panel */}
+          <Grid
+            flex="1"
+            minH={0}
+            templateColumns={runtimePanelOpen ? { base: '1fr', xl: 'minmax(0, 1fr) 340px' } : '1fr'}
+            css={{ transition: 'grid-template-columns 280ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+          >
+            {/* Primary thread column */}
+            <Flex direction="column" minH={0}>
+              {/* Scrollable messages — takes all remaining space */}
+              <Box flex="1" minH={0} overflow="hidden">
+                <ChatTranscript
+                  loading={loading}
+                  messages={sessionPayload?.messages ?? []}
+                  assistantDraft={assistantDraft}
+                  showTypingIndicator={typing}
+                  typingStatusLabel={progress}
+                  typingActivityKind={typingActivityKind}
+                  selectedRequestId={selectedActivityRequestId}
+                  onMessageClick={handleStandaloneTranscriptMessageClick}
+                  emptyTitle="No messages yet"
+                  emptyDetail="Start a real Hermes session with the composer below."
+                />
+              </Box>
+
+              {/* Composer — anchored at bottom, centered, open canvas */}
+              <Box
+                flexShrink={0}
+                px={{ base: '3', md: '4', lg: '6' }}
+                pt="3"
+                pb={{ base: '4', lg: '5' }}
+                maxW={runtimePanelOpen ? undefined : '800px'}
+                mx={runtimePanelOpen ? undefined : 'auto'}
+                w="100%"
+              >
+                <ChatComposer onSend={onSend} sending={sending} disabled={loading} />
+              </Box>
+            </Flex>
+
+            {/* Desktop runtime activity panel — hidden by default, slides in on xl+ */}
+            <Box
+              minH={0}
+              overflow="hidden"
+              display={{ base: 'none', xl: 'block' }}
+              borderLeft={runtimePanelOpen ? '1px solid var(--border-subtle)' : 'none'}
+              style={{
+                opacity: runtimePanelOpen ? 1 : 0,
+                pointerEvents: runtimePanelOpen ? 'auto' : 'none',
+                transition: 'opacity 220ms ease',
+              }}
+            >
+              <ChatActivityFeed
+                activities={activities}
+                sending={sending}
+                progress={progress}
+                requestPreview={selectedActivityPreview}
+                requestStatus={selectedActivityStatus}
+              />
+            </Box>
+          </Grid>
+
+          {/* Mobile runtime activity drawer */}
+          <Drawer.Root
+            lazyMount
+            unmountOnExit
+            open={runtimePanelOpen}
+            onOpenChange={(event) => setRuntimePanelOpen(event.open)}
+            size={{ base: 'full', sm: 'md' }}
+            placement="bottom"
+          >
+            <Portal>
+              <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
+              <Drawer.Positioner display={{ base: 'block', xl: 'none' }}>
+                <Drawer.Content
+                  bg="var(--surface-elevated)"
+                  borderTop="1px solid var(--border-subtle)"
+                  maxH="75dvh"
+                  rounded={{ base: '16px 16px 0 0', sm: '12px' }}
+                >
+                  <Drawer.Header>
+                    <HStack justify="space-between" align="center" gap="3" minW={0}>
+                      <Drawer.Title color="var(--text-primary)">Runtime activity</Drawer.Title>
+                      <Drawer.CloseTrigger asChild>
+                        <CloseButton size="sm" aria-label="Close activity panel" />
+                      </Drawer.CloseTrigger>
+                    </HStack>
+                  </Drawer.Header>
+                  <Drawer.Body overflowX="hidden" minW={0}>
+                    <ChatActivityFeed
+                      hideTestId
                       activities={activities}
                       sending={sending}
                       progress={progress}
@@ -489,65 +745,6 @@ export function ChatPage({
             </Portal>
           </Drawer.Root>
         </>
-      ) : (
-        <Grid
-          flex="1"
-          minH={0}
-          templateColumns={runtimePanelOpen ? { base: '1fr', xl: 'minmax(0, 1fr) 340px' } : '1fr'}
-          css={{ transition: 'grid-template-columns 280ms cubic-bezier(0.4, 0, 0.2, 1)' }}
-        >
-          {/* Primary thread column */}
-          <Flex direction="column" minH={0}>
-            {/* Scrollable messages — takes all remaining space */}
-            <Box flex="1" minH={0} overflow="hidden">
-              <ChatTranscript
-                loading={loading}
-                messages={sessionPayload?.messages ?? []}
-                assistantDraft={assistantDraft}
-                showTypingIndicator={typing}
-                typingStatusLabel={progress}
-                typingActivityKind={typingActivityKind}
-                selectedRequestId={selectedActivityRequestId}
-                onMessageClick={handleStandaloneTranscriptMessageClick}
-                emptyTitle="No messages yet"
-                emptyDetail="Start a real Hermes session with the composer below."
-              />
-            </Box>
-
-            {/* Composer — anchored at bottom, centered, open canvas */}
-            <Box
-              flexShrink={0}
-              px={{ base: '3', md: '4', lg: '6' }}
-              pt="3"
-              pb={{ base: '4', lg: '5' }}
-              maxW={runtimePanelOpen ? undefined : '800px'}
-              mx={runtimePanelOpen ? undefined : 'auto'}
-              w="100%"
-            >
-              <ChatComposer onSend={onSend} sending={sending} disabled={loading} />
-            </Box>
-          </Flex>
-
-          {/* Runtime activity panel — hidden by default, slides in */}
-          <Box
-            minH={0}
-            overflow="hidden"
-            borderLeft={runtimePanelOpen ? '1px solid var(--border-subtle)' : 'none'}
-            style={{
-              opacity: runtimePanelOpen ? 1 : 0,
-              pointerEvents: runtimePanelOpen ? 'auto' : 'none',
-              transition: 'opacity 220ms ease',
-            }}
-          >
-            <ChatActivityFeed
-              activities={activities}
-              sending={sending}
-              progress={progress}
-              requestPreview={selectedActivityPreview}
-              requestStatus={selectedActivityStatus}
-            />
-          </Box>
-        </Grid>
       )}
 
       {activeSession ? (

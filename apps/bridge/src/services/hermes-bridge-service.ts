@@ -26,6 +26,12 @@ import type {
   Profile,
   RenameSessionRequest,
   RuntimeRequest,
+  CreateProfileRequest,
+  DeleteProfileRequest,
+  ProfilesMetricsResponse,
+  ProfilesResponse,
+  TestModelConfigRequest,
+  TestModelConfigResponse,
   SelectProfileRequest,
   SelectSessionRequest,
   Session,
@@ -657,6 +663,7 @@ function normalizeRecipeMetadata(metadata: Partial<Recipe['metadata']> | undefin
     latestRecipeAttemptRequestId: metadata?.latestRecipeAttemptRequestId ?? current?.latestRecipeAttemptRequestId,
     latestRecipeAttemptedAt: metadata?.latestRecipeAttemptedAt ?? current?.latestRecipeAttemptedAt,
     activeTemplateId: metadata?.activeTemplateId ?? current?.activeTemplateId,
+    alternativeTemplates: metadata?.alternativeTemplates ?? current?.alternativeTemplates,
     recipePipeline: metadata?.recipePipeline ?? current?.recipePipeline
   };
 }
@@ -1366,6 +1373,57 @@ export class HermesBridge {
       unrestrictedTimeoutMs: input.settings.unrestrictedTimeoutMs,
       unrestrictedAccessEnabled: input.settings.unrestrictedAccessEnabled
     });
+
+    // Model / provider errors — surface actionable messages before generic handling
+    if (/\b(401|unauthorized|invalid.*api.*key|api.*key.*invalid|authentication failed)\b/i.test(diagnostic)) {
+      return {
+        category: 'auth_scope',
+        userFacingMessage: `Authentication failed for profile ${input.profileId}. The API key may be invalid or expired. Check Settings → provider credentials.`,
+        diagnostic,
+        retryable: false,
+        failureStage: 'task_failed'
+      };
+    }
+
+    if (/\b(404|model.*not.*found|does not exist|no such model|unknown model)\b/i.test(diagnostic)) {
+      return {
+        category: 'task_failure',
+        userFacingMessage: 'The configured model was not found by the provider. Go to Settings, select a valid model and verify it before retrying.',
+        diagnostic,
+        retryable: false,
+        failureStage: 'task_failed'
+      };
+    }
+
+    if (/\b(429|rate.?limit|quota.*exceeded|too many requests)\b/i.test(diagnostic)) {
+      return {
+        category: 'task_failure',
+        userFacingMessage: 'Rate limit reached for this model. Wait a moment and try again, or switch to a different model in Settings.',
+        diagnostic,
+        retryable: true,
+        failureStage: 'task_failed'
+      };
+    }
+
+    if (/\b(context.*length|context.*window|too.*many.*tokens|token.*limit|maximum.*context)\b/i.test(diagnostic)) {
+      return {
+        category: 'task_failure',
+        userFacingMessage: 'This conversation exceeds the model\'s context window. Start a new session or switch to a model with a larger context in Settings.',
+        diagnostic,
+        retryable: false,
+        failureStage: 'task_failed'
+      };
+    }
+
+    if (/\b(503|service.*unavailable|overload|capacity)\b/i.test(diagnostic)) {
+      return {
+        category: 'task_failure',
+        userFacingMessage: 'The model provider is temporarily unavailable or overloaded. Try again in a moment or switch to a different model.',
+        diagnostic,
+        retryable: true,
+        failureStage: 'task_failed'
+      };
+    }
 
     if (/timed out/i.test(diagnostic)) {
       const category =
@@ -7599,6 +7657,49 @@ Emit one corrected TSX module now.`;
     });
   }
 
+  private computeAlternativeTemplates(
+    selectedId: RecipeTemplateId,
+    intentCategory: string | null
+  ): Array<{ id: RecipeTemplateId; name: string; intentLabel: string }> {
+    const TEMPLATE_TO_LABEL: Record<string, string> = {
+      'inbox-triage-board': 'inbox triage',
+      'security-review-board': 'security review',
+      'job-search-pipeline': 'job search',
+      'flight-comparison': 'flight comparison',
+      'travel-itinerary-planner': 'travel planner',
+      'event-planner': 'event planner',
+      'content-campaign-planner': 'campaign planner',
+      'price-comparison-grid': 'price comparison',
+      'restaurant-finder': 'restaurant shortlist',
+      'hotel-shortlist': 'hotel shortlist',
+      'local-discovery-comparison': 'nearby places',
+      'research-notebook': 'research notebook',
+      'vendor-evaluation-matrix': 'comparison matrix',
+      'shopping-shortlist': 'shopping results',
+      'step-by-step-instructions': 'step by step'
+    };
+    const CATEGORY_PRIORITY: Record<string, string[]> = {
+      plan: ['step-by-step-instructions', 'research-notebook', 'vendor-evaluation-matrix', 'event-planner', 'content-campaign-planner'],
+      shopping: ['shopping-shortlist', 'price-comparison-grid', 'vendor-evaluation-matrix'],
+      places: ['restaurant-finder', 'hotel-shortlist', 'local-discovery-comparison', 'travel-itinerary-planner', 'flight-comparison'],
+      research: ['research-notebook', 'step-by-step-instructions', 'vendor-evaluation-matrix'],
+      results: ['inbox-triage-board', 'job-search-pipeline', 'event-planner', 'shopping-shortlist'],
+      finance: ['price-comparison-grid', 'vendor-evaluation-matrix', 'research-notebook'],
+      general: ['research-notebook', 'shopping-shortlist', 'step-by-step-instructions']
+    };
+    const definitions = listAvailableRecipeTemplateDefinitions();
+    const categoryIds = intentCategory ? (CATEGORY_PRIORITY[intentCategory] ?? []) : [];
+    const results: Array<{ id: RecipeTemplateId; name: string; intentLabel: string }> = [];
+    for (const id of [...categoryIds, ...Object.keys(TEMPLATE_TO_LABEL)]) {
+      if (id === selectedId || results.some(r => r.id === id)) continue;
+      const def = definitions.find(d => d.id === id);
+      const label = TEMPLATE_TO_LABEL[id];
+      if (def && label) results.push({ id: id as RecipeTemplateId, name: def.name, intentLabel: label });
+      if (results.length >= 3) break;
+    }
+    return results;
+  }
+
   private withRetryBuildActionSpec(actionSpec: RecipeActionSpec | null, templateDriven: boolean) {
     const retryActionSpec = this.createRetryBuildActionSpec(templateDriven);
     const retryAction = retryActionSpec.actions[0];
@@ -7899,7 +8000,11 @@ Emit one corrected TSX module now.`;
           ) ?? null
         : null;
 
-    if (normalizedMode === 'switch' && currentTemplate && !transitionDefinition) {
+    // Only block the switch if the source template explicitly restricts transitions (non-empty list).
+    // An empty transitions array means "no restrictions — all switches allowed."
+    const sourceDefinition = currentTemplate ? getRecipeTemplateRuntimeDefinition(currentTemplate.templateId) : null;
+    const hasExplicitTransitions = (sourceDefinition?.transitions.length ?? 0) > 0;
+    if (normalizedMode === 'switch' && currentTemplate && hasExplicitTransitions && !transitionDefinition) {
       const switchDetail = `Template transition ${currentTemplate.templateId} -> ${selection.templateId} is not supported.`;
       const failure = this.classifyRecipeTemplateFailure({
         kind: 'switch',
@@ -9333,7 +9438,8 @@ Emit one corrected TSX module now.`;
         profileId: currentRecipe.profileId,
         metadata: {
           ...currentRecipe.metadata,
-          activeTemplateId: nextTemplateState.templateId
+          activeTemplateId: nextTemplateState.templateId,
+          alternativeTemplates: this.computeAlternativeTemplates(nextTemplateState.templateId, context.intent.category)
         }
       }) ?? currentRecipe;
     nextPipeline = updateRecipePipelineSegment(nextPipeline, 'applet', 'enrichment_ready', {
@@ -11944,6 +12050,99 @@ Emit one corrected TSX module now.`;
     return this.getBootstrap();
   }
 
+  async testModelConfig(input: TestModelConfigRequest): Promise<TestModelConfigResponse> {
+    const profile = await this.ensureProfile(input.profileId);
+
+    // Snapshot the current model so we can restore it if the test fails.
+    const previousConfig = this.options.database.getRuntimeModelConfig(profile.id);
+    const previousModel = previousConfig?.defaultModel ?? null;
+
+    // Apply the candidate model to the profile's config.
+    await this.options.hermesCli.updateRuntimeModelConfig(profile, {
+      defaultModel: input.defaultModel,
+      ...(input.provider ? { provider: input.provider } : {})
+    });
+
+    // Run a live single-turn test.
+    const testResult = await this.options.hermesCli.quickModelTest(profile);
+
+    if (!testResult.ok) {
+      // Restore previous model if there was one.
+      if (previousModel && previousModel !== 'unknown') {
+        try {
+          await this.options.hermesCli.updateRuntimeModelConfig(profile, { defaultModel: previousModel });
+        } catch {
+          // Restoration is best-effort; don't mask the original error.
+        }
+      }
+
+      const raw = testResult.errorMessage ?? 'The model returned an error.';
+      const message = this.describeModelTestError(raw, input.defaultModel);
+      this.recordTelemetry({
+        profileId: profile.id,
+        sessionId: null,
+        requestId: null,
+        severity: 'warning',
+        category: 'model_provider',
+        code: 'MODEL_TEST_FAILED',
+        message: `Model test failed for ${input.defaultModel} on profile ${profile.id}.`,
+        detail: raw,
+        payload: { model: input.defaultModel, provider: input.provider ?? null }
+      });
+      return { ok: false, message, model: input.defaultModel, latencyMs: testResult.latencyMs };
+    }
+
+    // Test passed — persist the new config and invalidate the readiness cache.
+    const nextConfig = await this.options.hermesCli.getRuntimeModelConfig(profile);
+    this.options.database.upsertRuntimeModelConfig(nextConfig);
+    this.invalidateRuntimeReadyCache(profile.id);
+    return {
+      ok: true,
+      message: `${input.defaultModel} responded in ${testResult.latencyMs}ms.`,
+      model: input.defaultModel,
+      latencyMs: testResult.latencyMs
+    };
+  }
+
+  private describeModelTestError(raw: string, model: string): string {
+    if (/\b(401|unauthorized|invalid.*api.*key|api.*key.*invalid)\b/i.test(raw)) {
+      return 'Authentication failed — the API key for this provider may be invalid or expired.';
+    }
+    if (/\b(404|not.*found|does not exist|no such model|unknown model)\b/i.test(raw)) {
+      return `Model "${model}" was not found by the provider. Select a different model.`;
+    }
+    if (/\b(429|rate.?limit|quota|too many requests)\b/i.test(raw)) {
+      return 'Rate limit reached. Wait a moment and try again.';
+    }
+    if (/\b(503|service.*unavailable|overload|capacity)\b/i.test(raw)) {
+      return 'The provider is temporarily unavailable. Try again in a moment.';
+    }
+    if (/timeout|timed out/i.test(raw)) {
+      return 'The model test timed out (30s). The model may be slow or unreachable.';
+    }
+    return `Model test failed: ${raw.slice(0, 200)}`;
+  }
+
+  async createProfile(input: CreateProfileRequest): Promise<ProfilesResponse> {
+    const profiles = await this.options.hermesCli.createProfile(input.name);
+    const activeProfileId = this.options.database.getUiState().activeProfileId ?? null;
+    return { profiles, activeProfileId };
+  }
+
+  async deleteProfile(input: DeleteProfileRequest): Promise<ProfilesResponse> {
+    const activeProfileId = this.options.database.getUiState().activeProfileId ?? null;
+    if (activeProfileId === input.profileId) {
+      throw new BridgeError(400, 'CANNOT_DELETE_ACTIVE_PROFILE', 'Cannot delete the currently active profile. Switch to another profile first.');
+    }
+    const profiles = await this.options.hermesCli.deleteProfile(input.profileId);
+    return { profiles, activeProfileId };
+  }
+
+  getProfilesMetrics(): ProfilesMetricsResponse {
+    const metrics = this.options.database.getProfilesMetrics();
+    return { metrics };
+  }
+
   async selectSession(input: SelectSessionRequest) {
     await this.ensureProfile(input.profileId);
     const session = this.ensureScopedSession(input.profileId, input.sessionId);
@@ -13158,6 +13357,15 @@ Emit one corrected TSX module now.`;
         })
       );
       this.options.database.markSessionMessagesSynced(refreshedSession.id, assistantMessage.createdAt);
+      // Re-evaluate the session title now that we have both the user prompt and the
+      // assistant response. This runs on every request so that long multi-turn sessions
+      // track significant topic shifts, while the scoring in resolveAutoSessionTitle
+      // preserves the current name when context hasn't meaningfully changed.
+      this.options.database.refreshSessionTitleFromConversation(
+        refreshedSession.id,
+        transcriptContent,
+        conversationalAssistantMarkdown
+      );
       this.appendPersistedRuntimeActivity(profile.id, refreshedSession.id, requestId, requestPreview, {
         kind: 'status',
         state: 'completed',
@@ -13366,23 +13574,89 @@ Emit one corrected TSX module now.`;
           };
           recipeSummaries.push(`queued background recipe enrichment for "${activeRecipe.title}"`);
         } else {
-          recipePipeline = updateRecipePipelineSegment(recipePipeline, 'applet', 'baseline_ready', {
-            status: 'skipped',
-            message: 'No richer recipe enrichment was required for this response.',
-            retryable: false,
-            updatedAt: this.now()
-          });
-          activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
-          if (activeRecipe) {
-            await this.emitRecipePipelineStateEvent(
-              activeRecipe,
-              refreshedSession.id,
+          // Enrichment was not triggered by the intent/mode check. Auto-queue it if the recipe
+          // doesn't already have a template — covers intent classifier misses for shopping,
+          // flight, restaurant, and similar queries where the baseline alone is insufficient.
+          const shouldAutoRetry =
+            !isRetryBuild &&
+            activeRecipe != null &&
+            activeRecipe.renderMode !== 'dynamic_v1' &&
+            requestMode === 'chat' &&
+            // Only auto-retry when intent clearly indicates structured output — not for
+            // simple conversational responses or generic prose where legacy_content_v1 is correct.
+            structuredRecipeIntent !== null &&
+            structuredRecipeIntent.label !== 'recipe request';
+
+          if (shouldAutoRetry && activeRecipe) {
+            const queuedAppletBuild = await this.queueRecipeAppletBuild({
+              profile,
+              session: refreshedSession,
+              currentRecipe: activeRecipe,
+              requestId,
+              requestPreview,
+              requestMode,
+              settings,
+              pipeline: recipePipeline,
               onEvent,
-              `Hermes kept the Home recipe baseline for "${activeRecipe.title}" without richer recipe enrichment.`,
-              {
-                enrichmentStatus: 'skipped'
-              }
-            );
+              triggerActionId: null,
+              triggerKindOverride: 'retry',
+              progressMessage: 'Queued recipe enrichment…',
+              pipelineMessage: 'Recipe generation is queued and filling an approved template in the background.',
+              pipelineEventMessage: `Hermes queued background recipe generation for "${activeRecipe.title}" after the Home baseline was ready.`,
+              telemetryCode: 'RECIPE_TEMPLATE_ENRICHMENT_QUEUED',
+              telemetryMessage: 'Auto-queued async template enrichment after intent-based enrichment was skipped.',
+              telemetryDetail: 'The recipe had no template yet; auto-retry was triggered to ensure the space is enriched.',
+              buildKind: 'template_enrichment',
+              renderMode: 'dynamic_v1'
+            });
+            activeRecipe = queuedAppletBuild.recipe;
+            recipePipeline = queuedAppletBuild.pipeline;
+            queuedRecipeEnrichmentJob = {
+              kind: 'request',
+              profile,
+              session: refreshedSession,
+              recipeId: activeRecipe.id,
+              requestId,
+              requestPreview,
+              requestMode,
+              settings,
+              buildId: queuedAppletBuild.build.id,
+              structuredIntentPrompt,
+              conversationalAssistantMarkdown,
+              structuredRecipeIntent,
+              mutationIntent: null,
+              refreshContext,
+              triggerActionId: null,
+              triggerKindOverride: 'retry'
+            };
+            recipeSummaries.push(`auto-queued background recipe enrichment for "${activeRecipe.title}"`);
+          } else {
+            recipePipeline = updateRecipePipelineSegment(recipePipeline, 'applet', 'baseline_ready', {
+              status: 'skipped',
+              message: 'No richer recipe enrichment was required for this response.',
+              retryable: false,
+              updatedAt: this.now()
+            });
+            activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;
+            if (activeRecipe) {
+              this.appendPersistedRuntimeActivity(profile.id, refreshedSession.id, requestId, requestPreview, {
+                kind: 'status',
+                state: 'completed',
+                label: 'Recipe event',
+                detail: `Hermes kept the Home recipe baseline for "${activeRecipe.title}" without richer recipe enrichment.`,
+                requestId,
+                timestamp: this.now()
+              });
+              await this.emitRecipePipelineStateEvent(
+                activeRecipe,
+                refreshedSession.id,
+                onEvent,
+                `Hermes kept the Home recipe baseline for "${activeRecipe.title}" without richer recipe enrichment.`,
+                {
+                  enrichmentStatus: 'skipped'
+                }
+              );
+            }
           }
         }
         if (activeRecipe?.id) {
@@ -13574,7 +13848,7 @@ Emit one corrected TSX module now.`;
         recipeId: input.recipeId,
         transcriptContent: input.content,
         hermesContent: input.content,
-        intentContent: input.content,
+        intentContent: input.intentContent ?? input.content,
         mode: input.mode
       },
       onEvent

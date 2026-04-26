@@ -1,6 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Badge, Box, Button, Checkbox, Drawer, Field, Grid, HStack, Input, NativeSelect, ScrollArea, Spinner, Table, Tabs, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, Checkbox, Drawer, Field, Grid, HStack, Input, NumberInput, NativeSelect, ScrollArea, Spinner, Table, Tabs, Text, VStack } from '@chakra-ui/react';
+
+/* ── Discrete step slider ── */
+function StepSlider({
+  steps,
+  value,
+  onChange,
+  disabled
+}: {
+  steps: Array<{ value: number; label: string }>;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const idx = Math.max(0, steps.findIndex((s) => String(s.value) === value));
+  return (
+    <Box w="100%">
+      <input
+        type="range"
+        min={0}
+        max={steps.length - 1}
+        step={1}
+        value={idx}
+        disabled={disabled}
+        className="settings-step-slider"
+        onChange={(e) => {
+          const step = steps[Number(e.target.value)];
+          if (step) onChange(String(step.value));
+        }}
+      />
+      <HStack justify="space-between" mt="0.5" px="0.5">
+        {steps.map((s, i) => (
+          <Text
+            key={s.value}
+            fontSize="10px"
+            fontWeight={i === idx ? '600' : '400'}
+            color={i === idx ? 'var(--accent)' : 'var(--text-muted)'}
+          >
+            {s.label}
+          </Text>
+        ))}
+      </HStack>
+    </Box>
+  );
+}
 import { useHermesTheme } from '@hermes-recipes/ui';
 import type {
   AccessAuditSummary,
@@ -12,7 +56,7 @@ import type {
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 
-type SettingsTabValue = 'general' | 'model' | 'unrestricted' | 'access_audit' | 'telemetry';
+type SettingsTabValue = 'general' | 'model' | 'access_audit' | 'telemetry';
 
 export function SettingsPage({
   settings,
@@ -27,7 +71,7 @@ export function SettingsPage({
   telemetryError,
   telemetryPage,
   onTelemetryPageChange,
-  saving,
+  saving: _saving,
   error,
   modelProviderResponse,
   modelProviderLoading,
@@ -38,6 +82,7 @@ export function SettingsPage({
   inspectedProvider,
   onSave,
   onUpdateRuntimeModelConfig,
+  onTestModelConfig,
   onConnectProvider,
   onBeginProviderAuth,
   onPollProviderAuth,
@@ -78,6 +123,7 @@ export function SettingsPage({
       scope?: 'page' | 'drawer';
     }
   ) => Promise<unknown> | void;
+  onTestModelConfig: (profileId: string, defaultModel: string, provider?: string) => Promise<{ ok: boolean; message: string; latencyMs: number }>;
   onConnectProvider: (
     provider: string,
     apiKey: string,
@@ -94,7 +140,7 @@ export function SettingsPage({
   onInspectProvider: (providerId: string) => Promise<unknown> | void;
 }) {
   const [currentTab, setCurrentTab] = useState<SettingsTabValue>('general');
-  const { themeMode: activeThemeMode, setThemeMode: setActiveThemeMode } = useHermesTheme();
+  const { themeMode: activeThemeMode } = useHermesTheme();
   const [themeMode, setThemeMode] = useState<AppSettings['themeMode']>('dark');
   const [themeDirty, setThemeDirty] = useState(false);
   const [sessionsPageSize, setSessionsPageSize] = useState('50');
@@ -114,6 +160,10 @@ export function SettingsPage({
   const [reasoningEffort, setReasoningEffort] = useState('');
   const [providerDrawerOpen, setProviderDrawerOpen] = useState(false);
   const [drawerProviderId, setDrawerProviderId] = useState<string | null>(null);
+  const [modelSearch, setModelSearch] = useState('');
+  const [modelVerifyStatus, setModelVerifyStatus] = useState<'idle' | 'testing' | 'passed' | 'failed'>('idle');
+  const [modelVerifyError, setModelVerifyError] = useState<string | null>(null);
+  const [pendingModel, setPendingModel] = useState<string | null>(null);
 
   const [providerLabel, setProviderLabel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -166,6 +216,10 @@ export function SettingsPage({
     setApiMode(modelProviderResponse.config.apiMode ?? '');
     setMaxTurns(String(modelProviderResponse.config.maxTurns));
     setReasoningEffort(modelProviderResponse.config.reasoningEffort ?? '');
+    // Clear pending verify state when provider response refreshes
+    setPendingModel(null);
+    setModelVerifyStatus('idle');
+    setModelVerifyError(null);
   }, [modelProviderResponse]);
 
   const selectedProvider = useMemo(
@@ -204,10 +258,6 @@ export function SettingsPage({
       field.required &&
       getConfigurationFieldValue(field.key, field.value ?? '').trim().length === 0
   );
-  const selectedProviderConfigBlocked =
-    selectedProviderModelField?.input === 'select' &&
-    selectedProviderModelField.disabled &&
-    selectedProviderModelField.options.length === 0;
   const providerDrawerAuthPending = Boolean(
     drawerProviderDetails?.authSession && ['pending', 'verifying'].includes(drawerProviderDetails.authSession.status)
   );
@@ -325,29 +375,60 @@ export function SettingsPage({
     providerDrawerOpen
   ]);
 
-  async function persistSettings() {
-    const previousThemeMode = settings?.themeMode ?? activeThemeMode;
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    try {
-      await onSave({
+  function scheduleSave(overrides: Partial<{
+    sessionsPageSize: string;
+    chatTimeoutMs: string;
+    discoveryTimeoutMs: string;
+    nearbySearchTimeoutMs: string;
+    recipeOperationTimeoutMs: string;
+    unrestrictedTimeoutMs: string;
+    restrictedChatMaxTurns: string;
+    unrestrictedAccessEnabled: boolean;
+  }> = {}) {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void onSave({
         themeMode,
-        sessionsPageSize: Number.parseInt(sessionsPageSize, 10),
-        chatTimeoutMs: Number.parseInt(chatTimeoutMs, 10),
-        discoveryTimeoutMs: Number.parseInt(discoveryTimeoutMs, 10),
-        nearbySearchTimeoutMs: Number.parseInt(nearbySearchTimeoutMs, 10),
-        recipeOperationTimeoutMs: Number.parseInt(recipeOperationTimeoutMs, 10),
-        unrestrictedTimeoutMs: Number.parseInt(unrestrictedTimeoutMs, 10),
-        restrictedChatMaxTurns: Number.parseInt(restrictedChatMaxTurns, 10),
-        unrestrictedAccessEnabled
+        sessionsPageSize: Number.parseInt(overrides.sessionsPageSize ?? sessionsPageSize, 10),
+        chatTimeoutMs: Number.parseInt(overrides.chatTimeoutMs ?? chatTimeoutMs, 10),
+        discoveryTimeoutMs: Number.parseInt(overrides.discoveryTimeoutMs ?? discoveryTimeoutMs, 10),
+        nearbySearchTimeoutMs: Number.parseInt(overrides.nearbySearchTimeoutMs ?? nearbySearchTimeoutMs, 10),
+        recipeOperationTimeoutMs: Number.parseInt(overrides.recipeOperationTimeoutMs ?? recipeOperationTimeoutMs, 10),
+        unrestrictedTimeoutMs: Number.parseInt(overrides.unrestrictedTimeoutMs ?? unrestrictedTimeoutMs, 10),
+        restrictedChatMaxTurns: Number.parseInt(overrides.restrictedChatMaxTurns ?? restrictedChatMaxTurns, 10),
+        unrestrictedAccessEnabled: overrides.unrestrictedAccessEnabled ?? unrestrictedAccessEnabled
       });
-      setThemeDirty(false);
-    } catch {
-      if (themeMode !== previousThemeMode) {
-        setActiveThemeMode(previousThemeMode);
-        setThemeMode(previousThemeMode);
-        setThemeDirty(false);
-      }
-    }
+    }, 600);
+  }
+
+  const modelSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleModelSave(overrides: Partial<{
+    defaultModel: string;
+    provider: string;
+    baseUrl: string;
+    apiMode: string;
+    maxTurns: string;
+    reasoningEffort: string;
+  }> = {}) {
+    if (modelSaveTimerRef.current) clearTimeout(modelSaveTimerRef.current);
+    modelSaveTimerRef.current = setTimeout(() => {
+      const nextBaseUrl = (overrides.baseUrl ?? baseUrl).trim();
+      const nextApiMode = (overrides.apiMode ?? apiMode).trim();
+      const nextReasoningEffort = (overrides.reasoningEffort ?? reasoningEffort).trim();
+      void Promise.resolve(
+        onUpdateRuntimeModelConfig({
+          defaultModel: overrides.defaultModel ?? defaultModel,
+          provider: overrides.provider ?? provider,
+          baseUrl: nextBaseUrl.length > 0 ? nextBaseUrl : undefined,
+          apiMode: nextApiMode.length > 0 ? nextApiMode : undefined,
+          maxTurns: Number.parseInt(overrides.maxTurns ?? maxTurns, 10),
+          reasoningEffort: nextReasoningEffort.length > 0 ? nextReasoningEffort : undefined
+        })
+      ).catch(() => undefined);
+    }, 600);
   }
 
   if (!settings) {
@@ -368,148 +449,158 @@ export function SettingsPage({
       flexDirection="column"
       variant="plain"
       lazyMount
+      px={{ base: '4', lg: '6' }}
       css={{
         '--tabs-indicator-bg': 'var(--surface-1)',
         '--tabs-indicator-shadow': 'var(--shadow-xs)',
         '--tabs-trigger-radius': '8px'
       }}
     >
-      <Box overflowX="auto" pb="1">
+      <Box overflowX="auto" pt="4" pb="1">
         <Tabs.List rounded="8px" bg="var(--surface-2)" border="1px solid var(--border-subtle)" p="1" minW="max-content">
-          <Tabs.Trigger value="general">General settings</Tabs.Trigger>
-          <Tabs.Trigger value="model">Model / Provider</Tabs.Trigger>
-          <Tabs.Trigger value="unrestricted">Unrestricted Access</Tabs.Trigger>
-          <Tabs.Trigger value="access_audit">Access audit</Tabs.Trigger>
-          <Tabs.Trigger value="telemetry">Troubleshooting telemetry</Tabs.Trigger>
+          <Tabs.Trigger value="general" fontSize="xs" px="3">Settings</Tabs.Trigger>
+          <Tabs.Trigger value="model" fontSize="xs" px="3">Models</Tabs.Trigger>
+          <Tabs.Trigger value="access_audit" fontSize="xs" px="3">Access</Tabs.Trigger>
+          <Tabs.Trigger value="telemetry" fontSize="xs" px="3">Audit</Tabs.Trigger>
           <Tabs.Indicator />
         </Tabs.List>
       </Box>
 
-      <VStack align="stretch" gap="4" pt="4">
-        {error ? <ErrorBanner title="Settings save failed" detail={error} /> : null}
-        {showModelProviderErrorBanner && modelProviderError ? (
-          <ErrorBanner title="Runtime configuration unavailable" detail={modelProviderError} />
-        ) : null}
-      </VStack>
+      {(error || (showModelProviderErrorBanner && modelProviderError)) ? (
+        <VStack align="stretch" gap="2" pt="3">
+          {error ? <ErrorBanner title="Settings save failed" detail={error} /> : null}
+          {showModelProviderErrorBanner && modelProviderError ? (
+            <ErrorBanner title="Runtime configuration unavailable" detail={modelProviderError} />
+          ) : null}
+        </VStack>
+      ) : null}
 
       <Tabs.ContentGroup flex="1" minH={0}>
         <SettingsTabPanel value="general">
           <SectionCard
             title="Local preferences"
-            description="Bridge-backed browser settings that persist across restarts."
-            action={
-              <Button
-                rounded="8px"
-                bg="var(--accent)"
-                color="var(--accent-contrast)"
-                _hover={{ bg: 'var(--accent-strong)' }}
-                loading={saving}
-                onClick={() => {
-                  void persistSettings();
-                }}
-              >
-                Save preferences
-              </Button>
-            }
+            description="Preferences save automatically when changed."
           >
-            <Grid templateColumns={{ base: '1fr', md: 'repeat(2, minmax(0, 1fr))' }} gap="4">
-              <Field.Root>
-                <Field.Label color="var(--text-secondary)">Theme mode</Field.Label>
-                <NativeSelect.Root size="sm" variant="subtle" bg="var(--surface-2)" rounded="8px" border="1px solid var(--border-subtle)">
-                  <NativeSelect.Field
-                    value={themeMode}
-                    onChange={(event) => {
-                      const nextThemeMode = event.currentTarget.value as AppSettings['themeMode'];
-                      setThemeDirty(true);
-                      setThemeMode(nextThemeMode);
-                      setActiveThemeMode(nextThemeMode);
-                    }}
-                  >
-                    <option value="dark">dark</option>
-                    <option value="light">light</option>
-                  </NativeSelect.Field>
-                  <NativeSelect.Indicator />
-                </NativeSelect.Root>
-              </Field.Root>
-
+            <VStack align="stretch" gap="5">
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Sessions page size</Field.Label>
-                <NativeSelect.Root size="sm" variant="subtle" bg="var(--surface-2)" rounded="8px" border="1px solid var(--border-subtle)">
-                  <NativeSelect.Field value={sessionsPageSize} onChange={(event) => setSessionsPageSize(event.currentTarget.value)}>
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </NativeSelect.Field>
-                  <NativeSelect.Indicator />
-                </NativeSelect.Root>
+                <StepSlider
+                  steps={[{ value: 25, label: '25' }, { value: 50, label: '50' }, { value: 100, label: '100' }]}
+                  value={sessionsPageSize}
+                  onChange={(v) => { setSessionsPageSize(v); scheduleSave({ sessionsPageSize: v }); }}
+                />
               </Field.Root>
 
               <Field.Root disabled={unrestrictedAccessEnabled}>
                 <Field.Label color="var(--text-secondary)">Restricted max turns</Field.Label>
-                <NativeSelect.Root size="sm" variant="subtle" bg="var(--surface-2)" rounded="8px" border="1px solid var(--border-subtle)">
-                  <NativeSelect.Field value={restrictedChatMaxTurns} onChange={(event) => setRestrictedChatMaxTurns(event.currentTarget.value)}>
-                    <option value="4">4</option>
-                    <option value="8">8</option>
-                    <option value="16">16</option>
-                    <option value="32">32</option>
-                  </NativeSelect.Field>
-                  <NativeSelect.Indicator />
-                </NativeSelect.Root>
+                <StepSlider
+                  steps={[{ value: 4, label: '4' }, { value: 8, label: '8' }, { value: 16, label: '16' }, { value: 32, label: '32' }]}
+                  value={restrictedChatMaxTurns}
+                  disabled={unrestrictedAccessEnabled}
+                  onChange={(v) => { setRestrictedChatMaxTurns(v); scheduleSave({ restrictedChatMaxTurns: v }); }}
+                />
                 <Field.HelperText color="var(--text-muted)">
-                  {unrestrictedAccessEnabled
-                    ? 'Ignored while Unrestricted Access is enabled.'
-                    : 'Used only while restricted mode stays enabled.'}
+                  {unrestrictedAccessEnabled ? 'Ignored while Unrestricted Access is enabled.' : 'Used only while restricted mode stays enabled.'}
                 </Field.HelperText>
               </Field.Root>
 
               <Field.Root>
-                <Field.Label color="var(--text-secondary)">Normal chat timeout (ms)</Field.Label>
-                <Input
-                  type="number"
+                <Field.Label color="var(--text-secondary)">Normal chat timeout</Field.Label>
+                <NumberInput.Root
                   value={chatTimeoutMs}
-                  onChange={(event) => setChatTimeoutMs(event.currentTarget.value)}
-                  bg="var(--surface-2)"
-                  borderColor="var(--border-subtle)"
-                />
-                <Field.HelperText color="var(--text-muted)">Default timeout for regular chat requests. Max 900000.</Field.HelperText>
+                  onValueChange={(d) => { setChatTimeoutMs(d.value); scheduleSave({ chatTimeoutMs: d.value }); }}
+                  min={1000}
+                  size="sm"
+                >
+                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
+                </NumberInput.Root>
+                <Field.HelperText color="var(--text-muted)">Default timeout for regular chat requests (ms).</Field.HelperText>
               </Field.Root>
 
               <Field.Root>
-                <Field.Label color="var(--text-secondary)">Search / discovery timeout (ms)</Field.Label>
-                <Input
-                  type="number"
+                <Field.Label color="var(--text-secondary)">Search / discovery timeout</Field.Label>
+                <NumberInput.Root
                   value={discoveryTimeoutMs}
-                  onChange={(event) => setDiscoveryTimeoutMs(event.currentTarget.value)}
-                  bg="var(--surface-2)"
-                  borderColor="var(--border-subtle)"
-                />
-                <Field.HelperText color="var(--text-muted)">Used for broad search, lookup, research, and recommendation requests. Max 1800000.</Field.HelperText>
+                  onValueChange={(d) => { setDiscoveryTimeoutMs(d.value); scheduleSave({ discoveryTimeoutMs: d.value }); }}
+                  min={1000}
+                  size="sm"
+                >
+                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
+                </NumberInput.Root>
+                <Field.HelperText color="var(--text-muted)">Used for broad search, lookup, research, and recommendation requests (ms).</Field.HelperText>
               </Field.Root>
 
               <Field.Root>
-                <Field.Label color="var(--text-secondary)">Nearby / local-search timeout (ms)</Field.Label>
-                <Input
-                  type="number"
+                <Field.Label color="var(--text-secondary)">Nearby / local-search timeout</Field.Label>
+                <NumberInput.Root
                   value={nearbySearchTimeoutMs}
-                  onChange={(event) => setNearbySearchTimeoutMs(event.currentTarget.value)}
-                  bg="var(--surface-2)"
-                  borderColor="var(--border-subtle)"
-                />
-                <Field.HelperText color="var(--text-muted)">Used for nearby places, restaurants, and local-discovery intents. Max 1800000.</Field.HelperText>
+                  onValueChange={(d) => { setNearbySearchTimeoutMs(d.value); scheduleSave({ nearbySearchTimeoutMs: d.value }); }}
+                  min={1000}
+                  size="sm"
+                >
+                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
+                </NumberInput.Root>
+                <Field.HelperText color="var(--text-muted)">Used for nearby places, restaurants, and local-discovery intents (ms).</Field.HelperText>
               </Field.Root>
 
               <Field.Root>
-                <Field.Label color="var(--text-secondary)">Recipe timeout (ms)</Field.Label>
-                <Input
-                  type="number"
+                <Field.Label color="var(--text-secondary)">Recipe timeout</Field.Label>
+                <NumberInput.Root
                   value={recipeOperationTimeoutMs}
-                  onChange={(event) => setRecipeOperationTimeoutMs(event.currentTarget.value)}
-                  bg="var(--surface-2)"
-                  borderColor="var(--border-subtle)"
-                />
-                <Field.HelperText color="var(--text-muted)">Used for Hermes-driven recipe creation and structured workspace updates. Max 900000.</Field.HelperText>
+                  onValueChange={(d) => { setRecipeOperationTimeoutMs(d.value); scheduleSave({ recipeOperationTimeoutMs: d.value }); }}
+                  min={1000}
+                  size="sm"
+                >
+                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
+                </NumberInput.Root>
+                <Field.HelperText color="var(--text-muted)">Used for Hermes-driven recipe creation and structured workspace updates (ms).</Field.HelperText>
               </Field.Root>
-            </Grid>
+            </VStack>
+          </SectionCard>
+
+          <SectionCard
+            title="Runtime access"
+            description="Use the Hermes runtime without the bridge turn limiter or reviewed restrictions."
+          >
+            <Box data-testid="settings-danger-zone" rounded="8px" border="1px solid rgba(177, 86, 47, 0.28)" bg="rgba(177, 86, 47, 0.08)" px="4" py="4">
+              <HStack align="start" gap="3">
+                <WarningBadge />
+                <VStack align="stretch" gap="3">
+                  <Text fontWeight="700" color="var(--text-primary)">
+                    High-risk mode
+                  </Text>
+                  <Text color="var(--text-secondary)">
+                    When enabled, Hermes can run with full autonomy through the local bridge. Restrictive turn limits are ignored, and actions may proceed without the reviewed bridge path.
+                  </Text>
+                  <Checkbox.Root
+                    checked={unrestrictedAccessEnabled}
+                    onCheckedChange={(event) => {
+                      const next = !!event.checked;
+                      setUnrestrictedAccessEnabled(next);
+                      scheduleSave({ unrestrictedAccessEnabled: next });
+                    }}
+                  >
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control />
+                    <Checkbox.Label>I understand the risk and want unrestricted runtime access.</Checkbox.Label>
+                  </Checkbox.Root>
+                  <Field.Root>
+                    <Field.Label color="var(--text-secondary)">Unrestricted timeout</Field.Label>
+                    <NumberInput.Root
+                      value={unrestrictedTimeoutMs}
+                      onValueChange={(d) => { setUnrestrictedTimeoutMs(d.value); scheduleSave({ unrestrictedTimeoutMs: d.value }); }}
+                      min={1000}
+                      size="sm"
+                    >
+                      <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
+                    </NumberInput.Root>
+                    <Field.HelperText color="var(--text-muted)">
+                      Maximum bridge timeout (ms) used only while Unrestricted Access is enabled.
+                    </Field.HelperText>
+                  </Field.Root>
+                </VStack>
+              </HStack>
+            </Box>
           </SectionCard>
         </SettingsTabPanel>
 
@@ -533,7 +624,7 @@ export function SettingsPage({
 
             <SectionCard
               title="Model and provider routing"
-              description="Profile-scoped runtime options discovered from Hermes and the local bridge."
+              description="Profile-scoped runtime options. Changes save automatically."
               action={
                 <HStack gap="2" wrap="wrap">
                   <Button variant="outline" onClick={() => void onRefreshProviders()} loading={modelProviderLoading}>
@@ -541,28 +632,6 @@ export function SettingsPage({
                   </Button>
                   <Button variant="outline" onClick={() => (selectedProvider ? openProviderDrawer(selectedProvider.id) : undefined)} disabled={!selectedProvider}>
                     Configure provider
-                  </Button>
-                  <Button
-                    rounded="8px"
-                    bg="var(--accent)"
-                    color="var(--accent-contrast)"
-                    _hover={{ bg: 'var(--accent-strong)' }}
-                    loading={modelProviderLoading}
-                    disabled={!modelProviderResponse || selectedProvider?.disabled || selectedProviderConfigBlocked}
-                    onClick={() => {
-                      void Promise.resolve(
-                        onUpdateRuntimeModelConfig({
-                          defaultModel,
-                          provider,
-                          baseUrl: baseUrl.trim().length > 0 ? baseUrl : undefined,
-                          apiMode: apiMode.trim().length > 0 ? apiMode : undefined,
-                          maxTurns: Number.parseInt(maxTurns, 10),
-                          reasoningEffort: reasoningEffort.trim().length > 0 ? reasoningEffort : undefined
-                        })
-                      ).catch(() => undefined);
-                    }}
-                  >
-                    Save runtime config
                   </Button>
                 </HStack>
               }
@@ -579,6 +648,7 @@ export function SettingsPage({
                         onChange={(event) => {
                           const nextProviderId = event.currentTarget.value;
                           setProvider(nextProviderId);
+                          scheduleModelSave({ provider: nextProviderId });
                         }}
                       >
                         {modelProviderResponse.providers.map((item) => (
@@ -596,28 +666,142 @@ export function SettingsPage({
                   <Field.Root disabled={selectedProvider?.disabled}>
                     <Field.Label color="var(--text-secondary)">Default model</Field.Label>
                     {selectedProviderModelField?.input === 'select' ? (
-                      <NativeSelect.Root size="sm" variant="subtle" bg="var(--surface-2)" disabled={selectedProviderModelField.disabled}>
-                        <NativeSelect.Field
-                          value={selectedProviderModelField.options.length === 0 ? '' : defaultModel}
-                          onChange={(event) => setDefaultModel(event.currentTarget.value)}
-                        >
-                          {selectedProviderModelField.options.length === 0 ? (
-                            <option value="">
-                              Model discovery unavailable
-                            </option>
-                          ) : null}
-                          {selectedProviderModelField.options.map((item) => (
-                            <option key={item.value} value={item.value} disabled={item.disabled}>
-                              {item.label}
-                            </option>
-                          ))}
-                        </NativeSelect.Field>
-                        <NativeSelect.Indicator />
-                      </NativeSelect.Root>
+                      (() => {
+                        const allOptions = selectedProviderModelField.options;
+                        const isLargeList = allOptions.length > 12;
+                        const filtered = isLargeList && modelSearch.trim()
+                          ? allOptions.filter((o) =>
+                              o.value.toLowerCase().includes(modelSearch.toLowerCase()) ||
+                              o.label.toLowerCase().includes(modelSearch.toLowerCase())
+                            )
+                          : allOptions;
+
+                        return (
+                          <VStack align="stretch" gap="1.5">
+                            {isLargeList ? (
+                              <Input
+                                size="sm"
+                                value={modelSearch}
+                                placeholder="Filter models…"
+                                bg="var(--surface-2)"
+                                borderColor="var(--border-subtle)"
+                                fontSize="xs"
+                                onChange={(e) => setModelSearch(e.currentTarget.value)}
+                              />
+                            ) : null}
+                            <NativeSelect.Root size="sm" variant="subtle" bg="var(--surface-2)" disabled={selectedProviderModelField.disabled}>
+                              <NativeSelect.Field
+                                value={allOptions.length === 0 ? '' : defaultModel}
+                                onChange={(event) => {
+                                  const next = event.currentTarget.value;
+                                  setDefaultModel(next);
+                                  setModelSearch('');
+                                  setPendingModel(next);
+                                  setModelVerifyStatus('idle');
+                                  setModelVerifyError(null);
+                                  // Don't auto-save — require verification first
+                                }}
+                              >
+                                {allOptions.length === 0 ? (
+                                  <option value="">Model discovery unavailable</option>
+                                ) : null}
+                                {filtered.map((item) => (
+                                  <option key={item.value} value={item.value} disabled={item.disabled}>
+                                    {item.label}
+                                  </option>
+                                ))}
+                                {isLargeList && filtered.length === 0 ? (
+                                  <option value="" disabled>No models match filter</option>
+                                ) : null}
+                              </NativeSelect.Field>
+                              <NativeSelect.Indicator />
+                            </NativeSelect.Root>
+                            {isLargeList ? (
+                              <Text fontSize="10px" color="var(--text-muted)">
+                                {filtered.length} of {allOptions.length} models shown
+                                {defaultModel ? ` · active: ${defaultModel}` : ''}
+                              </Text>
+                            ) : null}
+                            <ModelVerifyBar
+                              pendingModel={pendingModel}
+                              currentModel={modelProviderResponse?.config.defaultModel ?? null}
+                              status={modelVerifyStatus}
+                              errorMessage={modelVerifyError}
+                              onVerify={async () => {
+                                const profileId = modelProviderResponse?.config.profileId;
+                                if (!profileId || !pendingModel) return;
+                                setModelVerifyStatus('testing');
+                                setModelVerifyError(null);
+                                try {
+                                  const result = await onTestModelConfig(profileId, pendingModel, provider || undefined);
+                                  if (result.ok) {
+                                    setModelVerifyStatus('passed');
+                                    setPendingModel(null);
+                                    scheduleModelSave({ defaultModel: pendingModel });
+                                  } else {
+                                    setModelVerifyStatus('failed');
+                                    setModelVerifyError(result.message);
+                                    setDefaultModel(modelProviderResponse?.config.defaultModel ?? defaultModel);
+                                  }
+                                } catch (err) {
+                                  setModelVerifyStatus('failed');
+                                  setModelVerifyError(err instanceof Error ? err.message : 'Verification failed.');
+                                  setDefaultModel(modelProviderResponse?.config.defaultModel ?? defaultModel);
+                                }
+                              }}
+                            />
+                          </VStack>
+                        );
+                      })()
+                    ) : selectedProviderModelField?.input === 'text' ? (
+                      <VStack align="stretch" gap="1.5">
+                        <Input
+                          size="sm"
+                          value={defaultModel}
+                          placeholder={selectedProviderModelField.placeholder ?? 'Enter model ID'}
+                          bg="var(--surface-2)"
+                          borderColor="var(--border-subtle)"
+                          onChange={(event) => {
+                            const next = event.currentTarget.value;
+                            setDefaultModel(next);
+                            setPendingModel(next);
+                            setModelVerifyStatus('idle');
+                            setModelVerifyError(null);
+                          }}
+                        />
+                        <ModelVerifyBar
+                          pendingModel={pendingModel}
+                          currentModel={modelProviderResponse?.config.defaultModel ?? null}
+                          status={modelVerifyStatus}
+                          errorMessage={modelVerifyError}
+                          onVerify={async () => {
+                            const profileId = modelProviderResponse?.config.profileId;
+                            if (!profileId || !pendingModel) return;
+                            setModelVerifyStatus('testing');
+                            setModelVerifyError(null);
+                            try {
+                              const result = await onTestModelConfig(profileId, pendingModel, provider || undefined);
+                              if (result.ok) {
+                                setModelVerifyStatus('passed');
+                                setPendingModel(null);
+                                scheduleModelSave({ defaultModel: pendingModel });
+                              } else {
+                                setModelVerifyStatus('failed');
+                                setModelVerifyError(result.message);
+                                setDefaultModel(modelProviderResponse?.config.defaultModel ?? defaultModel);
+                              }
+                            } catch (err) {
+                              setModelVerifyStatus('failed');
+                              setModelVerifyError(err instanceof Error ? err.message : 'Verification failed.');
+                              setDefaultModel(modelProviderResponse?.config.defaultModel ?? defaultModel);
+                            }
+                          }}
+                        />
+                      </VStack>
                     ) : (
                       <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3" py="2.5">
                         <Text fontSize="sm" color="var(--text-secondary)">
-                          Model discovery is unavailable for this provider right now. Manual model entry is blocked until Hermes exposes discovered model choices.
+                          Model discovery is unavailable for this provider right now.
                         </Text>
                       </Box>
                     )}
@@ -634,14 +818,23 @@ export function SettingsPage({
 
                   <Field.Root>
                     <Field.Label color="var(--text-secondary)">Max turns</Field.Label>
-                    <Input type="number" value={maxTurns} onChange={(event) => setMaxTurns(event.currentTarget.value)} bg="var(--surface-2)" borderColor="var(--border-subtle)" />
+                    <Input
+                      type="number"
+                      value={maxTurns}
+                      bg="var(--surface-2)"
+                      borderColor="var(--border-subtle)"
+                      onChange={(event) => { setMaxTurns(event.currentTarget.value); scheduleModelSave({ maxTurns: event.currentTarget.value }); }}
+                    />
                   </Field.Root>
 
                   {shouldShowReasoningEffort ? (
                     <Field.Root>
                       <Field.Label color="var(--text-secondary)">Reasoning effort</Field.Label>
                       <NativeSelect.Root size="sm" variant="subtle" bg="var(--surface-2)">
-                        <NativeSelect.Field value={reasoningEffort} onChange={(event) => setReasoningEffort(event.currentTarget.value)}>
+                        <NativeSelect.Field
+                          value={reasoningEffort}
+                          onChange={(event) => { setReasoningEffort(event.currentTarget.value); scheduleModelSave({ reasoningEffort: event.currentTarget.value }); }}
+                        >
                           <option value="">default</option>
                           {(selectedModel?.reasoningEffortOptions ?? []).map((option) => (
                             <option key={option} value={option}>
@@ -680,9 +873,11 @@ export function SettingsPage({
                               <Text fontWeight="700" color="var(--text-primary)">
                                 {item.displayName}
                               </Text>
-                              <Text fontSize="sm" color="var(--text-secondary)">
-                                {item.description ?? item.notes ?? item.source}
-                              </Text>
+                              {(item.description ?? item.notes) ? (
+                                <Text fontSize="sm" color="var(--text-secondary)">
+                                  {item.description ?? item.notes}
+                                </Text>
+                              ) : null}
                             </Table.Cell>
                             <Table.Cell>
                               <Badge
@@ -702,7 +897,9 @@ export function SettingsPage({
                               </Badge>
                             </Table.Cell>
                             <Table.Cell color="var(--text-secondary)">{item.authKind}</Table.Cell>
-                            <Table.Cell color="var(--text-secondary)">{item.maskedCredential ?? item.credentialLabel ?? 'Not connected'}</Table.Cell>
+                            <Table.Cell color="var(--text-secondary)">
+                              {item.maskedCredential ?? item.credentialLabel ?? (item.status === 'connected' ? 'Connected' : '—')}
+                            </Table.Cell>
                             <Table.Cell textAlign="end">
                               <Button variant="ghost" size="sm" onClick={() => openProviderDrawer(item.id)}>
                                 Configure
@@ -859,9 +1056,7 @@ export function SettingsPage({
                                         onChange={(event) => setConfigurationFieldValue(field.key, event.currentTarget.value)}
                                       >
                                         {field.options.length === 0 ? (
-                                          <option value="">
-                                            {field.placeholder ?? 'Not available'}
-                                          </option>
+                                          <option value="">{field.placeholder ?? 'Not available'}</option>
                                         ) : null}
                                         {field.options.map((option) => (
                                           <option key={option.value} value={option.value} disabled={option.disabled}>
@@ -871,6 +1066,15 @@ export function SettingsPage({
                                       </NativeSelect.Field>
                                       <NativeSelect.Indicator />
                                     </NativeSelect.Root>
+                                  ) : field.input === 'text' && field.key === 'defaultModel' ? (
+                                    <Input
+                                      size="sm"
+                                      value={getConfigurationFieldValue(field.key, field.value ?? '')}
+                                      placeholder={field.placeholder ?? 'Enter model ID'}
+                                      bg="var(--surface-2)"
+                                      borderColor="var(--border-subtle)"
+                                      onChange={(event) => setConfigurationFieldValue(field.key, event.currentTarget.value)}
+                                    />
                                   ) : field.key === 'defaultModel' ? (
                                     <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3" py="2.5">
                                       <Text fontSize="sm" color="var(--text-secondary)">
@@ -1038,59 +1242,6 @@ export function SettingsPage({
           </Drawer.Root>
         </SettingsTabPanel>
 
-        <SettingsTabPanel value="unrestricted">
-          <SectionCard
-            title="Unrestricted Access"
-            description="Use the Hermes runtime without the bridge turn limiter or reviewed restrictions."
-            action={
-              <Button
-                rounded="8px"
-                bg="var(--accent)"
-                color="var(--accent-contrast)"
-                _hover={{ bg: 'var(--accent-strong)' }}
-                loading={saving}
-                onClick={() => {
-                  void persistSettings();
-                }}
-              >
-                Save access settings
-              </Button>
-            }
-          >
-            <Box data-testid="settings-danger-zone" rounded="8px" border="1px solid rgba(177, 86, 47, 0.28)" bg="rgba(177, 86, 47, 0.08)" px="4" py="4">
-              <HStack align="start" gap="3">
-                <WarningBadge />
-                <VStack align="stretch" gap="3">
-                  <Text fontWeight="700" color="var(--text-primary)">
-                    High-risk mode
-                  </Text>
-                  <Text color="var(--text-secondary)">
-                    When enabled, Hermes can run with full autonomy through the local bridge. Restrictive turn limits are ignored, and actions may proceed without the reviewed bridge path.
-                  </Text>
-                  <Checkbox.Root checked={unrestrictedAccessEnabled} onCheckedChange={(event) => setUnrestrictedAccessEnabled(!!event.checked)}>
-                    <Checkbox.HiddenInput />
-                    <Checkbox.Control />
-                    <Checkbox.Label>I understand the risk and want unrestricted runtime access.</Checkbox.Label>
-                  </Checkbox.Root>
-                  <Field.Root>
-                    <Field.Label color="var(--text-secondary)">Unrestricted timeout (ms)</Field.Label>
-                    <Input
-                      type="number"
-                      value={unrestrictedTimeoutMs}
-                      onChange={(event) => setUnrestrictedTimeoutMs(event.currentTarget.value)}
-                      bg="var(--surface-2)"
-                      borderColor="var(--border-subtle)"
-                    />
-                    <Field.HelperText color="var(--text-muted)">
-                      Maximum bridge timeout used only while Unrestricted Access is enabled. Max 7200000.
-                    </Field.HelperText>
-                  </Field.Root>
-                </VStack>
-              </HStack>
-            </Box>
-          </SectionCard>
-        </SettingsTabPanel>
-
         <SettingsTabPanel value="access_audit">
           <VStack align="stretch" gap="4">
             <SectionCard title="Access audit" description="Recent local audit trail for unrestricted access state changes and usage.">
@@ -1230,10 +1381,10 @@ function SettingsTabPanel({
   children: ReactNode;
 }) {
   return (
-    <Tabs.Content value={value} h="100%" minH={0} pt="4" _open={{ display: 'block' }}>
+    <Tabs.Content value={value} h="100%" minH={0} pt="3" _open={{ display: 'block' }}>
       <ScrollArea.Root h="100%" minH={0} variant="hover">
         <ScrollArea.Viewport data-testid="settings-scroll">
-          <VStack align="stretch" gap="4" pr={{ base: '1', xl: '2' }}>
+          <VStack align="stretch" gap="4" pb="6" pr={{ base: '1', xl: '2' }}>
             {children}
           </VStack>
         </ScrollArea.Viewport>
@@ -1308,6 +1459,78 @@ function PaginationFooter({
         </Button>
       </HStack>
     </HStack>
+  );
+}
+
+function ModelVerifyBar({
+  pendingModel,
+  currentModel,
+  status,
+  errorMessage,
+  onVerify
+}: {
+  pendingModel: string | null;
+  currentModel: string | null;
+  status: 'idle' | 'testing' | 'passed' | 'failed';
+  errorMessage: string | null;
+  onVerify: () => Promise<void>;
+}) {
+  const hasChange = pendingModel !== null && pendingModel !== currentModel;
+  if (!hasChange && status !== 'testing' && status !== 'passed' && status !== 'failed') {
+    return null;
+  }
+
+  return (
+    <VStack align="stretch" gap="1">
+      <HStack gap="2" align="center">
+        {status === 'idle' || status === 'failed' ? (
+          <Button
+            size="xs"
+            h="6"
+            px="2.5"
+            fontSize="xs"
+            fontWeight="500"
+            rounded="6px"
+            bg="var(--accent)"
+            color="var(--accent-contrast)"
+            _hover={{ bg: 'var(--accent-strong)' }}
+            disabled={!hasChange}
+            onClick={() => void onVerify()}
+          >
+            Verify model
+          </Button>
+        ) : null}
+        {status === 'testing' ? (
+          <HStack gap="1.5" align="center">
+            <Spinner size="xs" color="var(--accent)" />
+            <Text fontSize="xs" color="var(--text-muted)">Testing {pendingModel ?? ''}…</Text>
+          </HStack>
+        ) : null}
+        {status === 'passed' ? (
+          <Text fontSize="xs" color="#16a34a" fontWeight="500">
+            ✓ Verified and applied
+          </Text>
+        ) : null}
+        {status === 'failed' && hasChange ? (
+          <Text fontSize="xs" color="var(--text-muted)">
+            Fix the error and verify before applying.
+          </Text>
+        ) : null}
+      </HStack>
+      {status === 'failed' && errorMessage ? (
+        <Box
+          rounded="7px"
+          border="1px solid #dc2626"
+          bg="rgba(220,38,38,0.06)"
+          px="2.5"
+          py="2"
+        >
+          <Text fontSize="xs" color="#dc2626" lineHeight="1.4">
+            {errorMessage}
+          </Text>
+        </Box>
+      ) : null}
+    </VStack>
   );
 }
 

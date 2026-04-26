@@ -554,28 +554,34 @@ function ChecklistCodeBlock({ code, dimmed }: { code: string; dimmed: boolean })
 }
 
 function ChecklistStepDetail({ detail, dimmed }: { detail: string; dimmed: boolean }) {
-  const trimmed = detail.trimStart();
-  if (trimmed.startsWith('```')) {
-    const lines = detail.split('\n');
-    const code = lines.slice(1, trimmed.endsWith('```') ? lines.length - 1 : lines.length).join('\n');
-    return <ChecklistCodeBlock code={code} dimmed={dimmed} />;
-  }
   return (
-    <Box opacity={dimmed ? 0.5 : 1}>
+    <Box opacity={dimmed ? 0.5 : 1} mt="1">
       <ReactMarkdown
         urlTransform={(url) => safeMarkdownUrlTransform(url) ?? ''}
         remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }) => (
-            <Text fontSize="sm" color="var(--text-secondary)" textDecoration={dimmed ? 'line-through' : undefined}>
+            <Text fontSize="sm" color={dimmed ? 'var(--text-muted)' : 'var(--text-secondary)'}
+              textDecoration={dimmed ? 'line-through' : undefined}>
               {children}
             </Text>
           ),
-          code: ({ children }) => (
-            <Box as="code" fontFamily="mono" fontSize="0.82em" bg="var(--surface-2)" border="1px solid var(--border-subtle)" px="1" rounded="3px" color="var(--accent)">
-              {children}
-            </Box>
-          )
+          // pre wraps fenced code blocks — pass through as a fragment so ChecklistCodeBlock renders at the right level
+          pre: ({ children }) => <>{children}</>,
+          code: ({ children, className }) => {
+            const text = String(children);
+            // Fenced code blocks always end with a trailing newline added by the markdown parser
+            const isBlock = text.endsWith('\n') || Boolean(className);
+            if (isBlock) {
+              return <ChecklistCodeBlock code={text.replace(/\n$/, '')} dimmed={dimmed} />;
+            }
+            return (
+              <Box as="code" fontFamily="mono" fontSize="0.82em" bg="var(--surface-2)"
+                border="1px solid var(--border-subtle)" px="1" py="0.5" rounded="3px" color="var(--accent)">
+                {children}
+              </Box>
+            );
+          }
         }}
       >
         {detail}

@@ -6,7 +6,9 @@ import {
   BeginProviderAuthRequestSchema,
   ChatStreamRequestSchema,
   ConnectProviderRequestSchema,
+  CreateProfileRequestSchema,
   CreateRecipeRequestSchema,
+  TestModelConfigRequestSchema,
   CreateSessionRequestSchema,
   DeleteRecipeRequestSchema,
   DeleteSessionRequestSchema,
@@ -250,6 +252,29 @@ export function createBridgeServer(options: {
       if (request.method === 'POST' && pathname === '/api/profiles/select') {
         const payload = SelectProfileRequestSchema.parse(await readJsonBody(request));
         sendJson(response, 200, await bridge.selectProfile(payload), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/profiles') {
+        const payload = CreateProfileRequestSchema.parse(await readJsonBody(request));
+        sendJson(response, 201, await bridge.createProfile(payload), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'DELETE' && /^\/api\/profiles\/[^/]+$/.test(pathname)) {
+        const profileId = decodeURIComponent(pathname.split('/')[3] ?? '');
+        sendJson(response, 200, await bridge.deleteProfile({ profileId }), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'GET' && pathname === '/api/profiles/metrics') {
+        sendJson(response, 200, bridge.getProfilesMetrics(), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/model-providers/test') {
+        const payload = TestModelConfigRequestSchema.parse(await readJsonBody(request));
+        sendJson(response, 200, await bridge.testModelConfig(payload), originDecision.allowOrigin);
         return;
       }
 

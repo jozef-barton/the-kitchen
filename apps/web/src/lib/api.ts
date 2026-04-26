@@ -32,6 +32,9 @@ import {
   SessionDeletionResponseSchema,
   JobsResponseSchema,
   ModelProviderResponseSchema,
+  ProfilesMetricsResponseSchema,
+  ProfilesResponseSchema,
+  TestModelConfigResponseSchema,
   RecipeDeletionResponseSchema,
   RecipeResponseSchema,
   RecipesResponseSchema,
@@ -140,6 +143,45 @@ export async function selectProfile(profileId: string) {
       })
     }),
     BootstrapResponseSchema
+  );
+}
+
+export async function createProfile(name: string) {
+  return parseJsonResponse(
+    await apiFetch('/api/profiles', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ name })
+    }),
+    ProfilesResponseSchema
+  );
+}
+
+export async function deleteProfile(profileId: string) {
+  return parseJsonResponse(
+    await apiFetch(`/api/profiles/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE',
+      headers: jsonHeaders()
+    }),
+    ProfilesResponseSchema
+  );
+}
+
+export async function testModelConfig(profileId: string, defaultModel: string, provider?: string) {
+  return parseJsonResponse(
+    await apiFetch('/api/model-providers/test', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ profileId, defaultModel, provider })
+    }),
+    TestModelConfigResponseSchema
+  );
+}
+
+export async function getProfilesMetrics() {
+  return parseJsonResponse(
+    await apiFetch('/api/profiles/metrics'),
+    ProfilesMetricsResponseSchema
   );
 }
 

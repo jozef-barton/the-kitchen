@@ -33,13 +33,15 @@ export function ChatActivityFeed({
   sending,
   progress,
   requestPreview,
-  requestStatus
+  requestStatus,
+  hideTestId = false
 }: {
   activities: ChatActivity[];
   sending: boolean;
   progress: string | null;
   requestPreview: string | null;
   requestStatus: RuntimeRequest['status'] | null;
+  hideTestId?: boolean;
 }) {
   // Find the most recent in-progress activity for the live status strip.
   const liveActivity = useMemo(() => {
@@ -64,7 +66,7 @@ export function ChatActivityFeed({
       border="1px solid var(--border-subtle)"
       bg="var(--surface-1)"
       overflow="hidden"
-      data-testid="chat-activity-pane"
+      data-testid={hideTestId ? undefined : 'chat-activity-pane'}
     >
       {/* Header */}
       <Box px="3" pt="2.5" pb="0" flexShrink={0}>

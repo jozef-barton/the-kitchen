@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { testModelConfig } from './lib/api';
 import { Box, Button, Center, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
 import { useAppController } from './hooks/use-app-controller';
 import { ChatPage } from './ui/pages/ChatPage';
@@ -138,6 +139,7 @@ export function App() {
             recentSessions={controller.bootstrap.recentSessions}
             activePage={controller.page}
             collapsed={controller.sidebarCollapsed}
+            profileMetrics={controller.profileMetrics}
             onCollapsedChange={(collapsed) => void controller.handleSidebarCollapsedChange(collapsed)}
             onProfileChange={(profileId) => void controller.handleProfileChange(profileId)}
             onCreateSession={() => void controller.handleCreateSession()}
@@ -145,6 +147,29 @@ export function App() {
             onOpenPage={(page) => void controller.openPage(page)}
             onRenameSession={(sessionId, title) => void controller.handleRenameSession(sessionId, title)}
             onDeleteSession={(sessionId) => void controller.handleDeleteSession(sessionId)}
+            onCreateProfile={(name) => controller.handleCreateProfile(name)}
+            onDeleteProfile={(id) => controller.handleDeleteProfile(id)}
+          />
+        }
+        mobileNavContent={
+          <Sidebar
+            profiles={controller.bootstrap.profiles}
+            activeProfileId={controller.activeProfileId}
+            activeSessionId={controller.activeSessionId}
+            recentSessions={controller.bootstrap.recentSessions}
+            activePage={controller.page}
+            collapsed={false}
+            drawerMode
+            profileMetrics={controller.profileMetrics}
+            onCollapsedChange={() => undefined}
+            onProfileChange={(profileId) => void controller.handleProfileChange(profileId)}
+            onCreateSession={() => void controller.handleCreateSession()}
+            onOpenSession={(sessionId) => void controller.openSession(sessionId)}
+            onOpenPage={(page) => void controller.openPage(page)}
+            onRenameSession={(sessionId, title) => void controller.handleRenameSession(sessionId, title)}
+            onDeleteSession={(sessionId) => void controller.handleDeleteSession(sessionId)}
+            onCreateProfile={(name) => controller.handleCreateProfile(name)}
+            onDeleteProfile={(id) => controller.handleDeleteProfile(id)}
           />
         }
         tabBar={
@@ -203,6 +228,10 @@ export function App() {
             onApplyRecipeEntryAction={(recipeId, action, entryIds, options) =>
               void controller.handleApplyRecipeEntryAction(recipeId, action, entryIds, options)
             }
+            onSwitchTemplate={(recipe, targetTemplateId, intentLabel) =>
+              void controller.handleSwitchTemplate(recipe, targetTemplateId, intentLabel)
+            }
+            activeModelLabel={activeModelLabel}
           />
           )
         ) : null}
@@ -317,6 +346,7 @@ export function App() {
             inspectedProvider={controller.inspectedProvider}
             onSave={(nextSettings) => controller.handleSaveSettings(nextSettings)}
             onUpdateRuntimeModelConfig={(nextConfig, options) => controller.handleUpdateRuntimeModelConfig(nextConfig, options)}
+            onTestModelConfig={(profileId, model, prov) => testModelConfig(profileId, model, prov)}
             onConnectProvider={(provider, apiKey, label, options) => controller.handleConnectProvider(provider, apiKey, label, options)}
             onBeginProviderAuth={(providerId, options) => controller.handleBeginProviderAuth(providerId, options)}
             onPollProviderAuth={(providerId, authSessionId, options) => controller.handlePollProviderAuth(providerId, authSessionId, options)}
