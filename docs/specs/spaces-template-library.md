@@ -1,5 +1,7 @@
 # Spaces Template Library
 
+> **Status:** This document defines the target first-set catalog of 20 templates and the framework they share. The set actually wired up in production may lag this catalog at any given time — the recipe template registry under `apps/bridge/src/services/recipes/` is the source of truth for what currently ships.
+
 ## Purpose
 
 The top-level `Spaces` page is now a curated template gallery and pattern library.
