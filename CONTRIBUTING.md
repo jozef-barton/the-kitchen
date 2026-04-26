@@ -18,6 +18,8 @@ pnpm dev           # concurrently runs the bridge and the web app
 - Bridge: `http://127.0.0.1:8787`
 - Web: `http://127.0.0.1:5173`
 
+For a single-command production-style run (build + serve + open browser), use `pnpm kitchen`.
+
 ## Repository layout
 
 ```
@@ -39,7 +41,7 @@ packages/
    ```bash
    pnpm ci:full
    ```
-   This runs lint, typecheck, unit tests, Playwright e2e, and a security check.
+   This runs lint, typecheck, unit tests, and the security check — the same set GitHub Actions runs. End-to-end Playwright tests aren't part of `ci:full`; run them separately with `pnpm exec playwright test` if your change affects the e2e surface.
 4. Open a pull request. Describe what changed and why.
 
 ## Code style

@@ -1,3 +1,5 @@
+(node:49464) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
 
 > @hermes-recipes/bridge@0.2.0 build /Users/jozefbarton/dev/the-kitchen/apps/bridge
 > tsc -p tsconfig.json

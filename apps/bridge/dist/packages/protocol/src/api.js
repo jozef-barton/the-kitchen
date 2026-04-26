@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { AuditEventSchema, AccessAuditSummarySchema, AppSettingsSchema, ChatActivitySchema, ChatMessageSchema, ConnectionStateSchema, JobsFreshnessSchema, JobSchema, ProfileSchema, RuntimeActivityHistoryEntrySchema, RuntimeModelConfigSchema, RuntimeReadinessSchema, RuntimeRequestSchema, RuntimeProviderOptionSchema, SessionDeletionModeSchema, SessionFilterSummarySchema, SessionSchema, SpaceContentFormatSchema, SpaceBuildSchema, SpaceEventSchema, SpaceMetadataSchema, SpaceSchema, SpaceStatusSchema, SpaceTabSchema, SpaceUiStateSchema, SkillSchema, TelemetryEventSchema, ThemeModeSchema, ToolExecutionSchema, ToolSchema, ToolsTabSchema, UiStateSchema } from './schemas';
+import { AuditEventSchema, AccessAuditSummarySchema, AppSettingsSchema, ChatActivitySchema, ChatMessageSchema, ConnectionStateSchema, JobsFreshnessSchema, JobSchema, ProfileSchema, RuntimeActivityHistoryEntrySchema, RuntimeModelConfigSchema, RuntimeReadinessSchema, RuntimeRequestSchema, RuntimeProviderOptionSchema, SessionDeletionModeSchema, SessionFilterSummarySchema, SessionSchema, RecipeContentFormatSchema, RecipeBuildSchema, RecipeEventSchema, RecipeMetadataSchema, RecipeSchema, RecipeStatusSchema, RecipeTabSchema, RecipeUiStateSchema, SkillSchema, TelemetryEventSchema, ThemeModeSchema, ToolExecutionSchema, ToolSchema, ToolsTabSchema, UiStateSchema } from './schemas';
+import { RecipeTemplateStateSchema } from './recipe-template-schemas';
 export const ApiErrorSchema = z.object({
     code: z.string().min(1),
     message: z.string().min(1)
@@ -16,7 +17,9 @@ export const BootstrapResponseSchema = z.object({
     recentSessions: z.array(SessionSchema),
     sessionSummary: SessionFilterSummarySchema.nullable().default(null),
     settings: AppSettingsSchema,
-    uiState: UiStateSchema
+    uiState: UiStateSchema,
+    hermesVersion: z.string().nullable().default(null),
+    expectedHermesVersion: z.string().nullable().default(null)
 });
 export const SessionsResponseSchema = z.object({
     profileId: z.string().min(1),
@@ -32,8 +35,8 @@ export const SessionMessagesResponseSchema = z.object({
     session: SessionSchema,
     messages: z.array(ChatMessageSchema),
     runtimeRequests: z.array(RuntimeRequestSchema).default([]),
-    attachedSpace: SpaceSchema.nullable().default(null),
-    spaceEvents: z.array(SpaceEventSchema).default([])
+    attachedRecipe: RecipeSchema.nullable().default(null),
+    recipeEvents: z.array(RecipeEventSchema).default([])
 });
 export const JobsResponseSchema = z.object({
     connection: ConnectionStateSchema,
@@ -65,33 +68,63 @@ export const ModelProviderResponseSchema = z.object({
     inspectedProviderId: z.string().min(1).nullable().default(null),
     discoveredAt: z.string().datetime().nullable().default(null)
 });
-export const SpacesResponseSchema = z.object({
+export const RecipesResponseSchema = z.object({
     profileId: z.string().min(1),
-    items: z.array(SpaceSchema),
-    events: z.array(SpaceEventSchema).default([])
+    items: z.array(RecipeSchema),
+    events: z.array(RecipeEventSchema).default([])
 });
-export const SpaceResponseSchema = z.object({
+export const RecipeResponseSchema = z.object({
     profileId: z.string().min(1),
-    space: SpaceSchema,
-    events: z.array(SpaceEventSchema).default([])
+    recipe: RecipeSchema,
+    events: z.array(RecipeEventSchema).default([])
 });
 export const CreateSessionRequestSchema = z.object({
     profileId: z.string().min(1)
 });
-export const CreateSpaceRequestSchema = z.object({
+export const CreateRecipeRequestSchema = z.object({
     profileId: z.string().min(1),
     sessionId: z.string().min(1),
     title: z.string().min(1).max(120),
     description: z.string().max(500).optional(),
-    contentFormat: SpaceContentFormatSchema.default('markdown'),
+    contentFormat: RecipeContentFormatSchema.default('markdown'),
     contentData: z.record(z.string().min(1), z.unknown()).optional(),
-    tabs: z.array(SpaceTabSchema).optional(),
-    uiState: SpaceUiStateSchema.partial().optional(),
-    status: SpaceStatusSchema.optional(),
-    metadata: SpaceMetadataSchema.partial().optional()
+    tabs: z.array(RecipeTabSchema).optional(),
+    uiState: RecipeUiStateSchema.partial().optional(),
+    status: RecipeStatusSchema.optional(),
+    metadata: RecipeMetadataSchema.partial().optional()
 }).strict();
 export const SelectProfileRequestSchema = z.object({
     profileId: z.string().min(1)
+});
+export const CreateProfileRequestSchema = z.object({
+    name: z.string().min(1).max(64).regex(/^[a-z0-9_-]+$/i, 'Name must be alphanumeric with hyphens/underscores only')
+});
+export const DeleteProfileRequestSchema = z.object({
+    profileId: z.string().min(1)
+});
+export const ProfileMetricsSchema = z.object({
+    profileId: z.string().min(1),
+    sessionCount: z.number().int().nonnegative(),
+    messageCount: z.number().int().nonnegative(),
+    recipeCount: z.number().int().nonnegative()
+});
+export const ProfilesMetricsResponseSchema = z.object({
+    metrics: z.array(ProfileMetricsSchema)
+});
+export const ProfilesResponseSchema = z.object({
+    profiles: z.array(ProfileSchema),
+    activeProfileId: z.string().min(1).nullable()
+});
+export const TestModelConfigRequestSchema = z.object({
+    profileId: z.string().min(1),
+    defaultModel: z.string().min(1),
+    provider: z.string().min(1).optional()
+});
+export const TestModelConfigResponseSchema = z.object({
+    ok: z.boolean(),
+    message: z.string(),
+    model: z.string(),
+    latencyMs: z.number().int().nonnegative()
 });
 export const SelectSessionRequestSchema = z.object({
     profileId: z.string().min(1),
@@ -112,18 +145,18 @@ export const SessionDeletionResponseSchema = z.object({
 export const DeleteSkillRequestSchema = z.object({
     profileId: z.string().min(1)
 });
-export const UpdateSpaceRequestSchema = z
+export const UpdateRecipeRequestSchema = z
     .object({
     profileId: z.string().min(1),
     title: z.string().min(1).max(120).optional(),
     description: z.string().max(500).optional(),
-    contentFormat: SpaceContentFormatSchema.optional(),
-    status: SpaceStatusSchema.optional(),
+    contentFormat: RecipeContentFormatSchema.optional(),
+    status: RecipeStatusSchema.optional(),
     contentData: z.record(z.string().min(1), z.unknown()).optional(),
-    tabs: z.array(SpaceTabSchema).optional(),
-    uiState: SpaceUiStateSchema.partial().optional(),
+    tabs: z.array(RecipeTabSchema).optional(),
+    uiState: RecipeUiStateSchema.partial().optional(),
     lastUpdatedBy: z.string().min(1).optional(),
-    metadata: SpaceMetadataSchema.partial().optional()
+    metadata: RecipeMetadataSchema.partial().optional()
 })
     .strict()
     .refine((value) => value.title !== undefined ||
@@ -135,17 +168,17 @@ export const UpdateSpaceRequestSchema = z
     value.uiState !== undefined ||
     value.lastUpdatedBy !== undefined ||
     value.metadata !== undefined, 'At least one space field must be provided.');
-export const DeleteSpaceRequestSchema = z.object({
+export const DeleteRecipeRequestSchema = z.object({
     profileId: z.string().min(1)
 });
-export const ApplySpaceEntryActionRequestSchema = z
+export const ApplyRecipeEntryActionRequestSchema = z
     .object({
     profileId: z.string().min(1),
     action: z.enum(['remove', 'delete_source']),
     entryIds: z.array(z.string().min(1)).min(1)
 })
     .strict();
-export const ExecuteSpaceActionRequestSchema = z
+export const ExecuteRecipeActionRequestSchema = z
     .object({
     profileId: z.string().min(1),
     sessionId: z.string().min(1),
@@ -156,25 +189,25 @@ export const ExecuteSpaceActionRequestSchema = z
     filterState: z.record(z.string().min(1), z.string()).default({})
 })
     .strict();
-export const SpaceDeletionResponseSchema = z.object({
+export const RecipeDeletionResponseSchema = z.object({
     profileId: z.string().min(1),
-    spaceId: z.string().min(1),
+    recipeId: z.string().min(1),
     deletedAt: z.string().datetime()
 });
-export const SpaceEntryActionResponseSchema = z.object({
+export const RecipeEntryActionResponseSchema = z.object({
     profileId: z.string().min(1),
-    action: ApplySpaceEntryActionRequestSchema.shape.action,
+    action: ApplyRecipeEntryActionRequestSchema.shape.action,
     removedEntryIds: z.array(z.string().min(1)).default([]),
     deletedSourceEntryIds: z.array(z.string().min(1)).default([]),
-    space: SpaceSchema,
-    events: z.array(SpaceEventSchema).default([])
+    recipe: RecipeSchema,
+    events: z.array(RecipeEventSchema).default([])
 });
-export const OpenSpaceChatRequestSchema = z.object({
+export const OpenRecipeChatRequestSchema = z.object({
     profileId: z.string().min(1)
 });
-export const OpenSpaceChatResponseSchema = z.object({
+export const OpenRecipeChatResponseSchema = z.object({
     profileId: z.string().min(1),
-    space: SpaceSchema,
+    recipe: RecipeSchema,
     session: SessionSchema
 });
 export const SkillDeletionResponseSchema = z.object({
@@ -191,13 +224,14 @@ export const UpdateUiStateRequestSchema = UiStateSchema.partial()
     sidebarCollapsed: UiStateSchema.shape.sidebarCollapsed.optional()
 })
     .refine((value) => Object.keys(value).length > 0, 'At least one UI state field must be provided.');
-export const ChatRequestModeSchema = z.enum(['chat', 'space_refresh', 'space_action']);
-export const SPACE_REFRESH_USER_MESSAGE = 'Refresh this attached space with updated results.';
+export const ChatRequestModeSchema = z.enum(['chat', 'recipe_refresh', 'recipe_action']);
+export const RECIPE_REFRESH_USER_MESSAGE = 'Refresh this attached space with updated results.';
 export const ChatStreamRequestSchema = z.object({
     profileId: z.string().min(1),
     sessionId: z.string().min(1),
-    spaceId: z.string().min(1).optional(),
+    recipeId: z.string().min(1).optional(),
     content: z.string().min(1).max(20_000),
+    intentContent: z.string().min(1).max(500).optional(),
     mode: ChatRequestModeSchema.default('chat')
 });
 export const ToolExecutionPrepareRequestSchema = z.object({
@@ -212,11 +246,12 @@ export const ToolExecutionPrepareRequestSchema = z.object({
 export const ToolExecutionResolveRequestSchema = z.object({
     decision: z.enum(['approve', 'reject'])
 });
-export const SpaceBuildProgressEventSchema = z
+export const RecipeBuildProgressEventSchema = z
     .object({
-    spaceId: z.string().min(1),
-    build: SpaceBuildSchema,
-    space: SpaceSchema.nullable().default(null)
+    recipeId: z.string().min(1),
+    build: RecipeBuildSchema,
+    recipe: RecipeSchema.nullable().default(null),
+    partialTemplateState: RecipeTemplateStateSchema.nullable().default(null)
 })
     .strict();
 export const UpdateRuntimeModelConfigRequestSchema = z
@@ -283,16 +318,17 @@ const ChatStreamCompleteEventSchema = z.object({
     session: SessionSchema,
     assistantMessage: ChatMessageSchema
 });
-const ChatStreamSpaceEventSchema = z.object({
-    type: z.literal('space_event'),
-    event: SpaceEventSchema,
-    space: SpaceSchema.nullable().default(null)
+const ChatStreamRecipeEventSchema = z.object({
+    type: z.literal('recipe_event'),
+    event: RecipeEventSchema,
+    recipe: RecipeSchema.nullable().default(null)
 });
-const ChatStreamSpaceBuildProgressEventSchema = z.object({
-    type: z.literal('space_build_progress'),
-    spaceId: z.string().min(1),
-    build: SpaceBuildSchema,
-    space: SpaceSchema.nullable().default(null)
+const ChatStreamRecipeBuildProgressEventSchema = z.object({
+    type: z.literal('recipe_build_progress'),
+    recipeId: z.string().min(1),
+    build: RecipeBuildSchema,
+    recipe: RecipeSchema.nullable().default(null),
+    partialTemplateState: RecipeTemplateStateSchema.nullable().default(null)
 });
 const ChatStreamErrorEventSchema = z.object({
     type: z.literal('error'),
@@ -306,8 +342,8 @@ export const ChatStreamEventSchema = z.discriminatedUnion('type', [
     ChatStreamSessionEventSchema,
     ChatStreamMessageEventSchema,
     ChatStreamCompleteEventSchema,
-    ChatStreamSpaceEventSchema,
-    ChatStreamSpaceBuildProgressEventSchema,
+    ChatStreamRecipeEventSchema,
+    ChatStreamRecipeBuildProgressEventSchema,
     ChatStreamErrorEventSchema
 ]);
 export const HealthResponseSchema = z.object({
@@ -328,4 +364,14 @@ export const AuditEventsResponseSchema = z.object({
     page: z.number().int().positive(),
     pageSize: z.number().int().positive(),
     total: z.number().int().nonnegative()
+});
+export const ResolveImagesRequestSchema = z.object({
+    queries: z.array(z.string().min(1)).min(1).max(32)
+});
+export const ResolveImagesResponseSchema = z.object({
+    results: z.array(z.object({
+        query: z.string(),
+        url: z.string().nullable(),
+        error: z.string().nullable()
+    }))
 });

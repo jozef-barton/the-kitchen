@@ -21,7 +21,7 @@ Update it whenever architecture decisions, constraints, or risks materially chan
 9. Preserve a minimal, modern, internal-scrollable UI.
 10. If a better implementation detail is discovered, update this file before or alongside the code.
 11. Before declaring a phase complete, run the relevant verification command.
-12. When making changes, validate the local command path used by GitHub Actions before handoff; today that means mirroring `.github/workflows/ci.yml` with Playwright browser install plus `pnpm ci:full`.
+12. When making changes, validate the local command path used by GitHub Actions before handoff; today that means running `pnpm ci:full` (lint, typecheck, unit tests, security). End-to-end Playwright runs are not part of CI today; run them separately with `pnpm exec playwright test` when a change affects the e2e surface.
 
 ## Product vision
 
@@ -287,7 +287,7 @@ UI and performance:
 
 CI and environment:
 
-- GitHub Actions verifies this repo on Node 22 via `.github/workflows/ci.yml`. CI-sensitive fixes should validate against the workflow-equivalent path (`pnpm exec playwright install --with-deps chromium`, `pnpm ci:full`).
+- GitHub Actions verifies this repo on Node 22 via `.github/workflows/ci.yml` with four parallel jobs: lint, typecheck, unit tests, security. CI-sensitive fixes should validate against the workflow-equivalent path (`pnpm ci:full`). Playwright e2e is not part of CI today; if you reintroduce it, install browsers with `pnpm exec playwright install --with-deps chromium` first.
 
 ## Definition of done for each milestone
 

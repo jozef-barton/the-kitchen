@@ -224,7 +224,7 @@ describe('recipe template semantic completeness', () => {
     });
     it('provides text and hydration contract packets with valid examples for every registered template', () => {
         const templateIds = Object.keys(WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY);
-        expect(templateIds.length).toBeGreaterThanOrEqual(15);
+        expect(templateIds.length).toBeGreaterThanOrEqual(14);
         for (const templateId of templateIds) {
             const textPacket = createRecipeTemplateTextPacket(templateId);
             expect(textPacket).not.toBeNull();

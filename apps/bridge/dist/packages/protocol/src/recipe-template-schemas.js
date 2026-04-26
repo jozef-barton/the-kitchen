@@ -16,7 +16,6 @@ export const RECIPE_TEMPLATE_IDS = [
     'vendor-evaluation-matrix',
     'event-planner',
     'job-search-pipeline',
-    'content-campaign-planner',
     'local-discovery-comparison',
     'step-by-step-instructions'
 ];
@@ -163,6 +162,7 @@ export const RecipeTemplateTableCellSchema = z
     .object({
     value: z.string().min(1),
     subvalue: OptionalTextSchema,
+    href: OptionalTextSchema,
     tone: RecipeTemplateToneSchema.optional(),
     emphasis: z.boolean().default(false)
 })
@@ -412,6 +412,16 @@ export const RecipeTemplateSectionSchema = z.lazy(() => z.discriminatedUnion('ki
             .default([]),
         data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))).default([]),
         valueFormat: z.enum(['number', 'currency', 'percent']).default('number')
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('report'),
+        title: z.string().min(1),
+        body: z.string().min(1),
+        footnotes: z.array(z.object({
+            id: z.string().min(1),
+            label: z.string().min(1),
+            url: OptionalTextSchema
+        }).strict()).default([])
     }).strict()
 ]));
 export const RecipeTemplateTransitionRecordSchema = z
