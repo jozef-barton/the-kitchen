@@ -1,4 +1,4 @@
-import { Box, CloseButton, Drawer, HStack, Portal, ScrollArea, Tabs, VStack } from '@chakra-ui/react';
+import { Box, CloseButton, Drawer, HStack, Portal, ScrollArea, Tabs, Text, VStack } from '@chakra-ui/react';
 import { useEffect, useMemo, useState } from 'react';
 import { RecipeTemplateDetailDrawer } from '../../features/recipe-templates/template-detail-drawer';
 import { RecipeTemplateGallery } from '../../features/recipe-templates/template-gallery';
@@ -53,23 +53,38 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
 
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0">
-      {/* Tab bar — block style matching Tools */}
-      <Box mb="3" flexShrink={0}>
+      <Box flexShrink={0}>
+        <Box mb="1">
+          <Text fontSize="xl" fontWeight="700" color="var(--text-primary)" letterSpacing="-0.01em">Recipe Library</Text>
+          <Text fontSize="sm" color="var(--text-muted)" mt="0.5">Browse workspace templates and ingredient building blocks for structured Hermes responses.</Text>
+        </Box>
         <Tabs.Root
           value={activeTab}
           onValueChange={(e) => setActiveTab(e.value as 'book' | 'ingredients')}
           variant="plain"
-          css={{
-            '--tabs-indicator-bg': 'var(--surface-1)',
-            '--tabs-indicator-shadow': 'var(--shadow-xs)',
-            '--tabs-trigger-radius': '7px'
-          }}
         >
-          <Tabs.List rounded="8px" bg="var(--surface-2)" border="1px solid var(--border-subtle)" p="1" w="fit-content">
-            <Tabs.Trigger value="book" fontSize="xs" px="3">Recipe Book</Tabs.Trigger>
-            <Tabs.Trigger value="ingredients" fontSize="xs" px="3">Ingredients</Tabs.Trigger>
-            <Tabs.Indicator />
-          </Tabs.List>
+          <Box borderBottom="1px solid var(--divider)" mt="3">
+            <Tabs.List gap="0" px="0" borderBottom="none">
+              {(['book', 'ingredients'] as const).map((v) => (
+                <Tabs.Trigger
+                  key={v}
+                  value={v}
+                  fontSize="13px"
+                  px="4"
+                  h="44px"
+                  color="var(--text-muted)"
+                  fontWeight="400"
+                  borderBottom="2px solid transparent"
+                  mb="-1px"
+                  transition="color 120ms ease, border-color 120ms ease"
+                  _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
+                  _hover={{ color: 'var(--text-secondary)' }}
+                >
+                  {v === 'book' ? 'Recipe Book' : 'Ingredients'}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+          </Box>
         </Tabs.Root>
       </Box>
 

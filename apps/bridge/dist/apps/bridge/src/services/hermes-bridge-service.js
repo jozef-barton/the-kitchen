@@ -9989,6 +9989,24 @@ Emit one corrected TSX module now.`;
             throw new BridgeError(400, 'PROVIDER_CONNECT_FAILED', userMessage);
         }
     }
+    async getSoulMd(profileId) {
+        const profile = await this.ensureProfile(profileId);
+        const soulPath = path.join(profile.path ?? path.join(os.homedir(), '.hermes'), 'SOUL.md');
+        try {
+            const content = fs.readFileSync(soulPath, 'utf8');
+            return { profileId, content, exists: true };
+        }
+        catch {
+            return { profileId, content: '', exists: false };
+        }
+    }
+    async updateSoulMd(profileId, content) {
+        const profile = await this.ensureProfile(profileId);
+        const soulPath = path.join(profile.path ?? path.join(os.homedir(), '.hermes'), 'SOUL.md');
+        fs.mkdirSync(path.dirname(soulPath), { recursive: true });
+        fs.writeFileSync(soulPath, content, 'utf8');
+        return { profileId, content };
+    }
     async beginProviderAuth(input) {
         const profile = await this.ensureProfile(input.profileId);
         try {

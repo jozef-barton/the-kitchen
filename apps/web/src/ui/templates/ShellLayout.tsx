@@ -294,7 +294,6 @@ export function ShellLayout({
               flexDirection="column"
               px={{ base: '4', md: '8' }}
               pt={{ base: '5', md: '8' }}
-              maxW="1280px"
               w="100%"
             >
               {children}

@@ -13281,7 +13281,12 @@ Emit one corrected TSX module now.`;
     });
     const requestId = userMessage.requestId ?? userMessage.id;
 
-    this.options.database.appendMessage(userMessage);
+    // For recipe_refresh and recipe_action modes the user message is an
+    // operational action (e.g. "Refresh" or "Switch template"), not the
+    // session's original intent. Skip title updates so the title reflects
+    // the first real query rather than the latest action label.
+    const skipTitleUpdate = requestMode === 'recipe_refresh' || requestMode === 'recipe_action';
+    this.options.database.appendMessage(userMessage, { skipTitleUpdate });
     this.ensurePersistedRuntimeRequest(profile.id, session.id, requestId, requestPreview, userMessage.createdAt);
     let recipePipeline = createInitialRecipePipeline(userMessage.createdAt);
     activeRecipe = this.persistRecipePipeline(requestId, recipePipeline, activeRecipe) ?? activeRecipe;

@@ -1556,7 +1556,7 @@ function SettingsTabPanel({
     <Tabs.Content value={value} h="100%" minH={0} pt="3" _open={{ display: 'block' }}>
       <ScrollArea.Root h="100%" minH={0} variant="hover">
         <ScrollArea.Viewport data-testid="settings-scroll">
-          <VStack align="stretch" gap="4" pb="6" pr={{ base: '1', xl: '2' }} maxW="720px">
+          <VStack align="stretch" gap="4" pb="6" pr={{ base: '1', xl: '2' }}>
             {children}
           </VStack>
         </ScrollArea.Viewport>

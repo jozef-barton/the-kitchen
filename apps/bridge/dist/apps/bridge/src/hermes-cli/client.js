@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
-import { HermesCliActionResultSchema, HermesCliModelDiscoverySchema, RECIPE_REFRESH_USER_MESSAGE } from '@hermes-recipes/protocol';
+import { HermesCliActionResultSchema, RECIPE_REFRESH_USER_MESSAGE } from '@hermes-recipes/protocol';
 import { classifyImportedMessageKind, classifyImportedMessageVisibility, sanitizeAssistantBody, sanitizeImportedMessageContent } from '../transcript-runtime';
-export const HERMES_EXPECTED_VERSION = '0.9.0';
+export const HERMES_EXPECTED_VERSION = '0.11.0';
 const HERMES_PROVIDER_REGISTRY = {
     openrouter: {
         displayName: 'OpenRouter',
@@ -171,6 +171,66 @@ const HERMES_PROVIDER_REGISTRY = {
         supportsApiKey: true,
         supportsOAuth: false,
         description: 'KiloCode API provider.'
+    },
+    gemini: {
+        displayName: 'Google AI Studio',
+        envVar: 'GEMINI_API_KEY',
+        keyUrl: 'https://aistudio.google.com/app/apikey',
+        authKind: 'api_key',
+        supportsApiKey: true,
+        supportsOAuth: false,
+        exampleModel: 'gemini/gemini-2.5-pro-preview',
+        description: 'Google AI Studio — Gemini models via API key.'
+    },
+    'google/gemini': {
+        displayName: 'Google AI Studio',
+        envVar: 'GEMINI_API_KEY',
+        keyUrl: 'https://aistudio.google.com/app/apikey',
+        authKind: 'api_key',
+        supportsApiKey: true,
+        supportsOAuth: false,
+        exampleModel: 'gemini/gemini-2.5-pro-preview',
+        description: 'Google AI Studio — Gemini models via API key.'
+    },
+    xai: {
+        displayName: 'xAI',
+        envVar: 'XAI_API_KEY',
+        keyUrl: 'https://console.x.ai',
+        authKind: 'api_key',
+        supportsApiKey: true,
+        supportsOAuth: false,
+        exampleModel: 'xai/grok-3',
+        description: 'xAI — Grok models.'
+    },
+    nvidia: {
+        displayName: 'NVIDIA NIM',
+        envVar: 'NVIDIA_API_KEY',
+        keyUrl: 'https://build.nvidia.com',
+        authKind: 'api_key',
+        supportsApiKey: true,
+        supportsOAuth: false,
+        exampleModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        description: 'NVIDIA NIM — hosted open-source models.'
+    },
+    stepfun: {
+        displayName: 'StepFun',
+        envVar: 'STEPFUN_API_KEY',
+        keyUrl: 'https://platform.stepfun.ai',
+        authKind: 'api_key',
+        supportsApiKey: true,
+        supportsOAuth: false,
+        exampleModel: 'stepfun/step-2-16k',
+        description: 'StepFun Step Plan — reasoning models.'
+    },
+    'ollama-cloud': {
+        displayName: 'Ollama Cloud',
+        envVar: 'OLLAMA_API_KEY',
+        keyUrl: 'https://ollama.com',
+        authKind: 'api_key',
+        supportsApiKey: true,
+        supportsOAuth: false,
+        exampleModel: 'ollama/llama3.2',
+        description: 'Ollama Cloud — run open models in the cloud.'
     }
 };
 class HermesCliTimeoutError extends Error {
@@ -376,7 +436,9 @@ function parseProfileList(output) {
         const trimmed = line.trimStart();
         const marker = trimmed.startsWith('◆') ? '◆' : '';
         const withoutMarker = marker ? trimmed.slice(1).trimStart() : trimmed;
-        const [profileId, model = '', gateway = '', alias = ''] = splitCliCells(withoutMarker);
+        const [profileId, rawModel = '', gateway = '', alias = ''] = splitCliCells(withoutMarker);
+        // '—' is what Hermes prints when no model is configured on a fresh install
+        const model = rawModel === '—' ? '' : rawModel;
         return profileId
             ? [
                 {
@@ -1124,98 +1186,6 @@ function parseSkillInspect(output, identifier) {
     const source = sourceMatch?.[1]?.trim() ?? 'unknown';
     const trust = trustMatch?.[1]?.trim() ?? 'unknown';
     return { identifier, name, description, source, trust };
-}
-function mapCliConfigToRuntimeConfig(profileId, config) {
-    return {
-        profileId,
-        defaultModel: config.defaultModel,
-        provider: config.provider,
-        baseUrl: config.baseUrl,
-        apiMode: config.apiMode,
-        maxTurns: config.maxTurns,
-        reasoningEffort: config.reasoningEffort,
-        toolUseEnforcement: config.toolUseEnforcement,
-        lastSyncedAt: config.lastSyncedAt
-    };
-}
-function mapCliProviderToRuntimeProvider(profileId, provider) {
-    return {
-        id: provider.id,
-        profileId,
-        displayName: provider.displayName,
-        authKind: provider.authKind,
-        status: provider.status,
-        credentialLabel: provider.credentialLabel,
-        maskedCredential: provider.maskedCredential,
-        source: provider.source,
-        supportsApiKey: provider.supportsApiKey,
-        supportsOAuth: provider.supportsOAuth,
-        description: provider.description,
-        notes: provider.notes,
-        disabled: provider.disabled,
-        disabledReason: provider.disabledReason,
-        state: provider.state,
-        stateMessage: provider.stateMessage,
-        ready: provider.ready,
-        modelSelectionMode: provider.modelSelectionMode,
-        supportsDisconnect: provider.supportsDisconnect,
-        validation: provider.validation,
-        authSession: provider.authSession,
-        supportsModelDiscovery: provider.supportsModelDiscovery,
-        models: provider.models.map((model) => ({
-            id: model.id,
-            label: model.label,
-            providerId: model.providerId ?? provider.id,
-            description: model.description,
-            disabled: model.disabled,
-            disabledReason: model.disabledReason,
-            supportsReasoningEffort: model.supportsReasoningEffort,
-            reasoningEffortOptions: model.reasoningEffortOptions,
-            metadata: model.metadata
-        })),
-        configurationFields: provider.configurationFields.map((field) => ({
-            key: field.key,
-            label: field.label,
-            description: field.description,
-            input: field.input,
-            required: field.required,
-            secret: field.secret,
-            placeholder: field.placeholder,
-            value: field.value,
-            options: field.options,
-            disabled: field.disabled,
-            disabledReason: field.disabledReason
-        })),
-        setupSteps: provider.setupSteps.map((step) => ({
-            id: step.id,
-            kind: step.kind,
-            title: step.title,
-            description: step.description,
-            status: step.status,
-            actionLabel: step.actionLabel,
-            actionUrl: step.actionUrl,
-            command: step.command,
-            metadata: step.metadata
-        })),
-        lastSyncedAt: provider.lastSyncedAt
-    };
-}
-function mapCliDiscoveryToRuntimeState(profileId, discovery) {
-    const config = mapCliConfigToRuntimeConfig(profileId, discovery.config);
-    const providers = discovery.providers.map((provider) => mapCliProviderToRuntimeProvider(profileId, provider));
-    return {
-        config,
-        providers,
-        runtimeReadiness: {
-            ready: discovery.runtimeReadiness.ready,
-            code: discovery.runtimeReadiness.code,
-            message: discovery.runtimeReadiness.message,
-            providerId: discovery.runtimeReadiness.providerId,
-            modelId: discovery.runtimeReadiness.modelId
-        },
-        inspectedProviderId: discovery.inspectedProviderId,
-        discoveredAt: discovery.discoveredAt
-    };
 }
 function isEmailIntent(content) {
     return /\b(email|gmail|inbox|mail|unread)\b/i.test(content);
@@ -1995,6 +1965,41 @@ function buildProfileEnvironment(profile) {
         TERM: 'dumb'
     };
 }
+function resolveRuntimeReadiness(config, providers) {
+    const hasModel = config.defaultModel !== 'unknown';
+    const hasConnectedProvider = providers.some((p) => p.ready);
+    const autoProvider = config.provider === '(auto)';
+    if (!hasModel) {
+        // No model is configured at all — user must run setup.
+        const noKeys = providers.length > 0 && providers.every((p) => !p.ready);
+        return {
+            ready: false,
+            code: noKeys ? 'config_error' : 'model_missing',
+            message: noKeys
+                ? 'No model or provider credentials are configured. Open Settings to add an API key and select a model.'
+                : 'No model is selected. Open Settings to pick a model for the active provider.',
+            providerId: autoProvider ? null : config.provider,
+            modelId: null
+        };
+    }
+    if (!hasConnectedProvider && !autoProvider) {
+        // A model is set but its provider has no credentials.
+        return {
+            ready: false,
+            code: 'provider_auth_required',
+            message: `${config.provider} needs credentials. Open Settings to add an API key.`,
+            providerId: config.provider,
+            modelId: config.defaultModel
+        };
+    }
+    return {
+        ready: true,
+        code: 'ready',
+        message: `${config.provider} / ${config.defaultModel}`,
+        providerId: config.provider,
+        modelId: config.defaultModel
+    };
+}
 export class HermesCli {
     runner;
     cliPath;
@@ -2291,21 +2296,6 @@ export class HermesCli {
             throw new Error(result.stderr.trim() || `Failed to install Hermes skill "${identifier}".`);
         }
     }
-    parseDiscoveryJsonResult(args, result) {
-        const stdout = normalizeOutput(result.stdout);
-        const combinedOutput = combineCliOutput(result);
-        const commandLabel = formatCliCommand(args);
-        if (stdout.length === 0) {
-            throw new Error(`${commandLabel} did not return authoritative structured JSON. ${combinedOutput || 'The Hermes backend returned no JSON output.'}`);
-        }
-        try {
-            return HermesCliModelDiscoverySchema.parse(JSON.parse(stdout));
-        }
-        catch (error) {
-            const detail = error instanceof Error ? error.message : 'Unknown JSON validation failure.';
-            throw new Error(`${commandLabel} returned invalid authoritative discovery output. ${detail}`);
-        }
-    }
     parseStructuredActionResult(args, result) {
         const stdout = normalizeOutput(result.stdout);
         const combinedOutput = combineCliOutput(result);
@@ -2549,10 +2539,10 @@ export class HermesCli {
             description: provider.ready
                 ? `Using the configured model on ${name}.`
                 : meta?.exampleModel
-                    ? `Set the default model. Example: hermes config set model ${meta.exampleModel}`
-                    : `Set the default model with: hermes config set model <provider>/<model>`,
+                    ? `Set the default model. Example: hermes config set model.default ${meta.exampleModel}`
+                    : `Set the default model with: hermes config set model.default <provider>/<model>`,
             status: provider.ready ? 'completed' : connected ? 'action_required' : 'blocked',
-            command: provider.ready ? undefined : `hermes config set model ${meta?.exampleModel ?? `${id}/<model>`}`,
+            command: provider.ready ? undefined : `hermes config set model.default ${meta?.exampleModel ?? `${id}/<model>`}`,
             metadata: {}
         });
         // Step 5: Verify
@@ -2571,15 +2561,17 @@ export class HermesCli {
     parseDumpConfig(dumpOutput, profileId, now) {
         const modelMatch = dumpOutput.match(/^model:\s+(.+)$/m);
         const providerMatch = dumpOutput.match(/^provider:\s+(.+)$/m);
-        const model = modelMatch?.[1]?.trim() ?? 'unknown';
+        const rawModel = modelMatch?.[1]?.trim() ?? 'unknown';
+        // '(not set)' appears when the model dict has no 'default' key — treat as unknown.
+        const model = rawModel === '(not set)' ? 'unknown' : rawModel;
         const provider = providerMatch?.[1]?.trim() ?? 'unknown';
-        // Try to read the config YAML for extra fields (base_url, api_mode, max_turns, etc.)
         let baseUrl;
         let apiMode;
-        let maxTurns = 150;
+        // Default to 90, the Hermes CLI default. Overridden below if config_overrides says otherwise.
+        let maxTurns = 90;
         let reasoningEffort;
         let toolUseEnforcement;
-        // Parse config_overrides section from dump for max_turns, reasoning_effort, etc.
+        // Parse config_overrides section from dump for settings that differ from Hermes defaults.
         const overridesMatch = dumpOutput.match(/^config_overrides:\n((?: {2}.+\n)*)/m);
         if (overridesMatch?.[1]) {
             const lines = overridesMatch[1].split('\n').filter(Boolean);
@@ -2589,11 +2581,47 @@ export class HermesCli {
                     continue;
                 const [, key, value] = kv;
                 if (key === 'agent.max_turns')
-                    maxTurns = parseInt(value, 10) || 150;
+                    maxTurns = parseInt(value, 10) || 90;
                 if (key === 'agent.reasoning_effort')
                     reasoningEffort = value.trim();
                 if (key === 'agent.tool_use_enforcement')
                     toolUseEnforcement = value.trim();
+                if (key === 'model.base_url')
+                    baseUrl = value.trim();
+                if (key === 'model.api_mode')
+                    apiMode = value.trim();
+            }
+        }
+        // Fall back to reading config.yaml for base_url and api_mode when not in config_overrides.
+        // This covers the common case where they're set in the main config block.
+        if ((!baseUrl || !apiMode) && profileId) {
+            try {
+                // Resolve the profile's config path. For the default profile, path IS the hermes home.
+                const candidatePaths = [];
+                const hermesHome = path.join(os.homedir(), '.hermes');
+                // Check profile-specific path first, then default home
+                const profilePath = path.join(hermesHome, 'profiles', profileId);
+                candidatePaths.push(path.join(profilePath, 'config.yaml'));
+                candidatePaths.push(path.join(hermesHome, 'config.yaml'));
+                for (const configPath of candidatePaths) {
+                    if (fs.existsSync(configPath)) {
+                        const configYaml = fs.readFileSync(configPath, 'utf8');
+                        if (!baseUrl) {
+                            const m = configYaml.match(/^\s+base_url:\s+(.+)$/m);
+                            if (m?.[1]?.trim())
+                                baseUrl = m[1].trim();
+                        }
+                        if (!apiMode) {
+                            const m = configYaml.match(/^\s+api_mode:\s+(.+)$/m);
+                            if (m?.[1]?.trim())
+                                apiMode = m[1].trim();
+                        }
+                        break;
+                    }
+                }
+            }
+            catch {
+                // Config read is best-effort
             }
         }
         return {
@@ -2610,132 +2638,96 @@ export class HermesCli {
     }
     async runRuntimeProviderDiscoveryDump(profile, _inspectedProviderId, signal) {
         const env = buildProfileEnvironment(profile);
-        // Try JSON discovery first (hermes model --json), fall back to dump parsing
-        try {
-            const jsonArgs = ['model', '--json'];
-            const jsonResult = await this.run(jsonArgs, env, signal);
-            const discovery = this.parseDiscoveryJsonResult(jsonArgs, jsonResult);
-            return mapCliDiscoveryToRuntimeState(profile.id, discovery);
+        const dumpResult = await this.run(['dump'], env, signal);
+        const dumpOutput = normalizeOutput(dumpResult.stdout);
+        const now = this.now();
+        const config = this.parseDumpConfig(dumpOutput, profile.id, now);
+        // '(auto)' means hermes is routing through a credential pool rather than an
+        // explicit provider setting. Resolve it to the real backing provider so we can
+        // find its entry, load cached models, and populate configurationFields correctly.
+        if (config.provider === '(auto)' || config.provider === 'unknown') {
+            const resolved = this.resolveAutoProvider(dumpOutput, profile);
+            if (resolved) {
+                config.provider = resolved;
+            }
         }
-        catch {
-            // Fall back to hermes dump for v0.9.0+
-            const dumpResult = await this.run(['dump'], env, signal);
-            const dumpOutput = normalizeOutput(dumpResult.stdout);
-            const now = this.now();
-            const config = this.parseDumpConfig(dumpOutput, profile.id, now);
-            // '(auto)' means hermes is routing through a credential pool rather than an
-            // explicit provider setting. Resolve it to the real backing provider so we can
-            // find its entry, load cached models, and populate configurationFields correctly.
-            if (config.provider === '(auto)' || config.provider === 'unknown') {
-                const resolved = this.resolveAutoProvider(dumpOutput, profile);
-                if (resolved) {
-                    config.provider = resolved;
-                }
-            }
-            const providers = this.parseDumpProviders(dumpOutput, profile.id, config.provider, now);
-            // Try to read config.yaml for base_url and api_mode before building fields
-            if (profile.path) {
-                try {
-                    const configPath = path.join(profile.path, 'config.yaml');
-                    if (fs.existsSync(configPath)) {
-                        const configYaml = fs.readFileSync(configPath, 'utf8');
-                        const baseUrlMatch = configYaml.match(/^\s+base_url:\s+(.+)$/m);
-                        const apiModeMatch = configYaml.match(/^\s+api_mode:\s+(.+)$/m);
-                        if (baseUrlMatch?.[1]?.trim()) {
-                            config.baseUrl = baseUrlMatch[1].trim();
-                        }
-                        if (apiModeMatch?.[1]?.trim()) {
-                            config.apiMode = apiModeMatch[1].trim();
-                        }
-                    }
-                }
-                catch {
-                    // Config read is best-effort
-                }
-            }
-            // Populate the active provider with model data and configuration fields
-            const activeProviderEntry = providers.find((p) => p.id === config.provider);
-            if (activeProviderEntry && config.defaultModel !== 'unknown') {
-                const hermesHome = this.resolveHermesHome(profile);
-                const cachedModelOptions = this.loadModelsFromDevCache(hermesHome, config.provider);
-                const hasCachedModels = cachedModelOptions.length > 0;
-                activeProviderEntry.supportsModelDiscovery = true;
-                activeProviderEntry.models = hasCachedModels
-                    ? cachedModelOptions.map((opt) => ({
-                        id: opt.value,
-                        label: opt.label,
+        const providers = this.parseDumpProviders(dumpOutput, profile.id, config.provider, now);
+        // Populate the active provider with model data and configuration fields
+        const activeProviderEntry = providers.find((p) => p.id === config.provider);
+        if (activeProviderEntry && config.defaultModel !== 'unknown') {
+            const hermesHome = this.resolveHermesHome(profile);
+            const cachedModelOptions = this.loadModelsFromDevCache(hermesHome, config.provider);
+            const hasCachedModels = cachedModelOptions.length > 0;
+            activeProviderEntry.supportsModelDiscovery = true;
+            activeProviderEntry.models = hasCachedModels
+                ? cachedModelOptions.map((opt) => ({
+                    id: opt.value,
+                    label: opt.label,
+                    providerId: config.provider,
+                    disabled: false,
+                    supportsReasoningEffort: false,
+                    reasoningEffortOptions: [],
+                    metadata: {}
+                }))
+                : [{
+                        id: config.defaultModel,
+                        label: config.defaultModel,
                         providerId: config.provider,
                         disabled: false,
                         supportsReasoningEffort: false,
                         reasoningEffortOptions: [],
                         metadata: {}
-                    }))
-                    : [{
-                            id: config.defaultModel,
-                            label: config.defaultModel,
-                            providerId: config.provider,
-                            disabled: false,
-                            supportsReasoningEffort: false,
-                            reasoningEffortOptions: [],
-                            metadata: {}
-                        }];
-                activeProviderEntry.configurationFields = [
-                    {
-                        key: 'defaultModel',
-                        label: 'Default model',
-                        input: hasCachedModels ? 'select' : 'text',
-                        required: true,
-                        secret: false,
-                        disabled: false,
-                        placeholder: hasCachedModels ? undefined : 'e.g. openai/gpt-4o',
-                        value: config.defaultModel,
-                        options: hasCachedModels
-                            ? cachedModelOptions.map((opt) => ({ value: opt.value, label: opt.label, disabled: false }))
-                            : [{ value: config.defaultModel, label: config.defaultModel, disabled: false }]
-                    },
-                    {
-                        key: 'baseUrl',
-                        label: 'Base URL',
-                        input: 'url',
-                        required: false,
-                        secret: false,
-                        disabled: false,
-                        value: config.baseUrl,
-                        options: []
-                    },
-                    {
-                        key: 'apiMode',
-                        label: 'API mode',
-                        input: 'select',
-                        required: false,
-                        secret: false,
-                        disabled: false,
-                        value: config.apiMode,
-                        options: [
-                            { value: 'chat_completions', label: 'Chat Completions', disabled: false },
-                            { value: 'responses', label: 'Responses', disabled: false }
-                        ]
-                    }
-                ];
-            }
-            // Generate setup steps for all providers
-            for (const provider of providers) {
-                provider.setupSteps = this.buildDumpSetupSteps(provider);
-            }
-            return {
-                config,
-                providers,
-                runtimeReadiness: {
-                    ready: true,
-                    code: 'ready',
-                    message: `${config.provider} / ${config.defaultModel}`,
-                    providerId: config.provider,
-                    modelId: config.defaultModel
+                    }];
+            activeProviderEntry.configurationFields = [
+                {
+                    key: 'defaultModel',
+                    label: 'Default model',
+                    input: hasCachedModels ? 'select' : 'text',
+                    required: true,
+                    secret: false,
+                    disabled: false,
+                    placeholder: hasCachedModels ? undefined : 'e.g. openai/gpt-4o',
+                    value: config.defaultModel,
+                    options: hasCachedModels
+                        ? cachedModelOptions.map((opt) => ({ value: opt.value, label: opt.label, disabled: false }))
+                        : [{ value: config.defaultModel, label: config.defaultModel, disabled: false }]
                 },
-                inspectedProviderId: config.provider,
-                discoveredAt: now
-            };
+                {
+                    key: 'baseUrl',
+                    label: 'Base URL',
+                    input: 'url',
+                    required: false,
+                    secret: false,
+                    disabled: false,
+                    value: config.baseUrl,
+                    options: []
+                },
+                {
+                    key: 'apiMode',
+                    label: 'API mode',
+                    input: 'select',
+                    required: false,
+                    secret: false,
+                    disabled: false,
+                    value: config.apiMode,
+                    options: [
+                        { value: 'chat_completions', label: 'Chat Completions', disabled: false },
+                        { value: 'responses', label: 'Responses', disabled: false }
+                    ]
+                }
+            ];
         }
+        // Generate setup steps for all providers
+        for (const provider of providers) {
+            provider.setupSteps = this.buildDumpSetupSteps(provider);
+        }
+        return {
+            config,
+            providers,
+            runtimeReadiness: resolveRuntimeReadiness(config, providers),
+            inspectedProviderId: config.provider,
+            discoveredAt: now
+        };
     }
     async discoverRuntimeProviderState(profile, inspectedProviderId, signal) {
         return this.runRuntimeProviderDiscoveryDump(profile, inspectedProviderId, signal);
@@ -2745,17 +2737,40 @@ export class HermesCli {
     }
     async updateRuntimeModelConfig(profile, input, signal) {
         const env = buildProfileEnvironment(profile);
-        // v0.9.0+: use 'config set' for model/provider changes
+        // Apply each field via 'hermes config set'. Always set provider and model.default together
+        // so the yaml stays in dict form and neither key clobbers the other.
+        if (input.provider) {
+            await this.run(['config', 'set', 'model.provider', input.provider], env, signal);
+        }
         if (input.defaultModel) {
-            await this.run(['config', 'set', 'model', input.defaultModel], env, signal);
+            // Use 'model.default' (dict key) not 'model' (scalar) — setting the scalar form
+            // overwrites any sibling keys (provider, base_url, api_mode) already in the config.
+            await this.run(['config', 'set', 'model.default', input.defaultModel], env, signal);
+        }
+        if (input.baseUrl !== undefined) {
+            await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+        }
+        if (input.apiMode !== undefined) {
+            await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+        }
+        if (input.maxTurns !== undefined) {
+            await this.run(['config', 'set', 'agent.max_turns', String(input.maxTurns)], env, signal);
+        }
+        if (input.reasoningEffort !== undefined) {
+            await this.run(['config', 'set', 'agent.reasoning_effort', input.reasoningEffort], env, signal);
         }
         return this.getRuntimeModelConfig(profile);
     }
     async beginProviderAuth(profile, providerId, signal) {
-        // v0.9.0+: use 'hermes login' for provider auth
         const env = buildProfileEnvironment(profile);
+        // hermes login only supports OAuth providers (nous, openai-codex). Pass --provider so we
+        // don't default to nous when the user is authenticating a different OAuth provider.
+        const OAUTH_PROVIDERS = new Set(['nous', 'openai-codex']);
+        const loginArgs = OAUTH_PROVIDERS.has(providerId)
+            ? ['login', '--provider', providerId]
+            : ['login'];
         try {
-            await this.run(['login'], env, signal);
+            await this.run(loginArgs, env, signal);
         }
         catch {
             // Login is interactive — may fail in headless mode
@@ -2766,7 +2781,28 @@ export class HermesCli {
         return this.discoverRuntimeProviderState(profile, providerId, signal);
     }
     async connectProvider(profile, input, signal) {
-        // v0.9.0+: API keys are set via hermes config or .env
+        const env = buildProfileEnvironment(profile);
+        // Write the API key to the profile's .env file via 'hermes config set <ENV_VAR> <key>'.
+        // The caller may supply a specific env var name via input.label; fall back to the
+        // registry's primary env var for the provider.
+        if (input.apiKey) {
+            const meta = HERMES_PROVIDER_REGISTRY[input.provider];
+            const envVarName = (input.label && /^[A-Z][A-Z0-9_]*$/.test(input.label))
+                ? input.label
+                : meta?.envVar;
+            if (envVarName) {
+                await this.run(['config', 'set', envVarName, input.apiKey], env, signal);
+            }
+        }
+        // If baseUrl or apiMode are provided, persist them via model config
+        if (input.baseUrl || input.apiMode) {
+            if (input.baseUrl) {
+                await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+            }
+            if (input.apiMode) {
+                await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+            }
+        }
         return this.discoverRuntimeProviderState(profile, input.provider, signal);
     }
     async deleteGmailMessages(profile, messageIds, signal) {

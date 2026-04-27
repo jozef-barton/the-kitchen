@@ -421,3 +421,16 @@ export const ResolveImagesResponseSchema = z.object({
         error: z.string().nullable()
     }))
 });
+export const GetSoulMdResponseSchema = z.object({
+    profileId: z.string().min(1),
+    content: z.string(),
+    exists: z.boolean()
+});
+export const UpdateSoulMdRequestSchema = z.object({
+    profileId: z.string().min(1),
+    content: z.string()
+});
+export const UpdateSoulMdResponseSchema = z.object({
+    profileId: z.string().min(1),
+    content: z.string()
+});
