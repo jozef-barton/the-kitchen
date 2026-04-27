@@ -1023,6 +1023,23 @@ export function createBridgeServer(options: {
         return;
       }
 
+      if (request.method === 'POST' && pathname === '/api/hermes/install') {
+        preferSseErrors = true;
+        sendSseHeaders(response, originDecision.allowOrigin);
+        try {
+          await hermesCli.streamInstall((line) => {
+            if (!response.writableEnded) {
+              writeSseEvent(response, { type: 'output', line });
+            }
+          });
+          writeSseEvent(response, { type: 'complete' });
+        } catch (err) {
+          writeSseEvent(response, { type: 'error', detail: err instanceof Error ? err.message : 'Install failed' });
+        }
+        response.end();
+        return;
+      }
+
       if (request.method === 'GET' && !pathname.startsWith('/api/') && options.staticDirectory) {
         serveStaticAsset(response, options.staticDirectory, pathname, database.getSettings().themeMode);
         return;

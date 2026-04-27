@@ -9,6 +9,7 @@ import { SkillsPage } from './ui/pages/SkillsPage';
 import { RecipesPage } from './ui/pages/RecipesPage';
 import { SettingsPage } from './ui/pages/SettingsPage';
 import { ToolsPage } from './ui/pages/ToolsPage';
+import { HermesSetupPage } from './ui/pages/HermesSetupPage';
 import { ModelSelector } from './ui/molecules/ModelSelector';
 import { TabBar } from './ui/molecules/TabBar';
 import { ShellLayout, Sidebar } from './ui/templates/ShellLayout';
@@ -79,6 +80,15 @@ export function App() {
           </Button>
         </VStack>
       </Center>
+    );
+  }
+
+  // Show setup page when Hermes is not installed
+  if (controller.bootstrap && !controller.bootstrap.hermesVersion) {
+    return (
+      <HermesSetupPage
+        onComplete={() => void controller.refreshBootstrap({ preservePage: false, openPreferredSession: false })}
+      />
     );
   }
 

@@ -5030,7 +5030,7 @@ ${JSON.stringify({
 const args = process.argv.slice(2);
 
 if (args.includes('--version')) {
-  process.stdout.write('Hermes Agent v0.9.0 (2026.4.13)\n');
+  process.stdout.write('Hermes Agent v0.11.0 (2026.4.23)\n');
   process.exit(0);
 }
 
@@ -5206,7 +5206,7 @@ if (command === 'dump') {
   const authProviders = getAuthProvidersForProfile(state, profile.id);
   print(`model: ${profile.runtimeConfig.defaultModel}`);
   print(`provider: ${profile.runtimeConfig.provider}`);
-  print(`version: 0.9.0`);
+  print(`version: 0.11.0`);
   print('');
   print('api_keys:');
   const providerIds = ['openrouter', 'anthropic', 'nous', 'minimax', 'ai_gateway'];

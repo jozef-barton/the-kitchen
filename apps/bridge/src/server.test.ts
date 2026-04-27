@@ -435,7 +435,7 @@ describe.sequential('bridge server', () => {
     expect(updated.config.defaultModel).toBe('anthropic/claude-3.7-sonnet');
     // provider is updated via config set model.provider when included in the request
     expect(updated.config.provider).toBe('anthropic');
-    // connectProvider in v0.9.0 delegates to discovery — returns provider state
+    // connectProvider delegates to discovery — returns provider state
     expect(connected.config).toBeTruthy();
     expect(connected.providers.length).toBeGreaterThan(0);
     expect(otherProfileProviders.config.profileId).toBe('jbarton');
@@ -482,7 +482,7 @@ describe.sequential('bridge server', () => {
     await server.close();
   });
 
-  it('uses discovery and login for provider auth routes in v0.9.0', async () => {
+  it('uses discovery and login for provider auth routes', async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-provider-discovery-'));
     tempRoots.push(tempRoot);
     const server = await startServer(tempRoot);
@@ -520,7 +520,7 @@ describe.sequential('bridge server', () => {
     });
     expect(openrouter?.configurationFields.find((field) => field.key === 'defaultModel')?.options.length).toBeGreaterThan(0);
     expect(openrouter?.modelSelectionMode).toBe('select_only');
-    // In v0.9.0, beginProviderAuth calls login then discovery
+    // beginProviderAuth calls login then discovery
     expect(beginAuth.runtimeReadiness.ready).toBe(true);
     // pollProviderAuth just calls discovery
     expect(pollResult.runtimeReadiness.ready).toBe(true);
@@ -528,7 +528,7 @@ describe.sequential('bridge server', () => {
     await server.close();
   });
 
-  it('falls back to dump when model --json is unavailable in v0.9.0', async () => {
+  it('falls back to dump when model --json is unavailable', async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-provider-fallback-unavailable-'));
     tempRoots.push(tempRoot);
     const server = await startServer(tempRoot, {
@@ -538,7 +538,7 @@ describe.sequential('bridge server', () => {
     const providers = await fetch(`${server.baseUrl}/api/model-providers?profileId=jbarton&inspectedProviderId=openrouter`);
     const payload = await readJson<ModelProviderResponse>(providers);
 
-    // In v0.9.0, when model --json fails, the client falls back to hermes dump
+    // when model --json is unavailable, the client falls back to hermes dump
     expect(providers.status).toBe(200);
     expect(payload.runtimeReadiness.ready).toBe(true);
     expect(payload.config.defaultModel).toBeTruthy();
@@ -546,7 +546,7 @@ describe.sequential('bridge server', () => {
     await server.close();
   });
 
-  it('falls back to dump when model --json returns invalid data in v0.9.0', async () => {
+  it('falls back to dump when model --json returns invalid data', async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-provider-fallback-invalid-'));
     tempRoots.push(tempRoot);
     const server = await startServer(tempRoot, {
@@ -556,7 +556,7 @@ describe.sequential('bridge server', () => {
     const providers = await fetch(`${server.baseUrl}/api/model-providers?profileId=jbarton&inspectedProviderId=openrouter`);
     const payload = await readJson<ModelProviderResponse>(providers);
 
-    // In v0.9.0, when model --json returns invalid data, the client falls back to hermes dump
+    // when model --json returns invalid data, the client falls back to hermes dump
     expect(providers.status).toBe(200);
     expect(payload.runtimeReadiness.ready).toBe(true);
 
@@ -2173,12 +2173,12 @@ Keep summaries short and searchable for the active profile.
     await server.close();
   });
 
-  it('provider update and connect succeed via config set and discovery in v0.9.0', async () => {
+  it('provider update and connect succeed via config set and discovery', async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-provider-telemetry-'));
     tempRoots.push(tempRoot);
     const server = await startServer(tempRoot);
 
-    // In v0.9.0, config set + discovery succeeds even for unknown models
+    // config set + discovery succeeds even for unknown models
     const update = await fetch(`${server.baseUrl}/api/model-providers`, {
       method: 'PUT',
       headers: {
@@ -2190,7 +2190,7 @@ Keep summaries short and searchable for the active profile.
         defaultModel: 'openai/does-not-exist'
       })
     });
-    // In v0.9.0, connectProvider just runs discovery
+    // connectProvider delegates to dump-based discovery
     const connect = await fetch(`${server.baseUrl}/api/provider-connections`, {
       method: 'POST',
       headers: {

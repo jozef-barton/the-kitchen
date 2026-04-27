@@ -433,6 +433,13 @@ function createDefaultHermesCliRunner(cliPath: string): HermesCliRunner {
               return;
             }
 
+            // ENOENT = binary does not exist — reject so callers detect "not installed"
+            // rather than silently receiving an empty successful result.
+            if ((error as ExecFileException)?.code === 'ENOENT') {
+              reject(error);
+              return;
+            }
+
             resolve({
               stdout: typeof stdout === 'string' ? stdout : '',
               stderr: typeof stderr === 'string' ? stderr : '',
@@ -3013,6 +3020,17 @@ export class HermesCli {
     return null;
   }
 
+  private writeEnvVarDirect(profile: Pick<Profile, 'path'>, key: string, value: string): void {
+    const hermesHome = path.join(os.homedir(), '.hermes');
+    fs.mkdirSync(hermesHome, { recursive: true });
+    const envPath = path.join(hermesHome, '.env');
+    let existing = '';
+    try { existing = fs.readFileSync(envPath, 'utf-8'); } catch { /* new file */ }
+    const lines = existing.split('\n').filter(l => l.trim() && !l.startsWith(`${key}=`));
+    lines.push(`${key}=${value}`);
+    fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf-8');
+  }
+
   private resolveHermesHome(profile: Pick<Profile, 'path'>): string {
     if (profile.path) {
       // Default profile: path IS the home dir (contains models_dev_cache.json directly)
@@ -3311,13 +3329,87 @@ export class HermesCli {
     };
   }
 
+  private buildNotInstalledProviderState(profileId: string): RuntimeProviderDiscoveryResult {
+    const now = this.now();
+    // Populate all known providers so the Settings page can show them and the user
+    // can enter API keys (saved directly to .env via writeEnvVarDirect fallback).
+    const providers: RuntimeProviderOption[] = Object.entries(HERMES_PROVIDER_REGISTRY).map(([id, meta]) => ({
+      id,
+      profileId,
+      displayName: meta.displayName,
+      authKind: meta.authKind,
+      status: 'missing' as const,
+      source: 'local_config' as const,
+      supportsApiKey: meta.supportsApiKey,
+      supportsOAuth: meta.supportsOAuth,
+      lastSyncedAt: now,
+      state: (meta.supportsOAuth && !meta.supportsApiKey) ? 'needs_oauth' as const : 'needs_api_key' as const,
+      stateMessage: meta.supportsApiKey
+        ? `Enter your ${meta.displayName} API key to use this provider.`
+        : `OAuth login required for ${meta.displayName}.`,
+      ready: false,
+      modelSelectionMode: 'select_only' as const,
+      disabled: false,
+      supportsDisconnect: false,
+      supportsModelDiscovery: false,
+      models: [],
+      // value must be undefined (not '') — OptionalTextSchema requires min(1) or undefined
+      configurationFields: meta.supportsApiKey ? [
+        {
+          key: 'apiKey' as const,
+          label: 'API Key',
+          input: 'text' as const,
+          required: true,
+          secret: true,
+          disabled: false,
+          placeholder: meta.keyUrl ? `Get your key at ${meta.keyUrl}` : `Paste your ${meta.displayName} API key`,
+          value: undefined,
+          options: []
+        }
+      ] : [],
+      setupSteps: []
+    }));
+
+    // Build setup steps for each provider using the shared builder
+    for (const provider of providers) {
+      provider.setupSteps = this.buildDumpSetupSteps(provider);
+    }
+
+    const defaultProvider = 'openrouter';
+    return {
+      config: { profileId, provider: defaultProvider, defaultModel: 'unknown', maxTurns: 150, lastSyncedAt: now },
+      providers,
+      runtimeReadiness: {
+        ready: false,
+        code: 'runtime_state_unavailable',
+        message: 'Hermes is not installed. Enter your API key — it will be saved and used once Hermes is set up.',
+        providerId: null,
+        modelId: null
+      },
+      inspectedProviderId: defaultProvider,
+      discoveredAt: now
+    };
+  }
+
   private async runRuntimeProviderDiscoveryDump(
     profile: Profile,
     _inspectedProviderId?: string | null,
     signal?: AbortSignal
   ) {
     const env = buildProfileEnvironment(profile);
-    const dumpResult = await this.run(['dump'], env, signal);
+    let dumpResultOrNull: HermesCliExecutionResult | null = null;
+    try {
+      dumpResultOrNull = await this.run(['dump'], env, signal);
+    } catch (error) {
+      // ENOENT (binary not found) or similar — Hermes not installed.
+      const msg = error instanceof Error ? error.message : '';
+      const errCode = (error as { code?: string })?.code;
+      if (msg.includes('ENOENT') || msg.includes('not found') || msg.includes('Cannot find') || errCode === 'ENOENT') {
+        return this.buildNotInstalledProviderState(profile.id);
+      }
+      throw error;
+    }
+    const dumpResult = dumpResultOrNull;
     const dumpOutput = normalizeOutput(dumpResult.stdout);
     const now = this.now();
 
@@ -3403,6 +3495,35 @@ export class HermesCli {
         ];
       }
 
+      // Add an API key input field for any provider that needs credentials but has none.
+      // This is what renders the password input in the Settings drawer.
+      // NOTE: value must be undefined, not '' — OptionalTextSchema enforces min(1) or undefined.
+      for (const provider of providers) {
+        if (
+          provider.supportsApiKey &&
+          (provider.state === 'needs_api_key' || provider.state === 'unconfigured') &&
+          !provider.configurationFields.some((f) => f.key === 'apiKey')
+        ) {
+          const meta = HERMES_PROVIDER_REGISTRY[provider.id];
+          provider.configurationFields = [
+            {
+              key: 'apiKey' as const,
+              label: 'API Key',
+              input: 'text' as const,
+              required: true,
+              secret: true,
+              disabled: false,
+              placeholder: meta?.keyUrl
+                ? `Get your key at ${meta.keyUrl}`
+                : `Paste your ${provider.displayName} API key`,
+              value: undefined,
+              options: []
+            },
+            ...provider.configurationFields
+          ];
+        }
+      }
+
       // Generate setup steps for all providers
       for (const provider of providers) {
         provider.setupSteps = this.buildDumpSetupSteps(provider);
@@ -3419,6 +3540,145 @@ export class HermesCli {
 
   async discoverRuntimeProviderState(profile: Profile, inspectedProviderId?: string | null, signal?: AbortSignal) {
     return this.runRuntimeProviderDiscoveryDump(profile, inspectedProviderId, signal);
+  }
+
+  streamInstall(onOutput: (line: string) => void): Promise<void> {
+    // CI=1 and HERMES_SKIP_SETUP=1 suppress the interactive setup wizard.
+    // GIT_TERMINAL_PROMPT=0 and GIT_ASKPASS prevent git from hanging waiting
+    // for credentials when stdin is /dev/null (which it is in our subprocess).
+    const installEnv = {
+      ...process.env,
+      CI: '1',
+      HERMES_SKIP_SETUP: '1',
+      HERMES_NO_WIZARD: '1',
+      DEBIAN_FRONTEND: 'noninteractive',
+      // Prevent git from prompting for credentials — fails fast instead of hanging
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_ASKPASS: '/bin/echo',
+      GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no',
+    };
+
+    const runStep = (label: string, cmd: string): Promise<void> => {
+      onOutput(`\n→ ${label}`);
+      return new Promise((resolve, reject) => {
+        const child = spawn('/bin/bash', ['-c', cmd], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: installEnv,
+        });
+        child.stdout.setEncoding('utf-8');
+        child.stderr.setEncoding('utf-8');
+        const handleLine = (line: string) => {
+          if (!line.trim()) return;
+          onOutput(line);
+          if (line.includes('Cloning into')) {
+            onOutput('  (cloning repository — this may take 2–5 minutes, please wait…)');
+          }
+        };
+        child.stdout.on('data', (chunk: string) => { for (const l of chunk.split('\n')) handleLine(l); });
+        child.stderr.on('data', (chunk: string) => { for (const l of chunk.split('\n')) handleLine(l); });
+        child.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`${label} exited with code ${code}`));
+        });
+        child.on('error', reject);
+      });
+    };
+
+    // Run the install script but kill it the moment the interactive setup wizard
+    // starts — by that point git clone + venv + pip install are all done.
+    // We handle provider configuration ourselves through the app's Settings page.
+    const runInstallUntilWizard = (): Promise<void> => {
+      onOutput('\n→ Installing Hermes…');
+      return new Promise((resolve, reject) => {
+        const child = spawn('/bin/bash', ['-c',
+          'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | CI=1 HERMES_SKIP_SETUP=1 bash'
+        ], { stdio: ['ignore', 'pipe', 'pipe'], env: installEnv });
+
+        child.stdout.setEncoding('utf-8');
+        child.stderr.setEncoding('utf-8');
+
+        let resolved = false;
+        const finish = (err?: Error) => {
+          if (resolved) return;
+          resolved = true;
+          if (err) reject(err); else resolve();
+        };
+
+        const handleLine = (line: string) => {
+          if (!line.trim()) return;
+          // Kill and resolve successfully when the interactive wizard begins —
+          // everything we need is already installed at this point.
+          if (line.toLowerCase().includes('setup wizard') || line.toLowerCase().includes('starting setup')) {
+            onOutput('  (setup wizard detected — skipping, configure providers in Settings)');
+            child.kill('SIGTERM');
+            finish();
+            return;
+          }
+          onOutput(line);
+          if (line.includes('Cloning into')) {
+            onOutput('  (cloning repository — this may take 2–5 minutes, please wait…)');
+          }
+        };
+
+        child.stdout.on('data', (chunk: string) => { for (const l of chunk.split('\n')) handleLine(l); });
+        child.stderr.on('data', (chunk: string) => { for (const l of chunk.split('\n')) handleLine(l); });
+        child.on('close', (code) => {
+          // SIGTERM gives code null/-1; normal exit 0 = success; anything else = error
+          if (code === 0 || code === null || code === -1) finish();
+          else finish(new Error(`Install script exited with code ${code}`));
+        });
+        child.on('error', (err) => finish(err));
+      });
+    };
+
+    return (async () => {
+      // Step 1: Install Hermes, killing the process when the wizard starts
+      await runInstallUntilWizard();
+
+      // Step 2: Pin to the exact version this bridge expects
+      const hermesAgentDir = path.join(os.homedir(), '.hermes', 'hermes-agent');
+      if (fs.existsSync(path.join(hermesAgentDir, '.git'))) {
+        onOutput(`\n→ Pinning to Hermes v${HERMES_EXPECTED_VERSION}…`);
+
+        // Find the commit for the expected version from the git log
+        const findCommit = await new Promise<string | null>((resolve) => {
+          const git = spawn('/bin/bash', [
+            '-c',
+            `cd "${hermesAgentDir}" && git fetch --tags -q 2>/dev/null; ` +
+            `git log --oneline --all | grep -im1 "${HERMES_EXPECTED_VERSION}" | awk '{print $1}'`
+          ], { stdio: ['ignore', 'pipe', 'ignore'], env: installEnv });
+          let out = '';
+          git.stdout.setEncoding('utf-8');
+          git.stdout.on('data', (c: string) => { out += c; });
+          git.on('close', () => resolve(out.trim() || null));
+          git.on('error', () => resolve(null));
+        });
+
+        if (findCommit) {
+          await runStep(
+            `Checking out commit ${findCommit}…`,
+            `cd "${hermesAgentDir}" && git checkout ${findCommit} -q`
+          ).catch(() => {
+            onOutput(`  (version pin failed — continuing with installed version)`);
+          });
+
+          // Re-install the pinned version's Python package
+          const pythonPath = path.join(hermesAgentDir, 'venv', 'bin', 'python');
+          if (fs.existsSync(pythonPath)) {
+            await runStep(
+              'Rebuilding Python environment for pinned version…',
+              `cd "${hermesAgentDir}" && "${pythonPath}" -m pip install -e . -q 2>&1`
+            ).catch(() => {
+              onOutput(`  (pip install step failed — continuing)`);
+            });
+          }
+        } else {
+          onOutput(`  (could not find commit for v${HERMES_EXPECTED_VERSION} — using installed version)`);
+        }
+      }
+
+      onOutput(`\n✓ Hermes v${HERMES_EXPECTED_VERSION} ready`);
+    })();
   }
 
   async getRuntimeModelConfig(profile: Profile) {
@@ -3492,17 +3752,30 @@ export class HermesCli {
         ? input.label
         : meta?.envVar;
       if (envVarName) {
-        await this.run(['config', 'set', envVarName, input.apiKey], env, signal);
+        try {
+          await this.run(['config', 'set', envVarName, input.apiKey], env, signal);
+        } catch {
+          // Hermes not installed — write directly to ~/.hermes/.env
+          this.writeEnvVarDirect(profile, envVarName, input.apiKey);
+        }
       }
     }
 
     // If baseUrl or apiMode are provided, persist them via model config
     if (input.baseUrl || input.apiMode) {
       if (input.baseUrl) {
-        await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+        try {
+          await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+        } catch {
+          // Hermes not installed — skip; can be configured once Hermes is installed
+        }
       }
       if (input.apiMode) {
-        await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+        try {
+          await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+        } catch {
+          // Hermes not installed — skip; can be configured once Hermes is installed
+        }
       }
     }
 
