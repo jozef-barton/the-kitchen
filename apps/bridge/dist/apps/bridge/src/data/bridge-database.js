@@ -886,6 +886,7 @@ export class BridgeDatabase {
             .run();
         this.ensureBridgeTool();
         this.failInterruptedRecipeBuilds();
+        this.failInterruptedRuntimeRequests();
     }
     ensureBridgeTool() {
         const timestamp = new Date().toISOString();
@@ -915,6 +916,21 @@ export class BridgeDatabase {
             last_synced_at = excluded.last_synced_at
         `)
             .run(bridgeReviewedShellToolId, JSON.stringify(['Read-only recipe inspection after explicit approval.']), JSON.stringify(reviewedShellCommandAllowlist.map((entry) => `${entry.command}: ${entry.description}`)), timestamp);
+    }
+    failInterruptedRuntimeRequests() {
+        const timestamp = new Date().toISOString();
+        this.database
+            .prepare(`
+          UPDATE runtime_requests
+          SET
+            status = 'failed',
+            updated_at = ?,
+            completed_at = ?,
+            last_error = 'The Hermes request was interrupted while the bridge was restarting.'
+          WHERE status = 'running'
+            AND completed_at IS NULL
+        `)
+            .run(timestamp, timestamp);
     }
     failInterruptedRecipeBuilds() {
         const timestamp = new Date().toISOString();

@@ -216,6 +216,45 @@ export const SkillDeletionResponseSchema = z.object({
     skillName: z.string().min(1),
     deletedAt: z.string().datetime()
 });
+export const SkillSearchResultSchema = z.object({
+    name: z.string().min(1),
+    identifier: z.string().min(1),
+    description: z.string().default(''),
+    source: z.string().min(1),
+    trust: z.string().min(1),
+    category: z.string().default(''),
+    isInstalled: z.boolean().default(false),
+    isBuiltIn: z.boolean().default(false),
+    isOfficial: z.boolean().default(false),
+    isCommunity: z.boolean().default(false)
+});
+export const SkillSearchResponseSchema = z.object({
+    profileId: z.string().min(1),
+    query: z.string(),
+    safeOnly: z.boolean(),
+    page: z.number().int().min(1),
+    pageSize: z.number().int().min(1),
+    total: z.number().int().min(0),
+    results: z.array(SkillSearchResultSchema),
+    generatedAt: z.string().datetime()
+});
+export const SkillSearchRequestSchema = z.object({
+    profileId: z.string().min(1),
+    query: z.string(),
+    safeOnly: z.boolean().default(true),
+    page: z.number().int().min(1).default(1),
+    pageSize: z.number().int().min(1).max(50).default(12)
+});
+export const SkillInstallRequestSchema = z.object({
+    profileId: z.string().min(1),
+    identifier: z.string().min(1)
+});
+export const SkillInstallResponseSchema = z.object({
+    profileId: z.string().min(1),
+    identifier: z.string().min(1),
+    skillName: z.string().min(1),
+    installedAt: z.string().datetime()
+});
 export const UpdateSettingsRequestSchema = AppSettingsSchema.partial().refine((value) => Object.keys(value).length > 0, 'At least one setting must be provided.');
 export const UpdateUiStateRequestSchema = UiStateSchema.partial()
     .extend({

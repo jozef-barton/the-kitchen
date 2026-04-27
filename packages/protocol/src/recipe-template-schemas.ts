@@ -452,6 +452,43 @@ export const RecipeTemplateSectionSchema: z.ZodType<
       title: string;
       body: string;
       footnotes: Array<{ id: string; label: string; url?: string }>;
+    })
+  | ({
+      slotId: string;
+      kind: 'video';
+      title: string;
+      src: string;
+      poster?: string;
+      subtitle?: string;
+    })
+  | ({
+      slotId: string;
+      kind: 'file-attachment';
+      title: string;
+      files: Array<{ id: string; filename: string; mimeType: string; size: number; kind: string; url: string }>;
+    })
+  | ({
+      slotId: string;
+      kind: 'pdf-viewer';
+      title: string;
+      src: string;
+      filename?: string;
+    })
+  | ({
+      slotId: string;
+      kind: 'code-block';
+      title: string;
+      language: string;
+      code: string;
+      filename?: string;
+    })
+  | ({
+      slotId: string;
+      kind: 'data-table';
+      title: string;
+      columns: Array<{ key: string; label: string }>;
+      rows: Array<Record<string, string | number | null>>;
+      filename?: string;
     }),
   z.ZodTypeDef,
   unknown
@@ -691,6 +728,52 @@ export const RecipeTemplateSectionSchema: z.ZodType<
           url: OptionalTextSchema
         }).strict()
       ).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('video'),
+      title: z.string().min(1),
+      src: z.string().min(1),
+      poster: OptionalTextSchema,
+      subtitle: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('file-attachment'),
+      title: z.string().min(1),
+      files: z.array(
+        z.object({
+          id: z.string().min(1),
+          filename: z.string().min(1),
+          mimeType: z.string().min(1),
+          size: z.number().int().nonnegative(),
+          kind: z.string().min(1),
+          url: z.string().min(1)
+        }).strict()
+      ).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('pdf-viewer'),
+      title: z.string().min(1),
+      src: z.string().min(1),
+      filename: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('code-block'),
+      title: z.string().min(1),
+      language: z.string().min(1),
+      code: z.string().min(1),
+      filename: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('data-table'),
+      title: z.string().min(1),
+      columns: z.array(
+        z.object({
+          key: z.string().min(1),
+          label: z.string().min(1)
+        }).strict()
+      ).default([]),
+      rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.null()]))).default([]),
+      filename: OptionalTextSchema
     }).strict()
   ])
 );

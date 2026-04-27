@@ -31,7 +31,9 @@ import {
   ToolExecutionSchema,
   ToolSchema,
   ToolsTabSchema,
-  UiStateSchema
+  UiStateSchema,
+  FileRefSchema,
+  UploadedFileSchema
 } from './schemas';
 import { RecipeTemplateStateSchema } from './recipe-template-schemas';
 
@@ -401,9 +403,20 @@ export const ChatStreamRequestSchema = z.object({
   recipeId: z.string().min(1).optional(),
   content: z.string().min(1).max(20_000),
   intentContent: z.string().min(1).max(500).optional(),
-  mode: ChatRequestModeSchema.default('chat')
+  mode: ChatRequestModeSchema.default('chat'),
+  attachments: z.array(FileRefSchema).optional()
 });
 export type ChatStreamRequest = z.infer<typeof ChatStreamRequestSchema>;
+
+export const UploadFileResponseSchema = z.object({
+  file: UploadedFileSchema
+});
+export type UploadFileResponse = z.infer<typeof UploadFileResponseSchema>;
+
+export const GetUploadedFileResponseSchema = z.object({
+  file: UploadedFileSchema
+});
+export type GetUploadedFileResponse = z.infer<typeof GetUploadedFileResponseSchema>;
 
 export const ToolExecutionPrepareRequestSchema = z.object({
   toolId: z.string().min(1),

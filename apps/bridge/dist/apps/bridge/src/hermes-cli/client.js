@@ -2099,10 +2099,11 @@ export class HermesCli {
         return { ok: true, latencyMs };
     }
     async createProfile(name, signal) {
-        if (!name || !/^[a-z0-9_-]+$/i.test(name)) {
+        const normalized = name.toLowerCase();
+        if (!normalized || !/^[a-z0-9_-]+$/.test(normalized)) {
             throw new Error('Profile name must be non-empty and contain only letters, numbers, hyphens, or underscores.');
         }
-        const result = await this.run(['profile', 'create', name, '--clone', '--no-alias'], process.env, signal);
+        const result = await this.run(['profile', 'create', normalized, '--clone', '--no-alias'], process.env, signal);
         if (result.exitCode !== 0) {
             throw new Error(result.stderr.trim() || `Failed to create Hermes profile "${name}".`);
         }

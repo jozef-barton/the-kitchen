@@ -2052,6 +2052,201 @@ export function RecipeTemplateRenderer({
           </TemplateSurface>
         );
       }
+      case 'video': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {section.subtitle ? (
+                <Text fontSize="sm" color="var(--text-secondary)">{section.subtitle}</Text>
+              ) : null}
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                // eslint-disable-next-line jsx-a11y/media-has-caption -- uploaded video may not have captions
+                <video controls style={{ width: '100%', borderRadius: '8px' }} poster={section.poster ?? undefined}>
+                  <source src={section.src} />
+                </video>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'file-attachment': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <VStack align="stretch" gap="2">
+                  {section.files.map((file) => (
+                    <chakra.a
+                      key={file.id}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      display="flex"
+                      alignItems="center"
+                      gap="3"
+                      p="3"
+                      rounded="8px"
+                      border="1px solid var(--border-subtle)"
+                      bg="var(--surface-2)"
+                      textDecoration="none"
+                      _hover={{ bg: 'var(--surface-active)', borderColor: 'var(--border-default)' }}
+                      transition="background 100ms"
+                    >
+                      <Text fontSize="lg" flexShrink={0}>
+                        {file.kind === 'image' ? '🖼' : file.kind === 'audio' ? '🎵' : file.kind === 'video' ? '🎬' : file.kind === 'pdf' ? '📄' : file.kind === 'code' ? '💻' : file.kind === 'spreadsheet' ? '📊' : '📎'}
+                      </Text>
+                      <Box flex="1" minW={0}>
+                        <Text fontSize="sm" fontWeight="500" color="var(--text-primary)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{file.filename}</Text>
+                        <Text fontSize="xs" color="var(--text-muted)">{file.mimeType} · {(file.size / 1024).toFixed(0)} KB</Text>
+                      </Box>
+                    </chakra.a>
+                  ))}
+                </VStack>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'pdf-viewer': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <Box rounded="8px" overflow="hidden" border="1px solid var(--border-subtle)">
+                  <embed
+                    src={section.src}
+                    type="application/pdf"
+                    width="100%"
+                    height="500px"
+                    title={section.filename ?? section.title}
+                  />
+                  <Box p="2" borderTop="1px solid var(--border-subtle)" bg="var(--surface-2)">
+                    <chakra.a
+                      href={section.src}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      fontSize="xs"
+                      color="var(--text-secondary)"
+                      textDecoration="underline"
+                    >
+                      Open PDF in new tab
+                    </chakra.a>
+                  </Box>
+                </Box>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'code-block': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              {section.filename ? (
+                <Box>
+                  <TemplateSectionHeader title={section.title} />
+                  <Text fontSize="xs" color="var(--text-muted)" mt="-1">{section.filename}</Text>
+                </Box>
+              ) : (
+                <TemplateSectionHeader title={section.title} />
+              )}
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <Box
+                  as="pre"
+                  bg="var(--surface-code)"
+                  border="1px solid var(--border-subtle)"
+                  rounded="8px"
+                  p="4"
+                  overflow="auto"
+                  maxH="400px"
+                  fontSize="xs"
+                  fontFamily="monospace"
+                  color="var(--text-primary)"
+                  css={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}
+                >
+                  {section.code}
+                </Box>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'data-table': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              {section.filename ? (
+                <Box>
+                  <TemplateSectionHeader title={section.title} />
+                  <Text fontSize="xs" color="var(--text-muted)" mt="-1">{section.filename}</Text>
+                </Box>
+              ) : (
+                <TemplateSectionHeader title={section.title} />
+              )}
+              {ghost ? (
+                <Box>{renderGhostSectionBody(section)}</Box>
+              ) : (
+                <Box overflowX="auto" rounded="8px" border="1px solid var(--border-subtle)">
+                  <Box as="table" w="100%" style={{ borderCollapse: 'collapse' }}>
+                    <Box as="thead" bg="var(--surface-3)">
+                      <Box as="tr">
+                        {section.columns.map((col) => (
+                          <Box
+                            key={col.key}
+                            as="th"
+                            px="3" py="2"
+                            fontSize="xs"
+                            fontWeight="600"
+                            color="var(--text-secondary)"
+                            textAlign="left"
+                            borderBottom="1px solid var(--border-subtle)"
+                          >
+                            {col.label}
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box as="tbody">
+                      {section.rows.map((row, rowIndex) => (
+                        <Box
+                          key={rowIndex}
+                          as="tr"
+                          bg={rowIndex % 2 === 0 ? 'transparent' : 'var(--surface-2)'}
+                          _hover={{ bg: 'var(--surface-active)' }}
+                        >
+                          {section.columns.map((col) => (
+                            <Box
+                              key={col.key}
+                              as="td"
+                              px="3" py="2"
+                              fontSize="xs"
+                              color="var(--text-primary)"
+                              borderBottom="1px solid var(--border-subtle)"
+                            >
+                              {row[col.key] ?? ''}
+                            </Box>
+                          ))}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
       case 'bar-chart': {
         return wrap(
           <TemplateSurface key={section.slotId}>

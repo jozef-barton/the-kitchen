@@ -95,7 +95,8 @@ import type {
   RecipePipelineSegment,
   RecipePipelineStage,
   RecipePipelineState,
-  HermesCliRuntimeReadiness
+  HermesCliRuntimeReadiness,
+  FileRef
 } from '@hermes-recipes/protocol';
 import {
   AuditEventsResponseSchema,
@@ -172,6 +173,7 @@ import {
   classifyRecipeMutationIntent,
   resolveHermesChatTimeoutMs,
   type HermesCli,
+  type HermesAttachmentContext,
   type RecipeMutationIntent,
   type RuntimeProviderDiscoveryResult,
   type StructuredRecipeIntent
@@ -353,6 +355,7 @@ type StreamBridgeRequestInput = {
   mode?: ChatStreamRequest['mode'];
   triggerActionId?: string | null;
   triggerKindOverride?: RecipeBuildTriggerKind | null;
+  attachments?: FileRef[];
 };
 
 type RecipeActionArtifactContext = {
@@ -4334,6 +4337,20 @@ export class HermesBridge {
       sessionId,
       createdAt: this.now(),
       metadata
+    });
+  }
+
+  private resolveAttachmentContexts(fileRefs: FileRef[]): HermesAttachmentContext[] {
+    return fileRefs.map((ref) => {
+      const record = this.options.database.getUploadedFile(ref.id);
+      const storagePath = this.options.database.getUploadedFileStoragePath(ref.id);
+      return {
+        filename: ref.filename,
+        kind: ref.kind,
+        parsedText: record?.parsedText ?? null,
+        transcriptionText: record?.transcriptionText ?? null,
+        imagePath: ref.kind === 'image' && storagePath ? storagePath : null
+      };
     });
   }
 
@@ -13240,7 +13257,8 @@ Emit one corrected TSX module now.`;
       createdAt: this.now(),
       requestId: `request-${randomUUID()}`,
       visibility: 'transcript',
-      kind: 'conversation'
+      kind: 'conversation',
+      attachments: input.attachments ?? []
     });
     const requestId = userMessage.requestId ?? userMessage.id;
 
@@ -13367,12 +13385,15 @@ Emit one corrected TSX module now.`;
       }
     }
 
+    const hermesAttachments = this.resolveAttachmentContexts(input.attachments ?? []);
+
     try {
       const chatResult = await this.options.hermesCli.streamChat({
         profile,
         runtimeSessionId: session.runtimeSessionId,
         content: hermesContent,
         requestMode,
+        attachments: hermesAttachments,
         spaceContext: activeRecipe ? this.buildRecipeChatContext(activeRecipe) : null,
         refreshContext,
         requestId,
@@ -13940,7 +13961,8 @@ Emit one corrected TSX module now.`;
         transcriptContent: input.content,
         hermesContent: input.content,
         intentContent: input.intentContent ?? input.content,
-        mode: input.mode
+        mode: input.mode,
+        attachments: input.attachments ?? []
       },
       onEvent
     );

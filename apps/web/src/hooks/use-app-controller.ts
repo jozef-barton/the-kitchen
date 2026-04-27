@@ -8,6 +8,7 @@ import type {
   ChatStreamEvent,
   ChatRequestMode,
   ChatMessage,
+  FileRef,
   ModelProviderResponse,
   RuntimeRequest,
   Session,
@@ -58,6 +59,7 @@ import {
   updateSettings,
   updateUiState
 } from '../lib/api';
+import { useFileUploadQueue } from './use-file-upload-queue';
 import { toaster } from '../ui/toaster-store';
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -517,6 +519,7 @@ const EMPTY_SESSION_STREAM: SessionStreamState = {
 };
 
 export function useAppController() {
+  const fileUploadQueue = useFileUploadQueue();
   const [bootstrapStatus, setBootstrapStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
@@ -2500,7 +2503,7 @@ export function useAppController() {
   );
 
   const runChatRequest = useCallback(
-    async (content: string, options: { mode?: ChatRequestMode; intentContent?: string } = {}) => {
+    async (content: string, options: { mode?: ChatRequestMode; intentContent?: string; attachments?: FileRef[] } = {}) => {
       if (!activeProfileId) {
         setChatError('Select a real Hermes profile before sending a message.');
         return;
@@ -2534,7 +2537,8 @@ export function useAppController() {
               recipeId: resolvedRecipeId,
               content,
               intentContent: options.intentContent,
-              mode: requestMode
+              mode: requestMode,
+              attachments: options.attachments ?? []
             },
             onEvent
           )
@@ -2544,7 +2548,7 @@ export function useAppController() {
   );
 
   const handleSendMessage = useCallback(
-    (content: string) => {
+    (content: string, attachments: FileRef[] = []) => {
       const trimmedContent = content.trim();
       if (!trimmedContent) {
         return false;
@@ -2565,10 +2569,18 @@ export function useAppController() {
         return false;
       }
 
-      void runChatRequest(trimmedContent);
+      void runChatRequest(trimmedContent, { attachments });
       return true;
     },
     [activeProfileId, activeSessionId, runChatRequest]
+  );
+
+  const handleAddFiles = useCallback(
+    (files: File[]) => {
+      if (!activeProfileId || !activeSessionId) return;
+      fileUploadQueue.addFiles(files, activeProfileId, activeSessionId);
+    },
+    [activeProfileId, activeSessionId, fileUploadQueue]
   );
 
   const handleRefreshRecipe = useCallback(
@@ -3029,6 +3041,8 @@ export function useAppController() {
     handleExecuteRecipeAction,
     handleSidebarCollapsedChange,
     handleSendMessage,
+    handleAddFiles,
+    fileUploadQueue,
     handleSaveSettings,
     handleUpdateRuntimeModelConfig,
     handleConnectProvider,

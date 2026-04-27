@@ -8,6 +8,7 @@ import { HermesAvatar } from '../atoms/HermesAvatar';
 import { TypingDots } from '../atoms/TypingDots';
 import { StatusTicker } from '../atoms/StatusTicker';
 import { safeMarkdownUrlTransform } from '../../lib/markdown-url-transform';
+import { getUploadUrl } from '../../lib/api';
 
 
 
@@ -285,6 +286,8 @@ const TranscriptMessageRow = memo(
   }) {
     const clickable = Boolean(message.requestId && onMessageClick);
 
+    const hasAttachments = message.attachments && message.attachments.length > 0;
+
     return (
       <TranscriptBubble
         messageRole={message.role}
@@ -294,6 +297,35 @@ const TranscriptMessageRow = memo(
         copyContent={message.content}
         onClick={clickable ? () => onMessageClick?.(message) : undefined}
       >
+        {hasAttachments && (
+          <HStack gap="2" flexWrap="wrap" mb="2">
+            {message.attachments!.map((att) => (
+              <chakra.a
+                key={att.id}
+                href={getUploadUrl(att.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                display="inline-flex"
+                alignItems="center"
+                gap="1.5"
+                px="2"
+                py="1"
+                rounded="8px"
+                bg="var(--surface-3)"
+                border="1px solid var(--border-subtle)"
+                maxW="200px"
+                textDecoration="none"
+                _hover={{ borderColor: 'var(--border-default)', bg: 'var(--surface-active)' }}
+                transition="background-color 100ms, border-color 100ms"
+              >
+                <Text fontSize="xs" flexShrink={0}>
+                  {att.kind === 'image' ? '🖼' : att.kind === 'audio' ? '🎵' : att.kind === 'video' ? '🎬' : att.kind === 'pdf' ? '📄' : att.kind === 'code' ? '💻' : att.kind === 'spreadsheet' ? '📊' : '📎'}
+                </Text>
+                <Text fontSize="xs" color="var(--text-primary)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{att.filename}</Text>
+              </chakra.a>
+            ))}
+          </HStack>
+        )}
         <MarkdownMessage>{message.content}</MarkdownMessage>
       </TranscriptBubble>
     );

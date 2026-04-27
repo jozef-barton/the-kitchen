@@ -4,9 +4,21 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react';
 import { ChatComposer } from './ChatComposer';
+import type { FileUploadQueue } from '../../hooks/use-file-upload-queue';
 
 function TestProvider({ children }: PropsWithChildren) {
   return <ChakraProvider value={defaultSystem}>{children}</ChakraProvider>;
+}
+
+function makeUploadQueue(): FileUploadQueue {
+  return {
+    pending: [],
+    completedRefs: [],
+    isUploading: false,
+    addFiles: vi.fn(),
+    removeFile: vi.fn(),
+    clear: vi.fn()
+  };
 }
 
 afterEach(() => {
@@ -19,7 +31,7 @@ describe('ChatComposer', () => {
 
     render(
       <TestProvider>
-        <ChatComposer onSend={onSend} sending={false} disabled={false} />
+        <ChatComposer onSend={onSend} sending={false} disabled={false} uploadQueue={makeUploadQueue()} onAddFiles={vi.fn()} />
       </TestProvider>
     );
 
@@ -30,7 +42,7 @@ describe('ChatComposer', () => {
     await userEvent.keyboard('{Enter}');
 
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith('First line');
+    expect(onSend).toHaveBeenCalledWith('First line', []);
     await waitFor(() => expect(textarea).toHaveValue(''));
 
     await userEvent.click(textarea);
@@ -47,7 +59,7 @@ describe('ChatComposer', () => {
 
     render(
       <TestProvider>
-        <ChatComposer onSend={onSend} sending={false} disabled={false} />
+        <ChatComposer onSend={onSend} sending={false} disabled={false} uploadQueue={makeUploadQueue()} onAddFiles={vi.fn()} />
       </TestProvider>
     );
 
@@ -56,7 +68,7 @@ describe('ChatComposer', () => {
     await userEvent.type(textarea, 'Retry this draft');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(onSend).toHaveBeenCalledWith('Retry this draft');
+    expect(onSend).toHaveBeenCalledWith('Retry this draft', []);
     expect(textarea).toHaveValue('Retry this draft');
   });
 
@@ -67,7 +79,7 @@ describe('ChatComposer', () => {
       return (
         <>
           {transcriptSpy()}
-          <ChatComposer onSend={() => true} sending={false} disabled={false} />
+          <ChatComposer onSend={() => true} sending={false} disabled={false} uploadQueue={makeUploadQueue()} onAddFiles={vi.fn()} />
         </>
       );
     }

@@ -2589,6 +2589,7 @@ function compileTemplateSections(fill, definition) {
             const data = fill.data;
             const tabs = [
                 { id: 'sources', label: 'Sources' },
+                { id: 'notes', label: 'Notes' },
                 { id: 'points', label: 'Extracted points' },
                 { id: 'follow-ups', label: 'Follow-ups' }
             ];
@@ -2607,6 +2608,9 @@ function compileTemplateSections(fill, definition) {
                                 title: 'Sources',
                                 groups: toGroups(definition, data.sources, [], 'research-sources')
                             }
+                        ],
+                        notes: [
+                            createNotesSection(definition, 'notes', 'Notes', data.noteLines)
                         ],
                         points: [
                             {
@@ -2876,14 +2880,69 @@ function getTemplateFillGuide(templateId) {
                     kind: 'recipe_template_fill',
                     schemaVersion: 'recipe_template_fill/v2',
                     templateId,
-                    title: 'Recipe reliability research',
-                    summary: 'Capture sources, notes, extracted points, and follow-ups.',
+                    title: 'LLM recipe system reliability',
+                    summary: 'Sources, notes, extracted insights, and follow-up questions gathered from research.',
                     data: {
                         activeTabId: 'sources',
-                        sources: [{ id: 'sources', label: 'Sources', items: [{ id: 'source-1', title: 'Runtime logs' }] }],
-                        noteLines: ['Focus on deterministic normalization before repair.'],
-                        extractedPoints: [],
-                        followUps: [{ id: 'follow-ups', label: 'Follow-ups', items: [{ id: 'follow-up-1', title: 'Tighten vendor matrix keys' }] }]
+                        sources: [
+                            {
+                                id: 'sources',
+                                label: 'Primary sources',
+                                tone: 'neutral',
+                                items: [
+                                    {
+                                        id: 'source-1',
+                                        title: 'Hermes runtime logs — normalization pass',
+                                        subtitle: 'internal/logs/runtime-2024-04.json',
+                                        meta: 'Collected Apr 2024',
+                                        chips: [{ label: 'Internal', tone: 'neutral' }]
+                                    },
+                                    {
+                                        id: 'source-2',
+                                        title: 'Anthropic model card — Claude 3.7',
+                                        subtitle: 'anthropic.com/research/claude-3-7',
+                                        meta: 'Published Feb 2024',
+                                        chips: [{ label: 'Official', tone: 'success' }]
+                                    }
+                                ]
+                            }
+                        ],
+                        noteLines: [
+                            'Deterministic normalization must run before any repair pass.',
+                            'Vendor matrix keys drift when the LLM omits the column array — add an explicit columns guard.',
+                            'Ghost state rendering is purely client-side; keep it decoupled from contract logic.'
+                        ],
+                        extractedPoints: [
+                            {
+                                id: 'extracted',
+                                label: 'Key findings',
+                                tone: 'accent',
+                                items: [
+                                    {
+                                        id: 'point-1',
+                                        title: 'Repair pass is not idempotent under concurrent mutations',
+                                        subtitle: 'Observed in 3 of 12 test runs when two actions land in the same tick.',
+                                        chips: [{ label: 'High priority', tone: 'danger' }]
+                                    },
+                                    {
+                                        id: 'point-2',
+                                        title: 'Template ghost fills should carry example data for richer skeletons',
+                                        subtitle: 'Current ghost fills use empty arrays, causing loading state to show generic bars.',
+                                        chips: [{ label: 'UX', tone: 'warning' }]
+                                    }
+                                ]
+                            }
+                        ],
+                        followUps: [
+                            {
+                                id: 'follow-ups',
+                                label: 'Open questions',
+                                items: [
+                                    { id: 'fu-1', title: 'How should concurrent action mutations be serialized in the contract?' },
+                                    { id: 'fu-2', title: 'Can the ghost fill carry sample data without affecting validation?' }
+                                ]
+                            }
+                        ]
                     }
                 },
                 invalidExamples: [
@@ -2901,7 +2960,13 @@ function getTemplateFillGuide(templateId) {
                         whyInvalid: 'Stage content should not author action ids directly. Keep follow-up prompts as canonical grouped items.'
                     }
                 ],
-                commonMistakes: ['Keep followUps as grouped items. Do not embed action ids or links into the text or hydration payloads.']
+                commonMistakes: [
+                    'Use subtitle for URLs/authors and meta for dates/domains — do not collapse everything into title.',
+                    'Use chips to tag relevance, source type, or priority.',
+                    'Keep followUps as grouped items. Do not embed action ids or links.',
+                    'Put prose observations in noteLines, not as grouped-list items.',
+                    'Populate all four sections (sources, noteLines, extractedPoints, followUps) for a complete notebook.'
+                ]
             };
         case 'travel-itinerary-planner':
             return {

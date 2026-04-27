@@ -86,6 +86,45 @@ export type ChatMessageVisibility = z.infer<typeof ChatMessageVisibilitySchema>;
 export const ChatMessageKindSchema = z.enum(['conversation', 'notice', 'technical']);
 export type ChatMessageKind = z.infer<typeof ChatMessageKindSchema>;
 
+export const UploadedFileKindSchema = z.enum([
+  'image',
+  'audio',
+  'video',
+  'pdf',
+  'text',
+  'code',
+  'spreadsheet',
+  'archive',
+  'document',
+  'unknown'
+]);
+export type UploadedFileKind = z.infer<typeof UploadedFileKindSchema>;
+
+export const FileRefSchema = z.object({
+  id: z.string().min(1),
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  kind: UploadedFileKindSchema
+});
+export type FileRef = z.infer<typeof FileRefSchema>;
+
+export const UploadedFileSchema = z.object({
+  id: z.string().min(1),
+  profileId: z.string().min(1),
+  sessionId: z.string().min(1).nullable(),
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  kind: UploadedFileKindSchema,
+  parseStatus: z.enum(['pending', 'processing', 'done', 'failed', 'not_applicable']),
+  parsedText: z.string().nullable(),
+  transcriptionStatus: z.enum(['none', 'pending', 'processing', 'done', 'failed']),
+  transcriptionText: z.string().nullable(),
+  createdAt: z.string().datetime()
+});
+export type UploadedFile = z.infer<typeof UploadedFileSchema>;
+
 export const ChatMessageSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -95,7 +134,8 @@ export const ChatMessageSchema = z.object({
   status: z.enum(['completed', 'error']).default('completed'),
   requestId: z.string().min(1).nullable().default(null),
   visibility: ChatMessageVisibilitySchema.default('transcript'),
-  kind: ChatMessageKindSchema.default('conversation')
+  kind: ChatMessageKindSchema.default('conversation'),
+  attachments: z.array(FileRefSchema).optional()
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 

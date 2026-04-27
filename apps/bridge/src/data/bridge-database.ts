@@ -43,7 +43,9 @@ import type {
   RecipeDsl,
   RecipeModel,
   RecipePatch,
-  RecipePipelineState
+  RecipePipelineState,
+  UploadedFile,
+  UploadedFileKind
 } from '@hermes-recipes/protocol';
 import {
   AppSettingsSchema,
@@ -794,6 +796,30 @@ export class BridgeDatabase {
 
       CREATE INDEX IF NOT EXISTS telemetry_events_request_idx
         ON telemetry_events(request_id, created_at ASC);
+
+      CREATE TABLE IF NOT EXISTS uploaded_files (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        session_id TEXT,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_kind TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        storage_path TEXT NOT NULL,
+        parse_status TEXT NOT NULL DEFAULT 'pending',
+        parsed_text TEXT,
+        parse_error TEXT,
+        transcription_status TEXT NOT NULL DEFAULT 'none',
+        transcription_text TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS uploaded_files_profile_idx
+        ON uploaded_files(profile_id, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS uploaded_files_session_idx
+        ON uploaded_files(session_id, created_at DESC)
+        WHERE session_id IS NOT NULL;
     `);
 
     this.database.exec('DROP TABLE IF EXISTS space_reminder_jobs;');
@@ -1196,7 +1222,7 @@ export class BridgeDatabase {
   }
 
   private rowToMessage(row: Record<string, unknown>) {
-    const metadata = parseJson<Partial<Pick<ChatMessage, 'requestId' | 'visibility' | 'kind'>>>(
+    const metadata = parseJson<Partial<Pick<ChatMessage, 'requestId' | 'visibility' | 'kind' | 'attachments'>>>(
       typeof row.metadata_json === 'string' ? row.metadata_json : '{}',
       {}
     );
@@ -1210,7 +1236,8 @@ export class BridgeDatabase {
       status: row.status,
       requestId: metadata.requestId ?? null,
       visibility: metadata.visibility ?? 'transcript',
-      kind: metadata.kind ?? 'conversation'
+      kind: metadata.kind ?? 'conversation',
+      attachments: Array.isArray(metadata.attachments) ? metadata.attachments : undefined
     });
   }
 
@@ -3745,7 +3772,8 @@ export class BridgeDatabase {
         JSON.stringify({
           requestId: normalizedMessage.requestId,
           visibility: normalizedMessage.visibility,
-          kind: normalizedMessage.kind
+          kind: normalizedMessage.kind,
+          ...(normalizedMessage.attachments?.length ? { attachments: normalizedMessage.attachments } : {})
         })
       );
 
@@ -5073,6 +5101,71 @@ export class BridgeDatabase {
       latestEvents,
       unrestrictedAccessLastEnabledAt: latestEnabled?.created_at,
       unrestrictedAccessLastUsedAt: latestUsed?.created_at
+    };
+  }
+
+  insertUploadedFile(file: {
+    id: string;
+    profileId: string;
+    sessionId: string | null;
+    filename: string;
+    mimeType: string;
+    fileKind: UploadedFileKind;
+    fileSize: number;
+    storagePath: string;
+    createdAt: string;
+  }): void {
+    this.database
+      .prepare(
+        `INSERT INTO uploaded_files (id, profile_id, session_id, filename, mime_type, file_kind, file_size, storage_path, parse_status, transcription_status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'none', ?)`
+      )
+      .run(file.id, file.profileId, file.sessionId, file.filename, file.mimeType, file.fileKind, file.fileSize, file.storagePath, file.createdAt);
+  }
+
+  getUploadedFile(id: string): UploadedFile | null {
+    const row = this.database.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? this.rowToUploadedFile(row) : null;
+  }
+
+  getUploadedFileStoragePath(id: string): string | null {
+    const row = this.database.prepare('SELECT storage_path FROM uploaded_files WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? String(row.storage_path) : null;
+  }
+
+  listUploadedFilesBySession(sessionId: string): UploadedFile[] {
+    const rows = this.database
+      .prepare('SELECT * FROM uploaded_files WHERE session_id = ? ORDER BY created_at ASC')
+      .all(sessionId) as Record<string, unknown>[];
+    return rows.map((row) => this.rowToUploadedFile(row));
+  }
+
+  updateUploadedFileParse(id: string, update: { status: UploadedFile['parseStatus']; parsedText?: string | null; parseError?: string | null }): void {
+    this.database
+      .prepare('UPDATE uploaded_files SET parse_status = ?, parsed_text = ?, parse_error = ? WHERE id = ?')
+      .run(update.status, update.parsedText ?? null, update.parseError ?? null, id);
+  }
+
+  updateUploadedFileTranscription(id: string, update: { status: UploadedFile['transcriptionStatus']; transcriptionText?: string | null }): void {
+    this.database
+      .prepare('UPDATE uploaded_files SET transcription_status = ?, transcription_text = ? WHERE id = ?')
+      .run(update.status, update.transcriptionText ?? null, id);
+  }
+
+  private rowToUploadedFile(row: Record<string, unknown>): UploadedFile {
+    return {
+      id: String(row.id),
+      profileId: String(row.profile_id),
+      sessionId: row.session_id != null ? String(row.session_id) : null,
+      filename: String(row.filename),
+      mimeType: String(row.mime_type),
+      size: Number(row.file_size),
+      kind: String(row.file_kind) as UploadedFileKind,
+      parseStatus: String(row.parse_status) as UploadedFile['parseStatus'],
+      parsedText: row.parsed_text != null ? String(row.parsed_text) : null,
+      transcriptionStatus: String(row.transcription_status) as UploadedFile['transcriptionStatus'],
+      transcriptionText: row.transcription_text != null ? String(row.transcription_text) : null,
+      createdAt: String(row.created_at)
     };
   }
 }

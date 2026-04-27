@@ -1,37 +1,86 @@
-import { useCallback, useState, type FormEvent } from 'react';
-import { Box, Button, Flex, Textarea } from '@chakra-ui/react';
+import { useCallback, useRef, useState, type ClipboardEvent, type FormEvent, type DragEvent } from 'react';
+import { Box, Button, Flex, HStack, Textarea, chakra } from '@chakra-ui/react';
+
+const ChakraButton = chakra('button');
+import type { FileRef } from '../../lib/api';
+import type { FileUploadQueue } from '../../hooks/use-file-upload-queue';
+import { PendingAttachmentChip } from '../molecules/AttachmentChip';
 
 export function ChatComposer({
   onSend,
   sending,
-  disabled
+  disabled,
+  uploadQueue,
+  onAddFiles
 }: {
-  onSend: (content: string) => boolean | Promise<boolean>;
+  onSend: (content: string, attachments: FileRef[]) => boolean | Promise<boolean>;
   sending: boolean;
   disabled: boolean;
+  uploadQueue: FileUploadQueue;
+  onAddFiles: (files: File[]) => void;
 }) {
   const [draft, setDraft] = useState('');
-  const canSubmit = !disabled && !sending && draft.trim().length > 0;
+  const [draggingOver, setDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { pending, completedRefs, isUploading, removeFile, clear: clearQueue } = uploadQueue;
+
+  const hasPending = pending.length > 0;
+  const canSubmit = !disabled && !sending && !isUploading && draft.trim().length > 0;
 
   const handleSubmit = useCallback(async () => {
     const content = draft.trim();
-    if (!content || disabled || sending) return;
-    const accepted = await Promise.resolve(onSend(content)).catch(() => false);
-    if (accepted) setDraft('');
-  }, [disabled, draft, onSend, sending]);
+    if (!content || disabled || sending || isUploading) return;
+    const accepted = await Promise.resolve(onSend(content, completedRefs)).catch(() => false);
+    if (accepted) {
+      setDraft('');
+      clearQueue();
+    }
+  }, [disabled, draft, isUploading, onSend, completedRefs, sending, clearQueue]);
+
+  const handleFiles = useCallback(
+    (files: FileList | File[]) => {
+      const arr = Array.from(files);
+      if (arr.length === 0) return;
+      onAddFiles(arr);
+    },
+    [onAddFiles]
+  );
+
+  const handleDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setDraggingOver(false);
+      if (e.dataTransfer.files.length > 0) {
+        handleFiles(e.dataTransfer.files);
+      }
+    },
+    [handleFiles]
+  );
+
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = Array.from(e.clipboardData.files);
+      if (files.length > 0) {
+        e.preventDefault();
+        handleFiles(files);
+      }
+    },
+    [handleFiles]
+  );
 
   return (
     <Box
       as="form"
       rounded="12px"
-      border="1px solid var(--border-subtle)"
-      bg="var(--surface-elevated)"
+      border="1px solid"
+      borderColor={draggingOver ? 'var(--accent)' : 'var(--border-subtle)'}
+      bg={draggingOver ? 'var(--accent-surface)' : 'var(--surface-elevated)'}
       boxShadow="0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)"
       data-testid="chat-composer"
       css={{
-        transition: 'border-color 150ms ease-in-out, box-shadow 150ms ease-in-out',
+        transition: 'border-color 150ms ease-in-out, box-shadow 150ms ease-in-out, background-color 150ms ease-in-out',
         '&:focus-within': {
-          borderColor: 'var(--border-default)',
+          borderColor: draggingOver ? 'var(--accent)' : 'var(--border-default)',
           boxShadow: 'var(--focus-ring)'
         }
       }}
@@ -39,13 +88,70 @@ export function ChatComposer({
         event.preventDefault();
         if (canSubmit) void handleSubmit();
       }}
+      onDragOver={(e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setDraggingOver(true);
+      }}
+      onDragLeave={(e: DragEvent<HTMLDivElement>) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setDraggingOver(false);
+        }
+      }}
+      onDrop={handleDrop}
     >
+      {hasPending && (
+        <HStack gap="2" px="3" pt="2" pb="0" flexWrap="wrap">
+          {pending.map((item) => (
+            <PendingAttachmentChip
+              key={item.id}
+              item={item}
+              onRemove={() => removeFile(item.id)}
+            />
+          ))}
+        </HStack>
+      )}
       <Flex align="flex-end" gap="2" px="3" py="2">
+        <ChakraButton
+          type="button"
+          aria-label="Attach files"
+          color="var(--text-muted)"
+          _hover={{ color: 'var(--text-secondary)' }}
+          disabled={disabled}
+          flexShrink={0}
+          mb="0.5"
+          background="none"
+          border="none"
+          p={0}
+          cursor="pointer"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M13.5 7.5l-5.5 5.5a3.5 3.5 0 01-4.95-4.95l5.5-5.5a2 2 0 012.83 2.83L5.88 10.88a.5.5 0 01-.71-.71L10.5 4.84"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </ChakraButton>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            if (e.target.files) {
+              handleFiles(e.target.files);
+              e.target.value = '';
+            }
+          }}
+        />
         <Textarea
           flex="1"
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}
-          placeholder="Ask Hermes something real."
+          placeholder={draggingOver ? 'Drop files to attach…' : 'Ask Hermes something real.'}
           autoresize
           resize="none"
           variant="subtle"
@@ -59,13 +165,14 @@ export function ChatComposer({
           disabled={disabled}
           bg="transparent"
           border="none"
-          _placeholder={{ color: 'var(--text-muted)' }}
+          _placeholder={{ color: draggingOver ? 'var(--accent)' : 'var(--text-muted)' }}
           _focus={{ boxShadow: 'none', bg: 'transparent' }}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
             event.preventDefault();
             if (canSubmit) void handleSubmit();
           }}
+          onPaste={handlePaste}
         />
         <Button
           type="submit"
