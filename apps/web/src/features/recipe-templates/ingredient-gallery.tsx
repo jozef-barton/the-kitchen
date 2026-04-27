@@ -1,6 +1,5 @@
 import { Badge, Box, Button, Flex, HStack, SimpleGrid, Text, VStack } from '@chakra-ui/react';
 import { TemplateSurface } from './template-primitives';
-import { resolveTemplateGalleryFilterButtonStyles } from './template-style-helpers';
 import { INGREDIENT_GROUPS, type Ingredient, type IngredientGroup } from './ingredient-catalog';
 import { IngredientPreview } from './ingredient-preview';
 

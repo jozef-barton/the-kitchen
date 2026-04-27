@@ -1,4 +1,4 @@
-import { Box, CloseButton, Drawer, Grid, HStack, Portal, ScrollArea, Tabs, VStack } from '@chakra-ui/react';
+import { Box, CloseButton, Drawer, HStack, Portal, ScrollArea, Tabs, VStack } from '@chakra-ui/react';
 import { useEffect, useMemo, useState } from 'react';
 import { RecipeTemplateDetailDrawer } from '../../features/recipe-templates/template-detail-drawer';
 import { RecipeTemplateGallery } from '../../features/recipe-templates/template-gallery';
