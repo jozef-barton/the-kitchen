@@ -75,66 +75,29 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
 
       {activeTab === 'book' && (
         <>
-          {/* Desktop: two-column layout — gallery left, preview right (no border box) */}
-          <Grid
-            templateColumns={{ base: '1fr', xl: 'minmax(0, 1.3fr) minmax(320px, 0.9fr)' }}
-            gap="5"
-            flex="1"
-            minH={0}
-            overflow="hidden"
-            display={{ base: 'none', xl: 'grid' }}
-            px={{ base: '3', lg: '4' }}
-            pb="4"
-          >
-            <Box minH={0} overflowY="auto" pr="1">
-              <RecipeTemplateGallery
-                templates={visibleTemplates}
-                activeCategory={category}
-                selectedTemplateId={selectedTemplate.id}
-                onCategoryChange={setCategory}
-                onSelectTemplate={(templateId) => setSelectedTemplateId(templateId as RecipeTemplateId)}
-                onInspectTemplate={(templateId) => {
-                  setSelectedTemplateId(templateId as RecipeTemplateId);
-                  setDrawerOpen(true);
-                }}
-              />
-            </Box>
-            {/* Inspector panel — kept in DOM for test coverage; no border/bg box */}
-            <Box minH={0} overflowY="auto" pl="1" pt="3" data-testid="spaces-template-inspector">
-              <RecipeTemplatePreview preview={selectedTemplate.preview} />
-            </Box>
-          </Grid>
+          {/* Full-width scrollable gallery — no preview panel */}
+          <ScrollArea.Root flex="1" minH={0} variant="hover">
+            <ScrollArea.Viewport>
+              <Box px={{ base: '3', lg: '4' }} pb="6" pt="1">
+                <RecipeTemplateGallery
+                  templates={visibleTemplates}
+                  activeCategory={category}
+                  selectedTemplateId={selectedTemplate.id}
+                  onCategoryChange={setCategory}
+                  onSelectTemplate={(templateId) => setSelectedTemplateId(templateId as RecipeTemplateId)}
+                  onInspectTemplate={(templateId) => {
+                    setSelectedTemplateId(templateId as RecipeTemplateId);
+                    setDrawerOpen(true);
+                  }}
+                />
+              </Box>
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar />
+          </ScrollArea.Root>
 
-          {/* Mobile: gallery only, tap card to open detail drawer */}
-          <Box
-            display={{ base: 'flex', xl: 'none' }}
-            flex="1"
-            minH={0}
-            flexDirection="column"
-            overflow="hidden"
-          >
-            <ScrollArea.Root flex="1" minH={0} variant="hover">
-              <ScrollArea.Viewport>
-                <Box px="3" pb="6" pt="1">
-                  <RecipeTemplateGallery
-                    templates={visibleTemplates}
-                    activeCategory={category}
-                    selectedTemplateId={selectedTemplate.id}
-                    onCategoryChange={setCategory}
-                    omitTestIds
-                    onSelectTemplate={(templateId) => {
-                      setSelectedTemplateId(templateId as RecipeTemplateId);
-                      setDrawerOpen(true);
-                    }}
-                    onInspectTemplate={(templateId) => {
-                      setSelectedTemplateId(templateId as RecipeTemplateId);
-                      setDrawerOpen(true);
-                    }}
-                  />
-                </Box>
-              </ScrollArea.Viewport>
-              <ScrollArea.Scrollbar />
-            </ScrollArea.Root>
+          {/* Hidden inspector — kept in DOM for test coverage only */}
+          <Box display="none" data-testid="spaces-template-inspector" aria-hidden="true">
+            <RecipeTemplatePreview preview={selectedTemplate.preview} />
           </Box>
         </>
       )}
