@@ -619,3 +619,22 @@ export const ResolveImagesResponseSchema = z.object({
   )
 });
 export type ResolveImagesResponse = z.infer<typeof ResolveImagesResponseSchema>;
+
+export const GetSoulMdResponseSchema = z.object({
+  profileId: z.string().min(1),
+  content: z.string(),
+  exists: z.boolean()
+});
+export type GetSoulMdResponse = z.infer<typeof GetSoulMdResponseSchema>;
+
+export const UpdateSoulMdRequestSchema = z.object({
+  profileId: z.string().min(1),
+  content: z.string()
+});
+export type UpdateSoulMdRequest = z.infer<typeof UpdateSoulMdRequestSchema>;
+
+export const UpdateSoulMdResponseSchema = z.object({
+  profileId: z.string().min(1),
+  content: z.string()
+});
+export type UpdateSoulMdResponse = z.infer<typeof UpdateSoulMdResponseSchema>;

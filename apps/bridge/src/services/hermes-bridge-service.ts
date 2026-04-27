@@ -13008,6 +13008,25 @@ Emit one corrected TSX module now.`;
     }
   }
 
+  async getSoulMd(profileId: string): Promise<{ profileId: string; content: string; exists: boolean }> {
+    const profile = await this.ensureProfile(profileId);
+    const soulPath = path.join(profile.path ?? path.join(os.homedir(), '.hermes'), 'SOUL.md');
+    try {
+      const content = fs.readFileSync(soulPath, 'utf8');
+      return { profileId, content, exists: true };
+    } catch {
+      return { profileId, content: '', exists: false };
+    }
+  }
+
+  async updateSoulMd(profileId: string, content: string): Promise<{ profileId: string; content: string }> {
+    const profile = await this.ensureProfile(profileId);
+    const soulPath = path.join(profile.path ?? path.join(os.homedir(), '.hermes'), 'SOUL.md');
+    fs.mkdirSync(path.dirname(soulPath), { recursive: true });
+    fs.writeFileSync(soulPath, content, 'utf8');
+    return { profileId, content };
+  }
+
   async beginProviderAuth(input: { profileId: string; provider: string }) {
     const profile = await this.ensureProfile(input.profileId);
     try {
