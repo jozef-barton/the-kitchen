@@ -521,7 +521,7 @@ tbody tr:hover {
    ───────────────────────────────────────────────────────────────────────────── */
 .msg-outer .msg-actions {
   opacity: 0;
-  transition: opacity 150ms ease-in-out;
+  transition: opacity 120ms ease;
 }
 .msg-outer:hover .msg-actions,
 .msg-outer:focus-within .msg-actions {

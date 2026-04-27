@@ -330,6 +330,37 @@ const TranscriptTypingRow = memo(function TranscriptTypingRow({
   );
 });
 
+/* ── Copy icon button — clipboard / check swap ── */
+function CopyIconButton({ copied, onClick }: { copied: boolean; onClick: (e: ReactMouseEvent) => void }) {
+  const Svg = chakra('svg');
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      w="6" h="6" minW="0" px="0"
+      rounded="var(--radius-sm)"
+      color={copied ? 'var(--status-success)' : 'var(--text-muted)'}
+      opacity={copied ? 1 : 0.65}
+      _hover={{ bg: 'var(--surface-active)', opacity: 1, color: 'var(--text-secondary)' }}
+      transition="opacity 120ms ease, background-color 120ms ease, color 120ms ease"
+      onClick={onClick}
+      aria-label={copied ? 'Copied' : 'Copy message'}
+      title={copied ? 'Copied!' : 'Copy'}
+    >
+      {copied ? (
+        <Svg viewBox="0 0 16 16" boxSize="3.5" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+          <path d="M2.5 8.5l4 4 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      ) : (
+        <Svg viewBox="0 0 16 16" boxSize="3.5" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+          <rect x="6.5" y="6.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M9.5 6.5V4.5A1.5 1.5 0 0 0 8 3H4A1.5 1.5 0 0 0 2.5 4.5v4A1.5 1.5 0 0 0 4 10h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </Svg>
+      )}
+    </Button>
+  );
+}
+
 function TranscriptBubble({
   messageRole,
   clickable = false,
@@ -348,74 +379,25 @@ function TranscriptBubble({
 }) {
   const isUser = messageRole === 'user';
   const isAssistant = messageRole === 'assistant' || messageRole === 'assistant_draft';
+  const isStreaming = messageRole === 'assistant_draft';
   const [copied, setCopied] = useState(false);
 
   function handleCopy(e: ReactMouseEvent) {
-    e.stopPropagation(); // always stop — click on copy should never bubble to message click
+    e.stopPropagation();
     if (!copyContent) return;
     void navigator.clipboard.writeText(copyContent).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 1200);
     });
   }
 
-  /* ── Copy button — top-right corner, revealed on hover ── */
-  const CopyBtn = copyContent ? (
-    <Box
-      className="msg-actions"
-      position="absolute"
-      top="3px"
-      right="4px"
-      zIndex={1}
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        minW={0}
-        px="1.5"
-        h="5"
-        rounded="4px"
-        color="var(--text-muted)"
-        fontSize="10px"
-        fontWeight="400"
-        bg="var(--surface-elevated)"
-        border="1px solid var(--border-subtle)"
-        boxShadow="var(--shadow-xs)"
-        _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-        onClick={handleCopy}
-      >
-        {copied ? '✓' : 'Copy'}
-      </Button>
-    </Box>
-  ) : null;
-
-  /* ── User message: right-aligned blue pill ── */
+  /* ── User message: right-aligned bubble, rail below flush-right ── */
   if (isUser) {
-    const inner = (
-      <Box
-        maxW="min(580px, 86%)"
-        bg={selected ? 'var(--user-bubble-bg-selected)' : 'var(--user-bubble-bg)'}
-        rounded="16px"
-        roundedBottomRight="4px"
-        px="3"
-        pt="2.5"
-        pb="2"
-        wordBreak="break-word"
-        overflow="hidden"
-        transition="background-color 150ms ease-in-out"
-        position="relative"
-        style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
-      >
-        {CopyBtn}
-        {children}
-      </Box>
-    );
-
     return (
       <Box
         display="flex"
-        justifyContent="flex-end"
+        flexDirection="column"
+        alignItems="flex-end"
         className="msg-outer"
         {...(clickable ? {
           role: 'button',
@@ -427,47 +409,38 @@ function TranscriptBubble({
           }
         } : {})}
       >
-        {inner}
+        <Box
+          maxW="min(580px, 86%)"
+          bg={selected ? 'var(--user-bubble-bg-selected)' : 'var(--user-bubble-bg)'}
+          rounded="16px"
+          roundedBottomRight="4px"
+          px="3"
+          pt="2.5"
+          pb="2"
+          wordBreak="break-word"
+          overflow="hidden"
+          transition="background-color 150ms ease-in-out"
+          style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
+        >
+          {children}
+        </Box>
+        {copyContent && !isStreaming ? (
+          <Box className="msg-actions" mt="1">
+            <CopyIconButton copied={copied} onClick={handleCopy} />
+          </Box>
+        ) : null}
       </Box>
     );
   }
 
-  /* ── Assistant message: left-aligned bubble ── */
+  /* ── Assistant message: left-aligned bubble, rail below offset by avatar width ── */
   if (isAssistant) {
-    const bubble = (
-      <Box
-        maxW="min(620px, 88%)"
-        bg={selected ? 'var(--surface-selected)' : 'var(--surface-2)'}
-        rounded="16px"
-        roundedBottomLeft="4px"
-        px="3"
-        pt="2.5"
-        pb="2"
-        wordBreak="break-word"
-        overflow="hidden"
-        transition="background-color 150ms ease-in-out"
-        position="relative"
-        style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
-      >
-        {CopyBtn}
-        {children}
-      </Box>
-    );
-
-    const inner = (
-      <HStack align="end" gap="2" w="100%">
-        <Box flexShrink={0} pb="1">
-          <HermesAvatar size="sm" />
-        </Box>
-        {bubble}
-      </HStack>
-    );
-
     return (
       <Box
         className="msg-outer"
         display="flex"
-        justifyContent="flex-start"
+        flexDirection="column"
+        alignItems="flex-start"
         {...(clickable ? {
           role: 'button' as const,
           tabIndex: 0,
@@ -478,7 +451,32 @@ function TranscriptBubble({
           }
         } : {})}
       >
-        {inner}
+        <HStack align="end" gap="2" w="100%">
+          <Box flexShrink={0} pb="1">
+            <HermesAvatar size="sm" />
+          </Box>
+          <Box
+            maxW="min(620px, 88%)"
+            bg={selected ? 'var(--surface-selected)' : 'var(--surface-2)'}
+            rounded="16px"
+            roundedBottomLeft="4px"
+            px="3"
+            pt="2.5"
+            pb="2"
+            wordBreak="break-word"
+            overflow="hidden"
+            transition="background-color 150ms ease-in-out"
+            style={selected ? { outline: '1.5px solid var(--accent)', outlineOffset: '2px' } : undefined}
+          >
+            {children}
+          </Box>
+        </HStack>
+        {copyContent && !isStreaming ? (
+          /* pl="9" = 36px = avatar width (28px) + HStack gap (8px) — aligns rail with bubble */
+          <Box className="msg-actions" mt="1" pl="9">
+            <CopyIconButton copied={copied} onClick={handleCopy} />
+          </Box>
+        ) : null}
       </Box>
     );
   }
