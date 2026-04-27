@@ -3324,11 +3324,43 @@ export class HermesCli {
 
   private buildNotInstalledProviderState(profileId: string): RuntimeProviderDiscoveryResult {
     const now = this.now();
+    // Populate all known providers so the Settings page can show them and the user
+    // can enter API keys (saved directly to .env via writeEnvVarDirect fallback).
+    const providers: RuntimeProviderOption[] = Object.entries(HERMES_PROVIDER_REGISTRY).map(([id, meta]) => ({
+      id,
+      profileId,
+      displayName: meta.displayName,
+      authKind: meta.authKind,
+      status: 'missing' as const,
+      source: 'local_config' as const,
+      supportsApiKey: meta.supportsApiKey,
+      supportsOAuth: meta.supportsOAuth,
+      lastSyncedAt: now,
+      state: (meta.supportsOAuth && !meta.supportsApiKey) ? 'needs_oauth' as const : 'needs_api_key' as const,
+      stateMessage: meta.supportsApiKey
+        ? `Enter your ${meta.displayName} API key to use this provider.`
+        : `OAuth login required for ${meta.displayName}.`,
+      ready: false,
+      modelSelectionMode: 'select_only' as const,
+      disabled: false,
+      supportsDisconnect: false,
+      supportsModelDiscovery: false,
+      models: [],
+      configurationFields: [],
+      setupSteps: []
+    }));
+
     return {
-      config: { profileId, provider: 'unknown', defaultModel: 'unknown', maxTurns: 150, lastSyncedAt: now },
-      providers: [],
-      runtimeReadiness: { ready: false, code: 'runtime_state_unavailable', message: 'Hermes is not installed. Use the Setup screen to install it.', providerId: null, modelId: null },
-      inspectedProviderId: null,
+      config: { profileId, provider: 'openrouter', defaultModel: 'unknown', maxTurns: 150, lastSyncedAt: now },
+      providers,
+      runtimeReadiness: {
+        ready: false,
+        code: 'runtime_state_unavailable',
+        message: 'Hermes is not installed. Enter your API key below — it will be saved and used once Hermes is set up.',
+        providerId: null,
+        modelId: null
+      },
+      inspectedProviderId: 'openrouter',
       discoveredAt: now
     };
   }
