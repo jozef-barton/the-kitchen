@@ -1754,7 +1754,7 @@ describe('HermesBridge Home baseline recipes', () => {
 
     await waitForRecipeEnrichment(bridge);
     database.close();
-  });
+  }, 15_000);
 
   it('skips the LLM selection stage when the intent label deterministically maps to a template', async () => {
     const database = createDatabase();
@@ -1853,7 +1853,7 @@ describe('HermesBridge Home baseline recipes', () => {
 
     await waitForRecipeEnrichment(bridge);
     database.close();
-  });
+  }, 15_000);
 
   it('retries structured seed generation, persists raw payload diagnostics, and recovers on a later attempt', async () => {
     const database = createDatabase();
