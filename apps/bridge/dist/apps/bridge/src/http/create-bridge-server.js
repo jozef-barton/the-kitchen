@@ -834,6 +834,24 @@ export function createBridgeServer(options) {
                 readStream.pipe(response);
                 return;
             }
+            // GET /api/soul-md?profileId=... — read SOUL.md for a profile
+            if (request.method === 'GET' && pathname === '/api/soul-md') {
+                const profileId = searchParams.get('profileId');
+                if (!profileId)
+                    throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId is required.');
+                sendJson(response, 200, await bridge.getSoulMd(profileId), originDecision.allowOrigin);
+                return;
+            }
+            // PUT /api/soul-md — write SOUL.md for a profile
+            if (request.method === 'PUT' && pathname === '/api/soul-md') {
+                const { profileId, content } = await readJsonBody(request);
+                if (!profileId)
+                    throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId is required.');
+                if (content === undefined)
+                    throw new BridgeError(400, 'CONTENT_REQUIRED', 'content is required.');
+                sendJson(response, 200, await bridge.updateSoulMd(profileId, content), originDecision.allowOrigin);
+                return;
+            }
             if (request.method === 'GET' && !pathname.startsWith('/api/') && options.staticDirectory) {
                 serveStaticAsset(response, options.staticDirectory, pathname, database.getSettings().themeMode);
                 return;

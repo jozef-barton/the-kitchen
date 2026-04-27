@@ -8,95 +8,6 @@ const skillsListOutput = `                                Installed Skills
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
 │ google-workspace                  │ productivity         │ builtin │ builtin │
 └───────────────────────────────────┴──────────────────────┴─────────┴─────────┘`;
-function createStructuredDiscovery(overrides = {}) {
-    return {
-        schemaVersion: 'hermes_cli_models/v2',
-        discoveredAt: '2026-04-10T18:00:00.000Z',
-        inspectedProviderId: 'openrouter',
-        runtimeReadiness: {
-            ready: true,
-            code: 'ready',
-            message: 'OpenRouter is ready from structured JSON discovery.',
-            providerId: 'openrouter',
-            modelId: 'openai/gpt-5.4'
-        },
-        config: {
-            provider: 'openrouter',
-            defaultModel: 'openai/gpt-5.4',
-            baseUrl: 'https://openrouter.ai/api/v1',
-            apiMode: 'chat_completions',
-            maxTurns: 150,
-            reasoningEffort: 'medium',
-            toolUseEnforcement: 'auto',
-            lastSyncedAt: '2026-04-10T18:00:00.000Z'
-        },
-        providers: [
-            {
-                id: 'openrouter',
-                displayName: 'OpenRouter',
-                source: 'config',
-                status: 'connected',
-                state: 'connected',
-                stateMessage: 'OpenRouter is ready from structured JSON discovery.',
-                ready: true,
-                modelSelectionMode: 'select_only',
-                supportsDisconnect: false,
-                disabled: false,
-                authKind: 'api_key',
-                supportsApiKey: true,
-                supportsOAuth: false,
-                supportsModelDiscovery: true,
-                description: 'OpenRouter pay-per-use routing.',
-                maskedCredential: 'sk-o...1234',
-                credentialLabel: 'OPENROUTER_API_KEY',
-                setupSteps: [
-                    {
-                        id: 'openrouter:inspect',
-                        kind: 'inspect',
-                        title: 'Inspect Hermes runtime metadata',
-                        description: 'The Hermes CLI loaded provider status, runtime config, and selectable model metadata.',
-                        status: 'completed',
-                        metadata: {}
-                    }
-                ],
-                configurationFields: [
-                    {
-                        key: 'defaultModel',
-                        label: 'Default model',
-                        description: 'Selectable models discovered from the active Hermes runtime.',
-                        input: 'select',
-                        required: true,
-                        secret: false,
-                        value: 'openai/gpt-5.4',
-                        options: [
-                            {
-                                value: 'openai/gpt-5.4',
-                                label: 'openai/gpt-5.4',
-                                disabled: false
-                            }
-                        ],
-                        disabled: false
-                    }
-                ],
-                models: [
-                    {
-                        id: 'openai/gpt-5.4',
-                        label: 'openai/gpt-5.4',
-                        providerId: 'openrouter',
-                        disabled: false,
-                        supportsReasoningEffort: true,
-                        reasoningEffortOptions: ['low', 'medium', 'high'],
-                        metadata: {
-                            current: true
-                        }
-                    }
-                ],
-                lastSyncedAt: '2026-04-10T18:00:00.000Z'
-            }
-        ],
-        ...overrides
-    };
-}
 describe('HermesCli', () => {
     it('classifies research-note recipe requests as research intents so template enrichment can run', () => {
         expect(classifyStructuredRecipeIntent('Create a recovered markdown recipe with research notes.', false)).toEqual({
@@ -1256,66 +1167,20 @@ Quarterly planning review                           9m ago                      
         });
         expect(result.assistantMarkdown).toBe('You have 1 unread email in jbarton.\n\nNext step: open Gmail if you want details.');
     });
-    it('uses authoritative structured discovery without invoking the TUI probe path', async () => {
+    it('uses hermes dump for runtime discovery', async () => {
         const runner = {
             async run(args) {
-                if (args.join(' ') === 'model --json') {
-                    return {
-                        stdout: JSON.stringify(createStructuredDiscovery()),
-                        stderr: '',
-                        exitCode: 0
-                    };
-                }
-                throw new Error(`Unexpected command: ${args.join(' ')}`);
-            },
-            async stream() {
-                return {
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0
-                };
-            }
-        };
-        const cli = new HermesCli({
-            runner,
-            workingDirectory: process.cwd()
-        });
-        expect(cli.runExpectScript).toBeUndefined();
-        const response = await cli.discoverRuntimeProviderState({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, 'openrouter');
-        expect(response.runtimeReadiness).toMatchObject({
-            ready: true,
-            code: 'ready',
-            message: 'OpenRouter is ready from structured JSON discovery.'
-        });
-        expect(response.discoveredAt).toBe('2026-04-10T18:00:00.000Z');
-        expect(response.providers.find((provider) => provider.id === 'openrouter')).toMatchObject({
-            state: 'connected',
-            ready: true,
-            modelSelectionMode: 'select_only'
-        });
-        expect(response.providers.find((provider) => provider.id === 'openrouter')?.models.map((model) => model.id)).toEqual([
-            'openai/gpt-5.4'
-        ]);
-    });
-    it('falls back to hermes dump when model --json is unavailable', async () => {
-        const runner = {
-            async run(args) {
-                if (args.join(' ') === 'model --json') {
-                    return {
-                        stdout: '',
-                        stderr: 'error: unrecognized arguments: --json',
-                        exitCode: 2
-                    };
-                }
                 if (args.join(' ') === 'dump') {
                     return {
-                        stdout: 'model: openai/gpt-5.4\nprovider: openrouter\nversion: 0.9.0\n',
+                        stdout: [
+                            'model: openai/gpt-5.4',
+                            'provider: openrouter',
+                            'api_keys:',
+                            '  openrouter           set',
+                            '  openai               not set',
+                            'features:',
+                            '  toolsets:           hermes-cli',
+                        ].join('\n'),
                         stderr: '',
                         exitCode: 0
                     };
@@ -1323,11 +1188,7 @@ Quarterly planning review                           9m ago                      
                 throw new Error(`Unexpected command: ${args.join(' ')}`);
             },
             async stream() {
-                return {
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0
-                };
+                return { stdout: '', stderr: '', exitCode: 0 };
             }
         };
         const cli = new HermesCli({
@@ -1335,30 +1196,120 @@ Quarterly planning review                           9m ago                      
             workingDirectory: process.cwd(),
             now: () => '2026-04-10T18:00:00.000Z'
         });
-        const response = await cli.discoverRuntimeProviderState({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, 'openrouter');
+        const response = await cli.discoverRuntimeProviderState({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, 'openrouter');
+        expect(response.config.defaultModel).toBe('openai/gpt-5.4');
+        expect(response.config.provider).toBe('openrouter');
+        expect(response.discoveredAt).toBe('2026-04-10T18:00:00.000Z');
+        expect(response.runtimeReadiness.ready).toBe(true);
+        expect(response.runtimeReadiness.code).toBe('ready');
+        expect(response.providers.find((p) => p.id === 'openrouter')).toMatchObject({
+            state: 'connected',
+            ready: true
+        });
+    });
+    it('parses model and provider from hermes dump output and reports ready when provider is connected', async () => {
+        const runner = {
+            async run(args) {
+                if (args.join(' ') === 'dump') {
+                    return {
+                        stdout: [
+                            'model: openai/gpt-5.4',
+                            'provider: openrouter',
+                            'api_keys:',
+                            '  openrouter           set',
+                            '  anthropic            not set',
+                            'features:',
+                            '  toolsets:           hermes-cli',
+                        ].join('\n'),
+                        stderr: '',
+                        exitCode: 0
+                    };
+                }
+                throw new Error(`Unexpected command: ${args.join(' ')}`);
+            },
+            async stream() {
+                return { stdout: '', stderr: '', exitCode: 0 };
+            }
+        };
+        const cli = new HermesCli({
+            runner,
+            workingDirectory: process.cwd(),
+            now: () => '2026-04-10T18:00:00.000Z'
+        });
+        const response = await cli.discoverRuntimeProviderState({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, 'openrouter');
         expect(response.config.defaultModel).toBe('openai/gpt-5.4');
         expect(response.config.provider).toBe('openrouter');
         expect(response.runtimeReadiness.ready).toBe(true);
     });
-    it('falls back to hermes dump when model --json returns invalid JSON', async () => {
+    it('returns ready: false when model is not set (fresh install)', async () => {
         const runner = {
             async run(args) {
-                if (args.join(' ') === 'model --json') {
+                if (args.join(' ') === 'dump') {
                     return {
-                        stdout: '{"schemaVersion":"hermes_cli_models/v2","providers":"broken"}',
+                        stdout: [
+                            'model: (not set)',
+                            'provider: (auto)',
+                            'api_keys:',
+                            '  openrouter           not set',
+                            '  anthropic            not set',
+                            'features:',
+                            '  toolsets:           hermes-cli',
+                        ].join('\n'),
                         stderr: '',
                         exitCode: 0
                     };
                 }
+                throw new Error(`Unexpected command: ${args.join(' ')}`);
+            },
+            async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+        };
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd(), now: () => '2026-04-10T18:00:00.000Z' });
+        const response = await cli.discoverRuntimeProviderState({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, null);
+        expect(response.runtimeReadiness.ready).toBe(false);
+        expect(response.runtimeReadiness.code).toBe('config_error');
+        expect(response.config.defaultModel).toBe('unknown');
+    });
+    it('returns ready: false with provider_auth_required when model is set but provider has no key', async () => {
+        const runner = {
+            async run(args) {
                 if (args.join(' ') === 'dump') {
                     return {
-                        stdout: 'model: openai/gpt-5.4\nprovider: openrouter\n',
+                        stdout: [
+                            'model: anthropic/claude-sonnet-4',
+                            'provider: anthropic',
+                            'api_keys:',
+                            '  openrouter           not set',
+                            '  anthropic            not set',
+                            'features:',
+                            '  toolsets:           hermes-cli',
+                        ].join('\n'),
+                        stderr: '',
+                        exitCode: 0
+                    };
+                }
+                throw new Error(`Unexpected command: ${args.join(' ')}`);
+            },
+            async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+        };
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd(), now: () => '2026-04-10T18:00:00.000Z' });
+        const response = await cli.discoverRuntimeProviderState({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, 'anthropic');
+        expect(response.runtimeReadiness.ready).toBe(false);
+        expect(response.runtimeReadiness.code).toBe('provider_auth_required');
+    });
+    it('marks provider connected when api key is set in dump', async () => {
+        const runner = {
+            async run(args) {
+                if (args.join(' ') === 'dump') {
+                    return {
+                        stdout: [
+                            'model: anthropic/claude-sonnet-4',
+                            'provider: anthropic',
+                            'api_keys:',
+                            '  openrouter           not set',
+                            '  anthropic            set',
+                            'features:',
+                            '  toolsets:           hermes-cli',
+                        ].join('\n'),
                         stderr: '',
                         exitCode: 0
                     };
@@ -1366,11 +1317,7 @@ Quarterly planning review                           9m ago                      
                 throw new Error(`Unexpected command: ${args.join(' ')}`);
             },
             async stream() {
-                return {
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0
-                };
+                return { stdout: '', stderr: '', exitCode: 0 };
             }
         };
         const cli = new HermesCli({
@@ -1378,143 +1325,33 @@ Quarterly planning review                           9m ago                      
             workingDirectory: process.cwd(),
             now: () => '2026-04-10T18:00:00.000Z'
         });
-        const response = await cli.discoverRuntimeProviderState({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, 'openrouter');
-        expect(response.config.defaultModel).toBe('openai/gpt-5.4');
-        expect(response.config.provider).toBe('openrouter');
+        const response = await cli.discoverRuntimeProviderState({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, 'anthropic');
+        expect(response.config.provider).toBe('anthropic');
+        const anthropic = response.providers.find((p) => p.id === 'anthropic');
+        expect(anthropic?.state).toBe('connected');
+        expect(anthropic?.ready).toBe(true);
     });
-    it('keeps runtime readiness from structured JSON discovery without recomputing it', async () => {
-        const discovery = createStructuredDiscovery({
-            runtimeReadiness: {
-                ready: false,
-                code: 'provider_auth_required',
-                message: 'Hermes is still checking provider readiness.',
-                providerId: 'openrouter',
-                modelId: 'openai/gpt-5.4'
-            }
-        });
-        const runner = {
-            async run(args) {
-                if (args.join(' ') === 'model --json') {
-                    return {
-                        stdout: JSON.stringify(discovery),
-                        stderr: '',
-                        exitCode: 0
-                    };
-                }
-                throw new Error(`Unexpected command: ${args.join(' ')}`);
-            },
-            async stream() {
-                return {
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0
-                };
-            }
-        };
-        const cli = new HermesCli({
-            runner,
-            workingDirectory: process.cwd()
-        });
-        const response = await cli.discoverRuntimeProviderState({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, 'openrouter');
-        expect(response.runtimeReadiness).toEqual(discovery.runtimeReadiness);
-    });
-    it('accepts nullable optional fields from authoritative discovery JSON', async () => {
-        const discovery = createStructuredDiscovery({
-            providers: [
-                {
-                    ...createStructuredDiscovery().providers[0],
-                    credentialLabel: null,
-                    maskedCredential: null,
-                    configurationFields: [
-                        {
-                            key: 'defaultModel',
-                            label: 'Default model',
-                            description: null,
-                            input: 'select',
-                            required: true,
-                            secret: false,
-                            value: 'openai/gpt-5.4',
-                            placeholder: null,
-                            options: [
-                                {
-                                    value: 'openai/gpt-5.4',
-                                    label: 'openai/gpt-5.4',
-                                    description: null,
-                                    disabled: false,
-                                    disabledReason: null
-                                }
-                            ],
-                            disabled: false,
-                            disabledReason: null
-                        }
-                    ]
-                }
-            ]
-        });
-        const runner = {
-            async run(args) {
-                if (args.join(' ') === 'model --json') {
-                    return {
-                        stdout: JSON.stringify(discovery),
-                        stderr: '',
-                        exitCode: 0
-                    };
-                }
-                throw new Error(`Unexpected command: ${args.join(' ')}`);
-            },
-            async stream() {
-                return {
-                    stdout: '',
-                    stderr: '',
-                    exitCode: 0
-                };
-            }
-        };
-        const cli = new HermesCli({
-            runner,
-            workingDirectory: process.cwd()
-        });
-        const response = await cli.discoverRuntimeProviderState({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, 'openrouter');
-        expect(response.providers[0]?.credentialLabel).toBeUndefined();
-        expect(response.providers[0]?.configurationFields[0]?.description).toBeUndefined();
-        expect(response.providers[0]?.configurationFields[0]?.options[0]?.disabledReason).toBeUndefined();
-    });
-    it('uses login and discovery for provider auth begin and poll in v0.9.0', async () => {
+    it('uses login --provider and dump for OAuth provider auth begin and poll', async () => {
         const calls = [];
-        let callCount = 0;
-        const discovery = createStructuredDiscovery();
+        let dumpCallCount = 0;
+        const dumpOutput = [
+            'model: openai/gpt-5.4',
+            'provider: openrouter',
+            'api_keys:',
+            '  openrouter           set',
+            'features:',
+            '  toolsets:           hermes-cli',
+        ].join('\n');
         const runner = {
             async run(args) {
                 const command = args.join(' ');
                 calls.push(command);
-                if (command === 'login') {
+                if (command.startsWith('login')) {
                     return { stdout: '', stderr: '', exitCode: 0 };
                 }
-                if (command === 'model --json') {
-                    callCount++;
-                    return {
-                        stdout: JSON.stringify(discovery),
-                        stderr: '',
-                        exitCode: 0
-                    };
+                if (command === 'dump') {
+                    dumpCallCount++;
+                    return { stdout: dumpOutput, stderr: '', exitCode: 0 };
                 }
                 throw new Error(`Unexpected command: ${command}`);
             },
@@ -1522,43 +1359,46 @@ Quarterly planning review                           9m ago                      
                 return { stdout: '', stderr: '', exitCode: 0 };
             }
         };
-        const cli = new HermesCli({
-            runner,
-            workingDirectory: process.cwd()
-        });
-        const profile = {
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        };
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+        const profile = { id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true };
         const beginState = await cli.beginProviderAuth(profile, 'nous');
         const pollState = await cli.pollProviderAuth(profile, 'nous', 'nous-session-1');
         expect(beginState.runtimeReadiness.ready).toBe(true);
         expect(pollState.runtimeReadiness.ready).toBe(true);
-        expect(calls).toContain('login');
-        expect(callCount).toBe(2); // once for begin, once for poll
+        // beginProviderAuth should pass --provider nous, not just 'login'
+        expect(calls).toContain('login --provider nous');
+        expect(dumpCallCount).toBe(2); // once for begin, once for poll
     });
-    it('uses config set and discovery for runtime model updates in v0.9.0', async () => {
+    it('passes correct --provider flag for openai-codex OAuth auth', async () => {
         const calls = [];
-        const configuredDiscovery = createStructuredDiscovery({
-            config: {
-                ...createStructuredDiscovery().config,
-                provider: 'openrouter',
-                defaultModel: 'openai/gpt-5.4-mini'
-            }
-        });
         const runner = {
             async run(args) {
                 const command = args.join(' ');
                 calls.push(command);
-                if (command === 'config set model openai/gpt-5.4-mini') {
+                if (command.startsWith('login') || command === 'dump') {
+                    return { stdout: command === 'dump' ? 'model: openai/gpt-5.4\nprovider: openrouter\n' : '', stderr: '', exitCode: 0 };
+                }
+                throw new Error(`Unexpected command: ${command}`);
+            },
+            async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+        };
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+        const profile = { id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true };
+        await cli.beginProviderAuth(profile, 'openai-codex');
+        expect(calls).toContain('login --provider openai-codex');
+    });
+    it('uses config set model.default (not model) and applies all fields', async () => {
+        const calls = [];
+        const runner = {
+            async run(args) {
+                const command = args.join(' ');
+                calls.push(command);
+                if (command.startsWith('config set ')) {
                     return { stdout: '', stderr: '', exitCode: 0 };
                 }
-                if (command === 'model --json') {
+                if (command === 'dump') {
                     return {
-                        stdout: JSON.stringify(configuredDiscovery),
+                        stdout: 'model: openai/gpt-5.4-mini\nprovider: openrouter\n',
                         stderr: '',
                         exitCode: 0
                     };
@@ -1569,37 +1409,56 @@ Quarterly planning review                           9m ago                      
                 return { stdout: '', stderr: '', exitCode: 0 };
             }
         };
-        const cli = new HermesCli({
-            runner,
-            workingDirectory: process.cwd()
-        });
-        const config = await cli.updateRuntimeModelConfig({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, {
-            provider: 'openrouter',
-            defaultModel: 'openai/gpt-5.4-mini',
-            baseUrl: 'https://openrouter.ai/api/v1',
-            apiMode: 'responses',
-            maxTurns: 42,
-            reasoningEffort: 'high'
-        });
-        expect(config).toMatchObject({
-            provider: 'openrouter',
-            defaultModel: 'openai/gpt-5.4-mini'
-        });
-        expect(calls).toContain('config set model openai/gpt-5.4-mini');
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+        const config = await cli.updateRuntimeModelConfig({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, { provider: 'openrouter', defaultModel: 'openai/gpt-5.4-mini', baseUrl: 'https://openrouter.ai/api/v1', apiMode: 'responses', maxTurns: 42, reasoningEffort: 'high' });
+        expect(config).toMatchObject({ provider: 'openrouter', defaultModel: 'openai/gpt-5.4-mini' });
+        // Must use model.default (dict key) not model (scalar) to preserve sibling keys
+        expect(calls).toContain('config set model.default openai/gpt-5.4-mini');
+        expect(calls).toContain('config set model.provider openrouter');
+        expect(calls).toContain('config set model.base_url https://openrouter.ai/api/v1');
+        expect(calls).toContain('config set model.api_mode responses');
+        expect(calls).toContain('config set agent.max_turns 42');
+        expect(calls).toContain('config set agent.reasoning_effort high');
+        // Must NOT use 'config set model ...' (scalar form) which would clobber provider/base_url
+        expect(calls.every((c) => c !== 'config set model openai/gpt-5.4-mini')).toBe(true);
     });
-    it('connectProvider delegates to discovery in v0.9.0', async () => {
-        const discovery = createStructuredDiscovery();
+    it('treats model: (not set) from dump as unknown', async () => {
         const runner = {
             async run(args) {
-                if (args.join(' ') === 'model --json') {
+                if (args.join(' ') === 'dump') {
                     return {
-                        stdout: JSON.stringify(discovery),
+                        stdout: 'model: (not set)\nprovider: openrouter\n',
+                        stderr: '',
+                        exitCode: 0
+                    };
+                }
+                throw new Error(`Unexpected command: ${args.join(' ')}`);
+            },
+            async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+        };
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd(), now: () => '2026-04-10T18:00:00.000Z' });
+        const response = await cli.discoverRuntimeProviderState({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, 'openrouter');
+        expect(response.config.defaultModel).toBe('unknown');
+    });
+    it('connectProvider writes API key via config set and calls dump-based discovery', async () => {
+        const calls = [];
+        const runner = {
+            async run(args) {
+                const command = args.join(' ');
+                calls.push(command);
+                if (command.startsWith('config set ')) {
+                    return { stdout: '', stderr: '', exitCode: 0 };
+                }
+                if (command === 'dump') {
+                    return {
+                        stdout: [
+                            'model: openai/gpt-5.4',
+                            'provider: openrouter',
+                            'api_keys:',
+                            '  openrouter           set',
+                            'features:',
+                            '  toolsets:           hermes-cli',
+                        ].join('\n'),
                         stderr: '',
                         exitCode: 0
                     };
@@ -1610,21 +1469,9 @@ Quarterly planning review                           9m ago                      
                 return { stdout: '', stderr: '', exitCode: 0 };
             }
         };
-        const cli = new HermesCli({
-            runner,
-            workingDirectory: process.cwd()
-        });
-        const result = await cli.connectProvider({
-            id: 'jbarton',
-            name: 'jbarton',
-            description: 'real profile',
-            path: '/tmp/jbarton',
-            isActive: true
-        }, {
-            profileId: 'jbarton',
-            provider: 'openrouter',
-            apiKey: 'some-key'
-        });
+        const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+        const result = await cli.connectProvider({ id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true }, { profileId: 'jbarton', provider: 'openrouter', apiKey: 'sk-or-test-1234' });
+        expect(calls).toContain('config set OPENROUTER_API_KEY sk-or-test-1234');
         expect(result.runtimeReadiness.ready).toBe(true);
     });
 });

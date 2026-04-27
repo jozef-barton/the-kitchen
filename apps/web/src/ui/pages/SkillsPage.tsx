@@ -284,43 +284,46 @@ export function SkillsPage({
         display="flex"
         flexDirection="column"
         variant="plain"
-        css={{
-          '--tabs-indicator-bg': 'var(--surface-1)',
-          '--tabs-indicator-shadow': 'var(--shadow-xs)',
-          '--tabs-trigger-radius': '7px'
-        }}
       >
-        {/* Tabs row with Refresh icon right-aligned */}
-        <HStack justify="space-between" align="center" mb="6" flexShrink={0}>
-          <Tabs.List
-            rounded="8px"
-            bg="var(--surface-2)"
-            border="1px solid var(--border-subtle)"
-            p="1"
-            w="fit-content"
-          >
-            <Tabs.Trigger value="installed" fontSize="xs" px="3">
-              Installed Skills{response ? ` (${response.items.length})` : ''}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="finder" fontSize="xs" px="3">
-              Skill Finder
-            </Tabs.Trigger>
-            <Tabs.Indicator />
-          </Tabs.List>
-          <Button
-            variant="ghost"
-            w="8" h="8" minW="0" px="0"
-            rounded="var(--radius-control)"
-            color="var(--text-muted)"
-            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-            onClick={onRefresh}
-            loading={loading}
-            title="Refresh"
-            aria-label="Refresh"
-          >
-            <RefreshIcon />
-          </Button>
-        </HStack>
+        <Box borderBottom="1px solid var(--divider)" flexShrink={0}>
+          <HStack justify="space-between" align="center">
+            <Tabs.List gap="0" px="0" borderBottom="none">
+              {(['installed', 'finder'] as const).map((v) => (
+                <Tabs.Trigger
+                  key={v}
+                  value={v}
+                  fontSize="13px"
+                  px="4"
+                  h="44px"
+                  color="var(--text-muted)"
+                  fontWeight="400"
+                  borderBottom="2px solid transparent"
+                  mb="-1px"
+                  transition="color 120ms ease, border-color 120ms ease"
+                  _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
+                  _hover={{ color: 'var(--text-secondary)' }}
+                >
+                  {v === 'installed'
+                    ? `Installed Skills${response ? ` (${response.items.length})` : ''}`
+                    : 'Skill Finder'}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+            <Button
+              variant="ghost"
+              w="8" h="8" minW="0" px="0"
+              rounded="var(--radius-control)"
+              color="var(--text-muted)"
+              _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+              onClick={onRefresh}
+              loading={loading}
+              title="Refresh"
+              aria-label="Refresh"
+            >
+              <RefreshIcon />
+            </Button>
+          </HStack>
+        </Box>
 
         <Tabs.Content value="installed" flex="1" minH={0} pt="0">
           <InstalledSkillsTab

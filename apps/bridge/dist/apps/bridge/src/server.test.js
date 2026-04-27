@@ -139,8 +139,15 @@ function expectPromotedRichHomeRecipe(recipe, expectedSnippet) {
 }
 async function startServer(tempRoot, options = {}) {
     const databasePath = options.databasePath ?? path.join(tempRoot, 'bridge.sqlite');
-    process.env.HERMES_FIXTURE_HOME = path.join(tempRoot, 'fixture-home');
+    const fixtureHome = path.join(tempRoot, 'fixture-home');
+    process.env.HERMES_FIXTURE_HOME = fixtureHome;
     process.env.HERMES_FIXTURE_FAIL = options.failureFlags ?? '';
+    // Seed a minimal models cache so dump-based discovery can offer select inputs for the active provider
+    fs.mkdirSync(fixtureHome, { recursive: true });
+    fs.writeFileSync(path.join(fixtureHome, 'models_dev_cache.json'), JSON.stringify({
+        openrouter: { models: { 'openai/gpt-5.4': { name: 'GPT-5.4' }, 'openai/gpt-5.4-mini': { name: 'GPT-5.4 Mini' } } },
+        anthropic: { models: { 'anthropic/claude-sonnet-4': { name: 'Claude Sonnet 4' } } }
+    }));
     const instance = createBridgeServer({
         databasePath,
         cliPath: fixtureCliPath,
@@ -300,8 +307,8 @@ describe.sequential('bridge server', () => {
             item.setupSteps.some((step) => step.kind === 'api_key' && step.status === 'completed') &&
             item.configurationFields.some((field) => field.key === 'baseUrl'))).toBe(true);
         expect(updated.config.defaultModel).toBe('anthropic/claude-3.7-sonnet');
-        // In v0.9.0, provider is not changed via config set model — only the model changes
-        expect(updated.config.provider).toBe('openrouter');
+        // provider is updated via config set model.provider when included in the request
+        expect(updated.config.provider).toBe('anthropic');
         // connectProvider in v0.9.0 delegates to discovery — returns provider state
         expect(connected.config).toBeTruthy();
         expect(connected.providers.length).toBeGreaterThan(0);

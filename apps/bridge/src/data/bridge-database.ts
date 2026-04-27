@@ -199,6 +199,27 @@ const sessionTitleStopWords = new Set([
   'tell',
   'the',
   'to',
+  'also',
+  'change',
+  'convert',
+  'different',
+  'format',
+  'instead',
+  'just',
+  'like',
+  'list',
+  'more',
+  'now',
+  'other',
+  'refresh',
+  'same',
+  'some',
+  'step',
+  'switch',
+  'this',
+  'turn',
+  'use',
+  'using',
   'update',
   'want',
   'what',
@@ -239,7 +260,17 @@ function generateSessionTitle(candidate: string, fallbackTitle: string) {
       ?.split(/[.?!]/u)[0]
       ?.trim() ?? normalized;
   const tokens = firstClause.match(/[A-Za-z0-9]+(?:[/-][A-Za-z0-9]+)*/gu) ?? [];
-  const keywords = tokens.filter((token) => token.length > 1 && !sessionTitleStopWords.has(token.toLowerCase())).slice(0, 6);
+  // Deduplicate: keep only the first occurrence of each lowercased keyword so
+  // repeated words like "step step" in the source don't produce "Step Step".
+  const seenLower = new Set<string>();
+  const keywords = tokens
+    .filter((token) => {
+      const lower = token.toLowerCase();
+      if (token.length <= 1 || sessionTitleStopWords.has(lower) || seenLower.has(lower)) return false;
+      seenLower.add(lower);
+      return true;
+    })
+    .slice(0, 6);
   const title =
     keywords.length >= 2
       ? keywords.map((token) => formatSessionTitleToken(token)).join(' ')
@@ -3750,7 +3781,7 @@ export class BridgeDatabase {
     return rows.map((row) => this.rowToMessage(row));
   }
 
-  appendMessage(message: ChatMessage) {
+  appendMessage(message: ChatMessage, options: { skipTitleUpdate?: boolean } = {}) {
     const parsedMessage = ChatMessageSchema.parse(message);
     const existingMessages = this.listMessages(parsedMessage.sessionId);
     const previousRequestId = existingMessages.at(-1)?.requestId ?? null;
@@ -3787,7 +3818,7 @@ export class BridgeDatabase {
           ? truncate(normalizedMessage.content.trim() || session.summary, 96)
           : session.summary;
       const title =
-        normalizedMessage.role === 'user' && normalizedMessage.visibility === 'transcript'
+        !options.skipTitleUpdate && normalizedMessage.role === 'user' && normalizedMessage.visibility === 'transcript'
           ? resolveAutoSessionTitle(session.title, normalizedMessage.content.trim(), {
               titleOverride: storageState?.title_override ?? null
             })
