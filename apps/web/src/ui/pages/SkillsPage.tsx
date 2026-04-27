@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Box, Button, HStack, Menu, Portal, Table, Text, Tooltip, VStack } from '@chakra-ui/react';
+import { Box, Button, HStack, Menu, Portal, Table, Tabs, Text, Tooltip, VStack } from '@chakra-ui/react';
 import type { Skill, SkillsResponse } from '@hermes-recipes/protocol';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
 import { ErrorBanner } from '../molecules/ErrorBanner';
+import { SkillFinderTab } from '../organisms/SkillFinderTab';
+
+type SkillsTab = 'installed' | 'finder';
 
 function trustSlot(value: string) {
   if (/builtin/i.test(value)) return 'managed';
@@ -46,16 +49,14 @@ function SkillsIcon() {
   );
 }
 
-export function SkillsPage({
+function InstalledSkillsTab({
   response,
-  loading: _loading,
-  error,
-  onRefresh: _onRefresh,
+  loading,
+  onRefresh,
   onDeleteSkill
 }: {
   response: SkillsResponse | null;
   loading: boolean;
-  error: string | null;
   onRefresh: () => void;
   onDeleteSkill: (skill: Skill) => Promise<void> | void;
 }) {
@@ -79,8 +80,19 @@ export function SkillsPage({
   }
 
   return (
-    <VStack align="stretch" h="100%" minH={0} gap="4">
-      {error ? <ErrorBanner title="Skills refresh failed" detail={error} /> : null}
+    <VStack align="stretch" h="100%" minH={0} gap="3">
+      <HStack justify="flex-end">
+        <Button
+          variant="outline"
+          size="sm"
+          rounded="8px"
+          onClick={onRefresh}
+          loading={loading}
+        >
+          Refresh
+        </Button>
+      </HStack>
+
       {actionError ? <ErrorBanner title="Skill update failed" detail={actionError} /> : null}
 
       <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
@@ -242,6 +254,104 @@ export function SkillsPage({
           </Box>
         </ConfirmDialog>
       ) : null}
+    </VStack>
+  );
+}
+
+export function SkillsPage({
+  response,
+  loading,
+  error,
+  activeProfileId,
+  onRefresh,
+  onDeleteSkill
+}: {
+  response: SkillsResponse | null;
+  loading: boolean;
+  error: string | null;
+  activeProfileId: string | null;
+  onRefresh: () => void;
+  onDeleteSkill: (skill: Skill) => Promise<void> | void;
+}) {
+  const [activeTab, setActiveTab] = useState<SkillsTab>('installed');
+
+  return (
+    <VStack align="stretch" h="100%" minH={0} gap="4">
+      <HStack
+        justify="space-between"
+        wrap="wrap"
+        gap="3"
+        rounded="8px"
+        border="1px solid var(--border-subtle)"
+        bg="var(--surface-elevated)"
+        px="4"
+        py="3.5"
+        boxShadow="var(--shadow-xs)"
+      >
+        <Box>
+          <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
+            Runtime skills
+          </Text>
+          <Text fontSize="xs" color="var(--text-secondary)" mt="0.5">
+            Skills available to the active Hermes profile.
+          </Text>
+        </Box>
+      </HStack>
+
+      {error ? <ErrorBanner title="Skills refresh failed" detail={error} /> : null}
+
+      <Tabs.Root
+        value={activeTab}
+        onValueChange={(e) => setActiveTab(e.value as SkillsTab)}
+        h="100%"
+        minH={0}
+        display="flex"
+        flexDirection="column"
+        variant="plain"
+        css={{
+          '--tabs-indicator-bg': 'var(--surface-1)',
+          '--tabs-indicator-shadow': 'var(--shadow-xs)',
+          '--tabs-trigger-radius': '7px'
+        }}
+      >
+        <Tabs.List
+          rounded="8px"
+          bg="var(--surface-2)"
+          border="1px solid var(--border-subtle)"
+          p="1"
+          w="fit-content"
+        >
+          <Tabs.Trigger value="installed" fontSize="xs" px="3">
+            Installed Skills{response ? ` (${response.items.length})` : ''}
+          </Tabs.Trigger>
+          <Tabs.Trigger value="finder" fontSize="xs" px="3">
+            Skill Finder
+          </Tabs.Trigger>
+          <Tabs.Indicator />
+        </Tabs.List>
+
+        <Tabs.Content value="installed" flex="1" minH={0} pt="4">
+          <InstalledSkillsTab
+            response={response}
+            loading={loading}
+            onRefresh={onRefresh}
+            onDeleteSkill={onDeleteSkill}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="finder" flex="1" minH={0} pt="4">
+          {activeProfileId ? (
+            <SkillFinderTab profileId={activeProfileId} />
+          ) : (
+            <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-1)" px="4" py="6">
+              <EmptyStateCard
+                title="No active profile"
+                detail="Connect a Hermes profile to use Skill Finder."
+              />
+            </Box>
+          )}
+        </Tabs.Content>
+      </Tabs.Root>
     </VStack>
   );
 }

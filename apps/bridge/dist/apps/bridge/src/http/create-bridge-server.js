@@ -1,6 +1,6 @@
 import http from 'node:http';
 import path from 'node:path';
-import { ApplyRecipeEntryActionRequestSchema, BeginProviderAuthRequestSchema, ChatStreamRequestSchema, ConnectProviderRequestSchema, CreateProfileRequestSchema, CreateRecipeRequestSchema, TestModelConfigRequestSchema, CreateSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSessionRequestSchema, DeleteSkillRequestSchema, ExecuteRecipeActionRequestSchema, OpenRecipeChatRequestSchema, PollProviderAuthRequestSchema, RenameSessionRequestSchema, ResolveImagesRequestSchema, SelectProfileRequestSchema, SelectSessionRequestSchema, ToolExecutionResolveRequestSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema, RecipeManifestSchema } from '@hermes-recipes/protocol';
+import { ApplyRecipeEntryActionRequestSchema, BeginProviderAuthRequestSchema, ChatStreamRequestSchema, ConnectProviderRequestSchema, CreateProfileRequestSchema, CreateRecipeRequestSchema, TestModelConfigRequestSchema, CreateSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSessionRequestSchema, DeleteSkillRequestSchema, SkillSearchRequestSchema, SkillInstallRequestSchema, ExecuteRecipeActionRequestSchema, OpenRecipeChatRequestSchema, PollProviderAuthRequestSchema, RenameSessionRequestSchema, ResolveImagesRequestSchema, SelectProfileRequestSchema, SelectSessionRequestSchema, ToolExecutionResolveRequestSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema, RecipeManifestSchema } from '@hermes-recipes/protocol';
 import { createUnsplashSourceResolver, resolveImagesInParallel } from '../services/images/image-resolver';
 import { refreshDiskRecipeRegistry } from '../services/recipes/recipe-template-registry';
 const defaultImageResolver = createUnsplashSourceResolver();
@@ -492,6 +492,16 @@ export function createBridgeServer(options) {
                 const skillId = decodeURIComponent(pathname.split('/')[3] ?? '');
                 const payload = DeleteSkillRequestSchema.parse(await readJsonBody(request));
                 sendJson(response, 200, await bridge.deleteSkill(skillId, payload), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'POST' && pathname === '/api/skills/search') {
+                const payload = SkillSearchRequestSchema.parse(await readJsonBody(request));
+                sendJson(response, 200, await bridge.searchSkillsHub(payload), originDecision.allowOrigin);
+                return;
+            }
+            if (request.method === 'POST' && pathname === '/api/skills/install') {
+                const payload = SkillInstallRequestSchema.parse(await readJsonBody(request));
+                sendJson(response, 200, await bridge.installSkillFromHub(payload), originDecision.allowOrigin);
                 return;
             }
             if (request.method === 'GET' && pathname === '/api/model-providers') {

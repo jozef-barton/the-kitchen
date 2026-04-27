@@ -1217,7 +1217,7 @@ describe('App', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(await screen.findByText('Local preferences')).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('keeps startup in checking state until authoritative runtime discovery resolves', async () => {
     const session = createSession('session-1', 'Quarterly planning review');

@@ -141,14 +141,50 @@ function formatOptionalExtensionError(detail: string) {
   return detail.replace(/\n+/gu, ' ').trim();
 }
 
+// Hermes sometimes emits links as plain URL strings instead of {label, url, kind} objects.
+// Coerce them before schema validation so the first parse attempt succeeds.
+function coerceLinksToObjects(links: unknown): unknown {
+  if (!Array.isArray(links)) {
+    return links;
+  }
+  return links.map((item) => {
+    if (typeof item === 'string' && item.trim().length > 0) {
+      const url = item.trim();
+      let label = url;
+      try {
+        label = new URL(url).hostname || url;
+      } catch {
+        // not a parseable URL — use the raw string
+      }
+      return { url, label, kind: 'other' };
+    }
+    return item;
+  });
+}
+
+function normalizeLinksInEnvelopeRecord(rawValue: unknown): unknown {
+  if (!isRecord(rawValue)) {
+    return rawValue;
+  }
+  const result: Record<string, unknown> = { ...rawValue };
+  if (isRecord(result.rawData)) {
+    result.rawData = { ...result.rawData, links: coerceLinksToObjects(result.rawData.links) };
+  }
+  if (isRecord(result.assistantContext)) {
+    result.assistantContext = { ...result.assistantContext, links: coerceLinksToObjects(result.assistantContext.links) };
+  }
+  return result;
+}
+
 function parseHermesRecipeEnvelopeObject(rawValue: unknown) {
   const warnings: string[] = [];
   const diagnostics: HermesRecipeDataExtractionDiagnostic[] = [];
   const extensionDiagnostics: HermesRecipeOptionalExtensionDiagnostic[] = [];
 
+  const normalizedValue = normalizeLinksInEnvelopeRecord(rawValue);
   let baseEnvelope: z.infer<typeof HermesRecipeSeedBaseSchema>;
   try {
-    baseEnvelope = HermesRecipeSeedBaseSchema.parse(rawValue);
+    baseEnvelope = HermesRecipeSeedBaseSchema.parse(normalizedValue);
   } catch (error) {
     return {
       envelope: null as HermesRecipeDataEnvelope | null,

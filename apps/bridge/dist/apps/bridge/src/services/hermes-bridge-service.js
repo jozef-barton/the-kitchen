@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AuditEventsResponseSchema, ApiErrorSchema, ApplyRecipeEntryActionRequestSchema, ChatMessageSchema, ExecuteRecipeActionRequestSchema, RECIPE_REFRESH_USER_MESSAGE, ConnectProviderRequestSchema, CreateRecipeRequestSchema, DeleteSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSkillRequestSchema, JobsFreshnessSchema, JobsResponseSchema, ModelProviderResponseSchema, OpenRecipeChatResponseSchema, RenameSessionRequestSchema, SessionDeletionResponseSchema, SessionMessagesResponseSchema, SessionsResponseSchema, RecipeDeletionResponseSchema, RecipeActionSpecSchema, RecipeAnalysisSchema, RecipeAssistantContextSchema, RecipeIntentSchema, RecipeMetadataSchema, RecipeEntryActionResponseSchema, RecipeFallbackStateSchema, RecipeNormalizedDataSchema, RecipeRawDataSchema, RecipeResponseSchema, RecipeSummarySchema, RecipesResponseSchema, RecipeStatusSchema, RecipeContentFormatSchema, RecipeTabSchema, RecipeUiStateSchema, RecipeUserPromptArtifactSchema, RecipeTemplateFillSchema, RecipeTemplateStateSchema, RecipeModelSchema, RecipePatchSchema, SettingsResponseSchema, SkillDeletionResponseSchema, SkillsResponseSchema, TelemetryResponseSchema, ToolExecutionPrepareRequestSchema, ToolHistoryResponseSchema, ToolsResponseSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema } from '@hermes-recipes/protocol';
+import { AuditEventsResponseSchema, ApiErrorSchema, ApplyRecipeEntryActionRequestSchema, ChatMessageSchema, ExecuteRecipeActionRequestSchema, RECIPE_REFRESH_USER_MESSAGE, ConnectProviderRequestSchema, CreateRecipeRequestSchema, DeleteSessionRequestSchema, DeleteRecipeRequestSchema, DeleteSkillRequestSchema, JobsFreshnessSchema, JobsResponseSchema, ModelProviderResponseSchema, OpenRecipeChatResponseSchema, RenameSessionRequestSchema, SessionDeletionResponseSchema, SessionMessagesResponseSchema, SessionsResponseSchema, RecipeDeletionResponseSchema, RecipeActionSpecSchema, RecipeAnalysisSchema, RecipeAssistantContextSchema, RecipeIntentSchema, RecipeMetadataSchema, RecipeEntryActionResponseSchema, RecipeFallbackStateSchema, RecipeNormalizedDataSchema, RecipeRawDataSchema, RecipeResponseSchema, RecipeSummarySchema, RecipesResponseSchema, RecipeStatusSchema, RecipeContentFormatSchema, RecipeTabSchema, RecipeUiStateSchema, RecipeUserPromptArtifactSchema, RecipeTemplateFillSchema, RecipeTemplateStateSchema, RecipeModelSchema, RecipePatchSchema, SettingsResponseSchema, SkillDeletionResponseSchema, SkillInstallRequestSchema, SkillInstallResponseSchema, SkillSearchRequestSchema, SkillSearchResponseSchema, SkillsResponseSchema, TelemetryResponseSchema, ToolExecutionPrepareRequestSchema, ToolHistoryResponseSchema, ToolsResponseSchema, UpdateRecipeRequestSchema, UpdateRuntimeModelConfigRequestSchema, UpdateSettingsRequestSchema, UpdateUiStateRequestSchema } from '@hermes-recipes/protocol';
 import { getRecipeContentFormat, getRecipeContentEntries, getRecipeContentTab, normalizeRecipeTabs, replaceRecipeContentEntries, removeRecipeContentEntries, normalizeRecipeUiState } from '@hermes-recipes/protocol';
 import { HERMES_EXPECTED_VERSION, HermesCliStructuredActionError, classifyStructuredRecipeIntent, classifyRecipeMutationIntent, resolveHermesChatTimeoutMs } from '../hermes-cli/client';
 import { bridgeReviewedShellToolId, runReviewedToolExecution } from '../reviewed-tools';
@@ -9558,6 +9558,63 @@ Emit one corrected TSX module now.`;
             deletedAt: this.now()
         });
     }
+    async searchSkillsHub(input) {
+        const parsed = SkillSearchRequestSchema.parse(input);
+        const profile = await this.ensureProfile(parsed.profileId);
+        const pageSize = parsed.pageSize;
+        const page = parsed.page;
+        const fetchLimit = pageSize * page + pageSize;
+        const rows = await this.options.hermesCli.searchSkills(profile, parsed.query, { limit: fetchLimit, safeOnly: parsed.safeOnly });
+        const installedIds = new Set(this.options.database.listSkills(profile.id).map((s) => s.name));
+        const CONCURRENCY = 6;
+        const enriched = [];
+        for (let i = 0; i < rows.length; i += CONCURRENCY) {
+            const batch = rows.slice(i, i + CONCURRENCY);
+            const inspected = await Promise.all(batch.map(async (row) => {
+                const inspect = await this.options.hermesCli.inspectSkill(profile, row.identifier).catch(() => null);
+                return {
+                    name: row.name,
+                    identifier: row.identifier,
+                    description: inspect?.description ?? row.description,
+                    source: row.source,
+                    trust: row.trust,
+                    category: '',
+                    isInstalled: installedIds.has(row.name),
+                    isBuiltIn: row.trust === 'builtin',
+                    isOfficial: row.trust === 'official',
+                    isCommunity: row.trust === 'community'
+                };
+            }));
+            enriched.push(...inspected);
+        }
+        const total = enriched.length;
+        const start = (page - 1) * pageSize;
+        const pageItems = enriched.slice(start, start + pageSize);
+        return SkillSearchResponseSchema.parse({
+            profileId: profile.id,
+            query: parsed.query,
+            safeOnly: parsed.safeOnly,
+            page,
+            pageSize,
+            total,
+            results: pageItems,
+            generatedAt: this.now()
+        });
+    }
+    async installSkillFromHub(input) {
+        const parsed = SkillInstallRequestSchema.parse(input);
+        const profile = await this.ensureProfile(parsed.profileId);
+        await this.options.hermesCli.installSkill(profile, parsed.identifier);
+        const freshSkills = await this.options.hermesCli.listSkills(profile);
+        this.options.database.replaceSkills(profile.id, freshSkills);
+        const installedName = parsed.identifier.split('/').at(-1) ?? parsed.identifier;
+        return SkillInstallResponseSchema.parse({
+            profileId: profile.id,
+            identifier: parsed.identifier,
+            skillName: installedName,
+            installedAt: this.now()
+        });
+    }
     async listTelemetry(options = {}) {
         if (options.profileId) {
             await this.ensureProfile(options.profileId);
@@ -10104,8 +10161,13 @@ Emit one corrected TSX module now.`;
             throw new BridgeError(400, 'RECIPE_REFRESH_REQUIRES_ATTACHED_SPACE', 'Open an attached recipe session before refreshing it.');
         }
         const refreshContext = requestMode === 'recipe_refresh' && activeRecipe ? this.buildRecipeRefreshContext(session.id, activeRecipe) : null;
+        const explicitIntentOverride = input.intentContent?.trim();
+        if (refreshContext && explicitIntentOverride && !isSyntheticRecipeRefreshMessage(explicitIntentOverride)) {
+            refreshContext.intentPrompt = explicitIntentOverride;
+            refreshContext.source = 'ui_override';
+        }
         const structuredIntentPrompt = requestMode === 'recipe_refresh'
-            ? (refreshContext?.intentPrompt ?? input.intentContent ?? input.transcriptContent)
+            ? (input.intentContent ?? refreshContext?.intentPrompt ?? input.transcriptContent)
             : (input.intentContent ?? input.transcriptContent);
         const attachedTemplateId = activeRecipe?.dynamic?.recipeTemplate?.templateId ?? null;
         const intentClassification = this.classifyRequiredStructuredRecipeIntent(structuredIntentPrompt, Boolean(activeRecipe), attachedTemplateId);

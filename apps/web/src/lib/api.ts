@@ -11,6 +11,8 @@ import type {
   DeleteRecipeRequest,
   DeleteSessionRequest,
   DeleteSkillRequest,
+  SkillSearchRequest,
+  SkillInstallRequest,
   ExecuteRecipeActionRequest,
   OpenRecipeChatRequest,
   PollProviderAuthRequest,
@@ -39,6 +41,8 @@ import {
   RecipeResponseSchema,
   RecipesResponseSchema,
   SkillDeletionResponseSchema,
+  SkillSearchResponseSchema,
+  SkillInstallResponseSchema,
   SessionMessagesResponseSchema,
   SessionsResponseSchema,
   SessionSchema,
@@ -395,6 +399,28 @@ export async function deleteSkill(skillId: string, input: DeleteSkillRequest) {
       body: JSON.stringify(input)
     }),
     SkillDeletionResponseSchema
+  );
+}
+
+export async function searchSkillsHub(input: SkillSearchRequest) {
+  return parseJsonResponse(
+    await apiFetch('/api/skills/search', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(input)
+    }),
+    SkillSearchResponseSchema
+  );
+}
+
+export async function installSkillFromHub(input: SkillInstallRequest) {
+  return parseJsonResponse(
+    await apiFetch('/api/skills/install', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(input)
+    }),
+    SkillInstallResponseSchema
   );
 }
 

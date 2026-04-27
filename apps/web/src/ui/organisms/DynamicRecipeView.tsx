@@ -24,6 +24,7 @@ import type {
   RecipeUiNode
 } from '@hermes-recipes/protocol';
 import { getRecipeContentTab } from '@hermes-recipes/protocol';
+import type React from 'react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -559,8 +560,8 @@ export function DynamicRecipeView({
   const actionMap = useMemo(() => new Map(mergedActions.map((action) => [action.id, action] as const)), [mergedActions]);
   const retryBuildAction = actionMap.get('retry-build');
   const enrichmentBuild = build ?? null;
-  const enrichmentBuildFailed = enrichmentBuild?.phase === 'failed';
-  const enrichmentBuildInProgress = Boolean(enrichmentBuild && enrichmentBuild.phase !== 'ready' && enrichmentBuild.phase !== 'failed');
+  const _enrichmentBuildFailed = enrichmentBuild?.phase === 'failed';
+  const _enrichmentBuildInProgress = Boolean(enrichmentBuild && enrichmentBuild.phase !== 'ready' && enrichmentBuild.phase !== 'failed');
   const templateBuild = enrichmentBuild?.buildKind === 'template_enrichment' || Boolean(recipeTemplate) || recipe.metadata.activeTemplateId !== undefined;
   const currentPipelineSegment = resolvePipelineSegment(pipeline);
   const templatePipelineStatus = templateBuild ? pipeline?.applet.status ?? null : null;
@@ -1171,112 +1172,7 @@ export function DynamicRecipeView({
   }
 
   function renderEnrichmentStatusBanner() {
-    if (!enrichmentBuildInProgress && !enrichmentBuildFailed) {
-      return null;
-    }
-
-    const failureCategory = humanizeRecipeFailureCategory(
-      currentPipelineSegment?.failureCategory ?? enrichmentBuild?.failureCategory ?? null
-    );
-    const timeoutLabel =
-      currentPipelineSegment?.configuredTimeoutMs ?? enrichmentBuild?.configuredTimeoutMs
-        ? `${(currentPipelineSegment?.configuredTimeoutMs ?? enrichmentBuild?.configuredTimeoutMs ?? 0).toLocaleString()}ms limit`
-        : null;
-    const buildPhaseLabel = formatBuildPhase(enrichmentBuild?.phase ?? null);
-
-    return (
-      <Box
-        rounded="8px"
-        border="1px solid var(--border-subtle)"
-        bg="var(--surface-1)"
-        px="4"
-        py="3.5"
-        data-testid={enrichmentBuildFailed ? 'recipe-enrichment-failed-banner' : 'recipe-enrichment-building-banner'}
-      >
-        <HStack align="start" gap="3">
-          {enrichmentBuildFailed ? (
-            <Box
-              mt="0.5"
-              flexShrink={0}
-              width="24px"
-              height="24px"
-              rounded="full"
-              border="1px solid"
-              borderColor="red.300"
-              color="red.500"
-              display="inline-flex"
-              alignItems="center"
-              justifyContent="center"
-              fontWeight="500"
-            >
-              !
-            </Box>
-          ) : (
-            <Spinner size="sm" color="blue.500" mt="1" />
-          )}
-            <VStack align="start" gap="1.5">
-              <Text fontSize="sm" fontWeight="600" color="var(--text-primary)">
-              {resolveDynamicRecipeBannerTitle(pipeline, enrichmentBuildFailed, templateBuild)}
-            </Text>
-            <Text fontSize="sm" color="var(--text-secondary)">
-              {currentPipelineSegment?.message ??
-                enrichmentBuild?.userFacingMessage ??
-                enrichmentBuild?.progressMessage ??
-                enrichmentBuild?.errorMessage ??
-                'The richer recipe pipeline is running in the background while the baseline Home recipe stays active.'}
-            </Text>
-            {failureCategory || timeoutLabel ? (
-              <HStack gap="2" wrap="wrap">
-                {failureCategory ? (
-                  <Box rounded="full" border="1px solid" borderColor="var(--border-subtle)" px="2.5" py="1">
-                    <Text fontSize="10px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0">
-                      Cause: {failureCategory}
-                    </Text>
-                  </Box>
-                ) : null}
-                {timeoutLabel ? (
-                  <Box rounded="full" border="1px solid" borderColor="var(--border-subtle)" px="2.5" py="1">
-                    <Text fontSize="10px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0">
-                      {timeoutLabel}
-                    </Text>
-                  </Box>
-                ) : null}
-              </HStack>
-            ) : null}
-            {buildPhaseLabel ? (
-              <Box rounded="full" border="1px solid" borderColor="var(--border-subtle)" px="2.5" py="1">
-                <Text fontSize="10px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0">
-                  Stage: {buildPhaseLabel}
-                </Text>
-              </Box>
-            ) : null}
-            {pipeline ? (
-              <HStack gap="2" wrap="wrap" data-testid="dynamic-recipe-pipeline-statuses">
-                <PipelineStatusPill label="Task" status={pipeline.task.status} />
-                <PipelineStatusPill label="Home" status={pipeline.baseline.status} />
-                <PipelineStatusPill label={templateBuild ? 'Generation' : 'Enrichment'} status={pipeline.applet.status} />
-              </HStack>
-            ) : null}
-            {actionMap.has('retry-build') ? (
-              <Button
-                size="xs"
-                variant="outline"
-                colorPalette="blue"
-                loading={actionLoadingId === 'retry-build'}
-                onClick={() => void runAction('retry-build')}
-              >
-                {resolveRetryBuildLabel(retryBuildAction, Boolean(templateBuild))}
-              </Button>
-            ) : null}
-            {actionMap.has('retry-build') ? (
-              <Text fontSize="xs" color="var(--text-muted)">
-                {resolveRetryBuildGuidance(Boolean(templateBuild))}
-              </Text>
-            ) : null}
-          </VStack>
-        </HStack>
-      </Box>
-    );
+    return null;
   }
 
   const dynamicBuildReady = build?.phase === 'ready';
@@ -1349,6 +1245,169 @@ export function DynamicRecipeView({
   }
 
   function renderTemplateLoadingShell() {
+    const tid = recipe.metadata.activeTemplateId;
+    const ghostBar = (w: string) => <Skeleton h="3" rounded="full" w={w} />;
+    const ghostCard = (idx: number) => (
+      <Box key={`gcard-${idx}`} flex={{ base: '1 1 100%', md: '1 1 calc(50% - 8px)' }} minW="220px" rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="4" py="3.5">
+        <VStack align="stretch" gap="2.5">
+          {ghostBar('52%')}
+          {ghostBar('84%')}
+          {ghostBar('68%')}
+        </VStack>
+      </Box>
+    );
+    const ghostListItem = (idx: number, w1 = '54%', w2 = '80%') => (
+      <Box key={`gli-${idx}`} rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+        <VStack align="stretch" gap="2">
+          {ghostBar(w1)}
+          {ghostBar(w2)}
+        </VStack>
+      </Box>
+    );
+    const ghostStats = () => (
+      <HStack gap="3" flexWrap="wrap">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Box key={`gs-${i}`} minW="124px" rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+            {ghostBar('42%')}
+            <Box mt="3">{ghostBar('62%')}</Box>
+          </Box>
+        ))}
+      </HStack>
+    );
+    const ghostTabs = (tabCount: number) => (
+      <VStack align="stretch" gap="3">
+        <HStack gap="2" flexWrap="wrap">
+          {Array.from({ length: tabCount }).map((_, i) => (
+            <Box key={`gt-${i}`} h="8" w={`${68 + i * 18}px`} rounded="8px" bg={i === 0 ? 'rgba(37, 99, 235, 0.12)' : 'rgba(148, 163, 184, 0.18)'} />
+          ))}
+        </HStack>
+        <VStack align="stretch" gap="2.5">
+          {Array.from({ length: 3 }).map((_, i) => ghostListItem(i, `${48 + i * 10}%`, '80%'))}
+        </VStack>
+      </VStack>
+    );
+    const ghostSplit = () => (
+      <HStack align="stretch" gap="3" flexWrap="wrap">
+        <VStack align="stretch" gap="2.5" flex="1" minW="180px">
+          {Array.from({ length: 3 }).map((_, i) => ghostListItem(i, `${52 + i * 8}%`))}
+        </VStack>
+        <VStack align="stretch" gap="3" flex="1.5" minW="200px">
+          {ghostBar('44%')}
+          {ghostBar('88%')}
+          {ghostBar('72%')}
+          {ghostBar('60%')}
+        </VStack>
+      </HStack>
+    );
+    const ghostTable = () => (
+      <VStack align="stretch" gap="2.5">
+        {ghostBar('48%')}
+        <Box rounded="8px" border="1px dashed var(--border-subtle)" px="3.5" py="3">
+          <VStack align="stretch" gap="2">
+            {ghostBar('100%')}
+            {ghostBar('88%')}
+            {ghostBar('94%')}
+            {ghostBar('76%')}
+          </VStack>
+        </Box>
+      </VStack>
+    );
+
+    let inner: React.ReactNode;
+    switch (tid) {
+      case 'flight-comparison':
+      case 'travel-itinerary-planner':
+      case 'event-planner':
+        inner = ghostTabs(3);
+        break;
+      case 'research-notebook':
+        inner = ghostTabs(4);
+        break;
+      case 'inbox-triage-board':
+      case 'security-review-board':
+        inner = (
+          <VStack align="stretch" gap="4">
+            {ghostStats()}
+            {ghostSplit()}
+          </VStack>
+        );
+        break;
+      case 'restaurant-finder':
+      case 'local-discovery-comparison':
+        inner = (
+          <VStack align="stretch" gap="4">
+            <HStack gap="2" flexWrap="wrap">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Box key={`gfilt-${i}`} h="7" w={`${58 + i * 14}px`} rounded="full" bg="rgba(148, 163, 184, 0.18)" />
+              ))}
+            </HStack>
+            {ghostSplit()}
+          </VStack>
+        );
+        break;
+      case 'hotel-shortlist':
+      case 'job-search-pipeline':
+        inner = (
+          <VStack align="stretch" gap="4">
+            {ghostStats()}
+            <HStack gap="3.5" flexWrap="wrap">
+              {ghostCard(0)}
+              {ghostCard(1)}
+            </HStack>
+          </VStack>
+        );
+        break;
+      case 'shopping-shortlist':
+        inner = (
+          <HStack gap="3.5" flexWrap="wrap">
+            {ghostCard(0)}
+            {ghostCard(1)}
+          </HStack>
+        );
+        break;
+      case 'price-comparison-grid':
+        inner = ghostTable();
+        break;
+      case 'vendor-evaluation-matrix':
+        inner = (
+          <VStack align="stretch" gap="4">
+            {ghostStats()}
+            {ghostTable()}
+          </VStack>
+        );
+        break;
+      case 'step-by-step-instructions':
+        inner = (
+          <VStack align="stretch" gap="3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <HStack key={`gcl-${i}`} gap="3" align="start">
+                <Box mt="1" w="4" h="4" rounded="4px" border="1px dashed var(--border-subtle)" flexShrink={0} />
+                <VStack align="stretch" gap="2" flex="1">
+                  {ghostBar(`${68 + i * 6}%`)}
+                  {ghostBar('52%')}
+                </VStack>
+              </HStack>
+            ))}
+          </VStack>
+        );
+        break;
+      default:
+        inner = (
+          <VStack align="stretch" gap="4">
+            <Box rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
+              <VStack align="stretch" gap="2.5">
+                {ghostBar('38%')}
+                {ghostBar('76%')}
+              </VStack>
+            </Box>
+            <HStack align="stretch" gap="4" flexWrap="wrap">
+              {ghostCard(0)}
+              {ghostCard(1)}
+            </HStack>
+          </VStack>
+        );
+    }
+
     return (
       <Box
         flex="1"
@@ -1361,31 +1420,7 @@ export function DynamicRecipeView({
         overflow="auto"
         data-testid="dynamic-recipe-template-shell"
       >
-        <VStack align="stretch" gap="4">
-          <Box rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
-            <VStack align="stretch" gap="2.5">
-              <Skeleton h="3" rounded="full" w="38%" />
-              <Skeleton h="3" rounded="full" w="76%" />
-            </VStack>
-          </Box>
-          <HStack align="stretch" gap="4" flexWrap="wrap">
-            <Box flex="1" minW={0} rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
-              <VStack align="stretch" gap="2.5">
-                <Skeleton h="3" rounded="full" w="32%" />
-                <Skeleton h="3" rounded="full" w="100%" />
-                <Skeleton h="3" rounded="full" w="88%" />
-                <Skeleton h="3" rounded="full" w="94%" />
-              </VStack>
-            </Box>
-            <Box flex="1" minW={0} rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
-              <VStack align="stretch" gap="2.5">
-                <Skeleton h="3" rounded="full" w="42%" />
-                <Skeleton h="3" rounded="full" w="92%" />
-                <Skeleton h="3" rounded="full" w="74%" />
-              </VStack>
-            </Box>
-          </HStack>
-        </VStack>
+        {inner}
       </Box>
     );
   }
@@ -1503,50 +1538,9 @@ export function DynamicRecipeView({
     }
 
     return (
-      <VStack
-        align="stretch"
-        gap="0"
-        h="100%"
-        minH={0}
-        data-testid="recipe-template-generation-running"
-      >
+      <Box h="100%" minH={0} data-testid="recipe-template-generation-running">
         {renderTemplateLoadingShell()}
-        <Box
-          rounded="0 0 10px 10px"
-          borderTop="none"
-          border="1px solid var(--border-subtle)"
-          bg="var(--surface-1)"
-          px="4"
-          py="2"
-        >
-          <HStack gap="3" align="center">
-            <Spinner size="xs" color="blue.500" borderWidth="2px" />
-            <Text fontSize="xs" fontWeight="500" color="var(--text-secondary)" flex="1">
-              {templateStatusMessage || 'Generating recipe…'}
-            </Text>
-            {templateBuildPhaseLabel ? (
-              <Text fontSize="xs" color="var(--text-muted)">
-                {templateBuildPhaseLabel}
-              </Text>
-            ) : null}
-          </HStack>
-          <Box mt="1.5" h="2px" rounded="full" bg="var(--border-subtle)" overflow="hidden">
-            <Box
-              h="100%"
-              rounded="full"
-              bg="blue.500"
-              css={{
-                animation: 'indeterminate-bar 1.5s ease-in-out infinite',
-                '@keyframes indeterminate-bar': {
-                  '0%': { width: '0%', marginLeft: '0%' },
-                  '50%': { width: '40%', marginLeft: '30%' },
-                  '100%': { width: '0%', marginLeft: '100%' }
-                }
-              }}
-            />
-          </Box>
-        </Box>
-      </VStack>
+      </Box>
     );
   }
 

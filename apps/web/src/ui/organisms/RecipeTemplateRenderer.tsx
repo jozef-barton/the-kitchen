@@ -448,6 +448,61 @@ function renderGhostSectionBody(section: RecipeTemplateSection) {
       return (
         <Box rounded="12px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" h="52" />
       );
+    case 'filter-strip':
+      return (
+        <Flex gap="2" wrap="wrap">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Box key={`ghost-filter-${i}`} h="7" w={`${60 + i * 14}px`} rounded="full" bg="rgba(148, 163, 184, 0.18)" />
+          ))}
+        </Flex>
+      );
+    case 'split':
+      return (
+        <HStack align="stretch" gap="3" flexWrap="wrap">
+          <VStack align="stretch" gap="2.5" flex="1" minW="180px">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Box key={`ghost-split-left-${i}`} rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+                <VStack align="stretch" gap="2">
+                  {ghostBar(`${54 + i * 8}%`)}
+                  {ghostBar('80%')}
+                </VStack>
+              </Box>
+            ))}
+          </VStack>
+          <VStack align="stretch" gap="3" flex="1.5" minW="200px">
+            {ghostBar('46%')}
+            {ghostBar('90%')}
+            {ghostBar('74%')}
+            {ghostBar('62%')}
+          </VStack>
+        </HStack>
+      );
+    case 'tabs':
+      return (
+        <VStack align="stretch" gap="3">
+          <Flex gap="2" wrap="wrap">
+            {section.tabs.map((tab, i) => (
+              <Box
+                key={`ghost-tab-${tab.id}`}
+                h="8"
+                w={`${72 + i * 20}px`}
+                rounded="8px"
+                bg={i === 0 ? 'rgba(37, 99, 235, 0.12)' : 'rgba(148, 163, 184, 0.18)'}
+              />
+            ))}
+          </Flex>
+          <VStack align="stretch" gap="2.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Box key={`ghost-pane-item-${i}`} rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+                <VStack align="stretch" gap="2">
+                  {ghostBar(`${50 + i * 10}%`)}
+                  {ghostBar('82%')}
+                </VStack>
+              </Box>
+            ))}
+          </VStack>
+        </VStack>
+      );
     default:
       return (
         <VStack align="stretch" gap="2">

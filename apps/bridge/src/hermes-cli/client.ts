@@ -1395,6 +1395,67 @@ function parseSkillsList(output: string, profileId: string, timestamp: string): 
     }));
 }
 
+export interface SkillSearchRow {
+  name: string;
+  description: string;
+  source: string;
+  trust: string;
+  identifier: string;
+}
+
+export interface SkillInspectData {
+  identifier: string;
+  name: string;
+  description: string;
+  source: string;
+  trust: string;
+}
+
+function parseSkillSearchTable(output: string, safeOnly: boolean): SkillSearchRow[] {
+  const normalized = normalizeOutput(output);
+  if (!normalized) return [];
+
+  const rows: SkillSearchRow[] = [];
+  const lines = normalized.split('\n').map((l) => l.trimEnd());
+
+  for (const line of lines) {
+    if (!line.startsWith('│') && !line.startsWith('┃')) continue;
+    const cells = line
+      .split(/[│┃]/)
+      .slice(1, -1)
+      .map((c) => c.trim());
+    if (cells.length < 5) continue;
+    if (cells[0] === 'Name') continue;
+    const name = cells[0] ?? '';
+    const description = cells[1] ?? '';
+    const source = cells[2] ?? '';
+    const trust = cells[3] ?? '';
+    const identifier = cells[4] ?? '';
+    if (!name || !identifier) continue;
+    if (safeOnly && trust === 'community') continue;
+    rows.push({ name, description, source, trust, identifier });
+  }
+
+  return rows;
+}
+
+function parseSkillInspect(output: string, identifier: string): SkillInspectData | null {
+  const normalized = normalizeOutput(output);
+  if (!normalized) return null;
+
+  const nameMatch = normalized.match(/Name:\s*(.+)/);
+  const descMatch = normalized.match(/Description:\s*([\s\S]+?)(?:\nSource:|$)/);
+  const sourceMatch = normalized.match(/Source:\s*(.+)/);
+  const trustMatch = normalized.match(/Trust:\s*(.+)/);
+
+  const name = nameMatch?.[1]?.trim() ?? identifier.split('/').at(-1) ?? identifier;
+  const description = descMatch?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+  const source = sourceMatch?.[1]?.trim() ?? 'unknown';
+  const trust = trustMatch?.[1]?.trim() ?? 'unknown';
+
+  return { identifier, name, description, source, trust };
+}
+
 function mapCliConfigToRuntimeConfig(profileId: string, config: HermesCliModelDiscovery['config']): RuntimeModelConfig {
   return {
     profileId,
@@ -2642,10 +2703,11 @@ export class HermesCli {
   }
 
   async createProfile(name: string, signal?: AbortSignal): Promise<Profile[]> {
-    if (!name || !/^[a-z0-9_-]+$/i.test(name)) {
+    const normalized = name.toLowerCase();
+    if (!normalized || !/^[a-z0-9_-]+$/.test(normalized)) {
       throw new Error('Profile name must be non-empty and contain only letters, numbers, hyphens, or underscores.');
     }
-    const result = await this.run(['profile', 'create', name, '--clone', '--no-alias'], process.env, signal);
+    const result = await this.run(['profile', 'create', normalized, '--clone', '--no-alias'], process.env, signal);
     if (result.exitCode !== 0) {
       throw new Error(result.stderr.trim() || `Failed to create Hermes profile "${name}".`);
     }
@@ -2819,6 +2881,45 @@ export class HermesCli {
     const result = await this.run(['skills', 'uninstall', skillName], env, signal);
     if (result.exitCode !== 0) {
       throw new Error(result.stderr.trim() || `Failed to uninstall Hermes skill ${skillName}.`);
+    }
+  }
+
+  async searchSkills(
+    profile: Profile,
+    query: string,
+    opts: { limit?: number; safeOnly?: boolean; source?: string } = {},
+    signal?: AbortSignal
+  ) {
+    const env = buildProfileEnvironment(profile);
+    const wideEnv = { ...env, COLUMNS: '300' };
+    const args = ['skills', 'search', query, '--limit', String(opts.limit ?? 20)];
+    if (opts.source) {
+      args.push('--source', opts.source);
+    }
+    const result = await this.run(args, wideEnv, signal);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || `Failed to search Hermes skills for "${query}".`);
+    }
+
+    return parseSkillSearchTable(result.stdout, opts.safeOnly ?? false);
+  }
+
+  async inspectSkill(profile: Profile, identifier: string, signal?: AbortSignal) {
+    const env = buildProfileEnvironment(profile);
+    const wideEnv = { ...env, COLUMNS: '300' };
+    const result = await this.run(['skills', 'inspect', identifier], wideEnv, signal);
+    if (result.exitCode !== 0) {
+      return null;
+    }
+
+    return parseSkillInspect(result.stdout, identifier);
+  }
+
+  async installSkill(profile: Profile, identifier: string, signal?: AbortSignal) {
+    const env = buildProfileEnvironment(profile);
+    const result = await this.run(['skills', 'install', identifier, '--yes'], env, signal);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || `Failed to install Hermes skill "${identifier}".`);
     }
   }
 

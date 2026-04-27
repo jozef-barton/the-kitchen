@@ -13,6 +13,8 @@ import {
   DeleteRecipeRequestSchema,
   DeleteSessionRequestSchema,
   DeleteSkillRequestSchema,
+  SkillSearchRequestSchema,
+  SkillInstallRequestSchema,
   ExecuteRecipeActionRequestSchema,
   OpenRecipeChatRequestSchema,
   PollProviderAuthRequestSchema,
@@ -592,6 +594,18 @@ export function createBridgeServer(options: {
         const skillId = decodeURIComponent(pathname.split('/')[3] ?? '');
         const payload = DeleteSkillRequestSchema.parse(await readJsonBody(request));
         sendJson(response, 200, await bridge.deleteSkill(skillId, payload), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/skills/search') {
+        const payload = SkillSearchRequestSchema.parse(await readJsonBody(request));
+        sendJson(response, 200, await bridge.searchSkillsHub(payload), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/skills/install') {
+        const payload = SkillInstallRequestSchema.parse(await readJsonBody(request));
+        sendJson(response, 200, await bridge.installSkillFromHub(payload), originDecision.allowOrigin);
         return;
       }
 

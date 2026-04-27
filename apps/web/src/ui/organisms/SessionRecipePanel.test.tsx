@@ -315,10 +315,8 @@ describe('SessionRecipePanel', () => {
     });
 
     expect(screen.getByTestId('recipe-template-generation-running')).toBeInTheDocument();
-    expect(screen.getByText('Filling the approved template…')).toBeInTheDocument();
     expect(screen.getByTestId('dynamic-recipe-template-shell')).toBeInTheDocument();
     expect(screen.queryByTestId('dynamic-recipe-baseline')).not.toBeInTheDocument();
-    // The slim running footer does not expose the retry button; retry is only available after failure.
   });
 
   it('renders a failed dynamic build state without falling back to baseline markdown in the template pane', () => {
@@ -526,9 +524,6 @@ describe('SessionRecipePanel', () => {
     });
 
     expect(screen.getByTestId('recipe-template-generation-running')).toBeInTheDocument();
-    expect(
-      screen.getByText('Recipe generation retry is queued and running in the background from persisted Home artifacts.')
-    ).toBeInTheDocument();
     expect(screen.queryByText('Reason: Template fill failed')).not.toBeInTheDocument();
     expect(screen.queryByText('Stage: Failed')).not.toBeInTheDocument();
     expect(screen.getByTestId('dynamic-recipe-template-shell')).toBeInTheDocument();

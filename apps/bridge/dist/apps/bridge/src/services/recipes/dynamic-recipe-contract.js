@@ -52,13 +52,48 @@ function isRecord(value) {
 function formatOptionalExtensionError(detail) {
     return detail.replace(/\n+/gu, ' ').trim();
 }
+// Hermes sometimes emits links as plain URL strings instead of {label, url, kind} objects.
+// Coerce them before schema validation so the first parse attempt succeeds.
+function coerceLinksToObjects(links) {
+    if (!Array.isArray(links)) {
+        return links;
+    }
+    return links.map((item) => {
+        if (typeof item === 'string' && item.trim().length > 0) {
+            const url = item.trim();
+            let label = url;
+            try {
+                label = new URL(url).hostname || url;
+            }
+            catch {
+                // not a parseable URL — use the raw string
+            }
+            return { url, label, kind: 'other' };
+        }
+        return item;
+    });
+}
+function normalizeLinksInEnvelopeRecord(rawValue) {
+    if (!isRecord(rawValue)) {
+        return rawValue;
+    }
+    const result = { ...rawValue };
+    if (isRecord(result.rawData)) {
+        result.rawData = { ...result.rawData, links: coerceLinksToObjects(result.rawData.links) };
+    }
+    if (isRecord(result.assistantContext)) {
+        result.assistantContext = { ...result.assistantContext, links: coerceLinksToObjects(result.assistantContext.links) };
+    }
+    return result;
+}
 function parseHermesRecipeEnvelopeObject(rawValue) {
     const warnings = [];
     const diagnostics = [];
     const extensionDiagnostics = [];
+    const normalizedValue = normalizeLinksInEnvelopeRecord(rawValue);
     let baseEnvelope;
     try {
-        baseEnvelope = HermesRecipeSeedBaseSchema.parse(rawValue);
+        baseEnvelope = HermesRecipeSeedBaseSchema.parse(normalizedValue);
     }
     catch (error) {
         return {
