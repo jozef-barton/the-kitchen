@@ -223,8 +223,19 @@ async function startServer(
   } = {}
 ) {
   const databasePath = options.databasePath ?? path.join(tempRoot, 'bridge.sqlite');
-  process.env.HERMES_FIXTURE_HOME = path.join(tempRoot, 'fixture-home');
+  const fixtureHome = path.join(tempRoot, 'fixture-home');
+  process.env.HERMES_FIXTURE_HOME = fixtureHome;
   process.env.HERMES_FIXTURE_FAIL = options.failureFlags ?? '';
+
+  // Seed a minimal models cache so dump-based discovery can offer select inputs for the active provider
+  fs.mkdirSync(fixtureHome, { recursive: true });
+  fs.writeFileSync(
+    path.join(fixtureHome, 'models_dev_cache.json'),
+    JSON.stringify({
+      openrouter: { models: { 'openai/gpt-5.4': { name: 'GPT-5.4' }, 'openai/gpt-5.4-mini': { name: 'GPT-5.4 Mini' } } },
+      anthropic: { models: { 'anthropic/claude-sonnet-4': { name: 'Claude Sonnet 4' } } }
+    })
+  );
 
   const instance = createBridgeServer({
     databasePath,
