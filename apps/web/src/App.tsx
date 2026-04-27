@@ -178,10 +178,11 @@ export function App() {
             activeModelId={controller.runtimeConfigGate.modelId}
           />
         }
+        noGutter={controller.page === 'chat'}
         sidebarCollapsed={controller.sidebarCollapsed}
         onToggleSidebar={() => void controller.handleSidebarCollapsedChange(!controller.sidebarCollapsed)}
         tabBar={
-          controller.page === 'chat' && controller.openTabs.length > 0 ? (
+          controller.page === 'chat' && controller.openTabs.length >= 2 ? (
             <TabBar
               tabs={controller.openTabs}
               activeTabId={controller.activeSessionId}

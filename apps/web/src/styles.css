@@ -12,54 +12,69 @@ body,
 :root {
   color-scheme: light;
 
-  /* Background layers */
-  --app-bg: #f7f7f8;
-  --shell-bg: #ffffff;
-  --sidebar-bg: #f9f9fa;
-  --surface-1: #ffffff;
-  --surface-2: #f1f3f6;
-  --surface-3: #e8ecf1;
+  /* Accent ramp — indigo-violet, hsl(245, *, *) */
+  --accent-50:  hsl(245, 55%, 97%);
+  --accent-100: hsl(245, 55%, 93%);
+  --accent-200: hsl(245, 52%, 83%);
+  --accent-300: hsl(245, 52%, 73%);
+  --accent-400: hsl(245, 55%, 65%);
+  --accent-500: hsl(245, 55%, 57%);
+  --accent-600: hsl(245, 52%, 47%);
+  --accent-700: hsl(245, 50%, 37%);
+  --accent-800: hsl(245, 48%, 27%);
+  --accent-900: hsl(245, 45%, 17%);
+
+  /* Background layers — cool blue-gray, hsl(220, *, *) */
+  --app-bg:         hsl(220, 18%, 97%);
+  --shell-bg:       hsl(220, 18%, 100%);
+  --sidebar-bg:     hsl(220, 16%, 96%);
+  --surface-1:      hsl(220, 18%, 100%);
+  --surface-2:      hsl(220, 14%, 93%);
+  --surface-3:      hsl(220, 12%, 86%);
   --surface-elevated: rgba(255, 255, 255, 0.97);
 
   /* Semantic surfaces */
-  --surface-hover: rgba(15, 23, 42, 0.04);
-  --surface-active: rgba(15, 23, 42, 0.07);
-  --surface-selected: rgba(0, 180, 150, 0.10);
-  --surface-accent: rgba(0, 180, 150, 0.11);
-  --surface-warning: rgba(245, 158, 11, 0.09);
-  --surface-danger: rgba(220, 38, 38, 0.07);
+  --surface-hover:    hsla(220, 14%, 0%, 0.04);
+  --surface-active:   hsla(220, 14%, 0%, 0.07);
+  --surface-selected: hsla(245, 52%, 47%, 0.10);
+  --surface-accent:   hsla(245, 52%, 47%, 0.10);
+  --surface-warning:  hsla(38, 75%, 44%, 0.09);
+  --surface-danger:   hsla(0, 65%, 50%, 0.07);
 
   /* Border scale */
-  --border-subtle: rgba(15, 23, 42, 0.08);
-  --border-default: rgba(15, 23, 42, 0.12);
-  --border-strong: rgba(15, 23, 42, 0.18);
-  --border-danger: rgba(220, 38, 38, 0.20);
+  --border-subtle:  hsla(220, 10%, 0%, 0.08);
+  --border-default: hsla(220, 10%, 0%, 0.13);
+  --border-strong:  hsla(220, 10%, 0%, 0.20);
+  --border-danger:  hsla(0, 65%, 50%, 0.22);
 
-  /* Text scale */
-  --text-primary: #14161b;
-  --text-secondary: rgba(20, 22, 27, 0.65);
-  --text-muted: rgba(20, 22, 27, 0.42);
-  --text-inverse: #ffffff;
+  /* Text scale — cool blue-gray */
+  --text-primary:   hsl(220, 14%, 10%);
+  --text-secondary: hsl(220, 10%, 38%);
+  --text-muted:     hsl(220, 8%, 55%);
+  --text-inverse:   hsl(220, 14%, 97%);
 
-  /* Accent */
-  --accent: #009e82;
-  --accent-strong: #007a66;
-  --accent-contrast: #ffffff;
-  --accent-soft: rgba(0, 158, 130, 0.11);
+  /* Accent — light mode uses accent-600 */
+  --accent:          hsl(245, 52%, 47%);
+  --accent-strong:   hsl(245, 50%, 37%);
+  --accent-contrast: hsl(245, 55%, 97%);
+  --accent-soft:     hsla(245, 52%, 47%, 0.10);
 
-  /* Semantic status */
-  --status-success: #16a34a;
-  --status-success-bg: rgba(22, 163, 74, 0.09);
-  --status-warning: #d97706;
-  --status-warning-bg: rgba(217, 119, 6, 0.09);
-  --status-danger: #dc2626;
-  --status-danger-bg: rgba(220, 38, 38, 0.09);
-  --status-info: #2563eb;
-  --status-info-bg: rgba(37, 99, 235, 0.09);
-  --user-bubble-bg: #dbeafe;
-  --user-bubble-bg-selected: #bfdbfe;
-  --status-neutral: #6b7280;
-  --status-neutral-bg: rgba(107, 114, 128, 0.09);
+  /* Semantic status — desaturated */
+  --status-success:    hsl(142, 50%, 40%);
+  --status-success-bg: hsla(142, 50%, 40%, 0.09);
+  --status-warning:    hsl(38, 75%, 44%);
+  --status-warning-bg: hsla(38, 75%, 44%, 0.09);
+  --status-danger:     hsl(0, 65%, 50%);
+  --status-danger-bg:  hsla(0, 65%, 50%, 0.09);
+  --status-info:       hsl(210, 65%, 48%);
+  --status-info-bg:    hsla(210, 65%, 48%, 0.09);
+  --status-neutral:    hsl(220, 8%, 52%);
+  --status-neutral-bg: hsla(220, 8%, 52%, 0.09);
+
+  /* User bubble — accent tint */
+  --user-bubble-bg:          hsla(245, 52%, 47%, 0.14);
+  --user-bubble-bg-selected: hsla(245, 52%, 47%, 0.24);
+  --user-bubble-fg:          hsl(220, 14%, 10%);
 
   /* Legacy */
   --coral: #e85935;
@@ -71,8 +86,8 @@ body,
   --shadow-md: 0 12px 40px rgba(16, 24, 40, 0.10);
   --shadow-lg: 0 24px 64px rgba(16, 24, 40, 0.14);
 
-  /* Focus */
-  --focus-ring: 0 0 0 3px rgba(0, 158, 130, 0.22);
+  /* Focus — indigo glow */
+  --focus-ring: 0 0 0 3px hsla(245, 50%, 37%, 0.35);
 
   /* Radii */
   --radius-xs: 3px;
@@ -115,54 +130,57 @@ body,
 .dark {
   color-scheme: dark;
 
-  /* Background layers — deep, calm dark */
-  --app-bg: #0d0d0f;
-  --shell-bg: #141416;
-  --sidebar-bg: #111113;
-  --surface-1: #1c1c1f;
-  --surface-2: #232327;
-  --surface-3: #2e2e34;
-  --surface-elevated: #1c1c1f;
+  /* Background layers — cool blue-gray, hsl(220, *, *) */
+  --app-bg:         hsl(220, 14%, 8%);
+  --shell-bg:       hsl(220, 13%, 10%);
+  --sidebar-bg:     hsl(220, 14%, 8%);
+  --surface-1:      hsl(220, 12%, 13%);
+  --surface-2:      hsl(220, 11%, 16%);
+  --surface-3:      hsl(220, 10%, 20%);
+  --surface-elevated: hsl(220, 12%, 13%);
 
   /* Semantic surfaces */
-  --surface-hover: rgba(255, 255, 255, 0.045);
-  --surface-active: rgba(255, 255, 255, 0.07);
-  --surface-selected: rgba(0, 201, 167, 0.11);
-  --surface-accent: rgba(0, 201, 167, 0.12);
-  --surface-warning: rgba(245, 158, 11, 0.11);
-  --surface-danger: rgba(239, 68, 68, 0.10);
+  --surface-hover:    hsla(220, 15%, 100%, 0.045);
+  --surface-active:   hsla(220, 15%, 100%, 0.07);
+  --surface-selected: hsla(245, 55%, 65%, 0.12);
+  --surface-accent:   hsla(245, 55%, 65%, 0.12);
+  --surface-warning:  hsla(38, 70%, 58%, 0.11);
+  --surface-danger:   hsla(0, 60%, 60%, 0.10);
 
   /* Border scale */
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-default: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.20);
-  --border-danger: rgba(239, 68, 68, 0.24);
+  --border-subtle:  hsla(220, 15%, 100%, 0.06);
+  --border-default: hsla(220, 15%, 100%, 0.10);
+  --border-strong:  hsla(220, 15%, 100%, 0.18);
+  --border-danger:  hsla(0, 60%, 60%, 0.26);
 
-  /* Text scale */
-  --text-primary: #ececec;
-  --text-secondary: #909090;
-  --text-muted: #505050;
-  --text-inverse: #0a0a0b;
+  /* Text scale — cool blue-gray */
+  --text-primary:   hsl(220, 15%, 96%);
+  --text-secondary: hsl(220, 10%, 68%);
+  --text-muted:     hsl(220, 8%, 48%);
+  --text-inverse:   hsl(220, 14%, 8%);
 
-  /* Accent */
-  --accent: #00c9a7;
-  --accent-strong: #00b396;
-  --accent-contrast: #071210;
-  --accent-soft: rgba(0, 201, 167, 0.12);
+  /* Accent — dark mode uses accent-400 */
+  --accent:          hsl(245, 55%, 65%);
+  --accent-strong:   hsl(245, 55%, 57%);
+  --accent-contrast: hsl(245, 55%, 97%);
+  --accent-soft:     hsla(245, 55%, 65%, 0.12);
 
-  /* Semantic status */
-  --status-success: #22c55e;
-  --status-success-bg: rgba(34, 197, 94, 0.10);
-  --status-warning: #f59e0b;
-  --status-warning-bg: rgba(245, 158, 11, 0.11);
-  --status-danger: #ef4444;
-  --status-danger-bg: rgba(239, 68, 68, 0.11);
-  --status-info: #3b82f6;
-  --status-info-bg: rgba(59, 130, 246, 0.11);
-  --status-neutral: #6b7280;
-  --status-neutral-bg: rgba(107, 114, 128, 0.11);
-  --user-bubble-bg: #1e3a5f;
-  --user-bubble-bg-selected: #1e40af;
+  /* Semantic status — desaturated for dark */
+  --status-success:    hsl(142, 45%, 55%);
+  --status-success-bg: hsla(142, 45%, 55%, 0.14);
+  --status-warning:    hsl(38, 70%, 58%);
+  --status-warning-bg: hsla(38, 70%, 58%, 0.14);
+  --status-danger:     hsl(0, 60%, 60%);
+  --status-danger-bg:  hsla(0, 60%, 60%, 0.14);
+  --status-info:       hsl(210, 70%, 62%);
+  --status-info-bg:    hsla(210, 70%, 62%, 0.14);
+  --status-neutral:    hsl(220, 8%, 50%);
+  --status-neutral-bg: hsla(220, 8%, 50%, 0.12);
+
+  /* User bubble — accent tint */
+  --user-bubble-bg:          hsla(245, 55%, 65%, 0.18);
+  --user-bubble-bg-selected: hsla(245, 55%, 65%, 0.28);
+  --user-bubble-fg:          hsl(220, 15%, 96%);
 
   /* Legacy */
   --coral: #ff7a59;
@@ -177,8 +195,8 @@ body,
   /* Layout structure */
   --divider: rgba(255, 255, 255, 0.06);
 
-  /* Focus */
-  --focus-ring: 0 0 0 3px rgba(0, 201, 167, 0.20);
+  /* Focus — indigo glow */
+  --focus-ring: 0 0 0 3px hsla(245, 55%, 65%, 0.30);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -269,21 +287,13 @@ a:focus-visible {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   PAGE CONTENT — standard padding applied to every non-chat page
+   PAGE CONTENT — shell now provides padding; this class is a no-op layout helper
    ───────────────────────────────────────────────────────────────────────────── */
 .page-content {
-  padding: 24px var(--page-pad-x);
   height: 100%;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-
-@media (max-width: 640px) {
-  .page-content {
-    padding: 16px var(--page-pad-x-sm);
-  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -933,6 +943,26 @@ tr:focus-within .table-row-actions {
   text-underline-offset: 2px;
 }
 
+/* Status dot — connect pulse (runs once on mount/reconnect) */
+@keyframes status-dot-connect {
+  0%   { box-shadow: 0 0 0 0 hsla(142, 45%, 55%, 0.55); }
+  60%  { box-shadow: 0 0 0 7px hsla(142, 45%, 55%, 0); }
+  100% { box-shadow: 0 0 0 0 hsla(142, 45%, 55%, 0); }
+}
+
+.status-dot--connected-pulse {
+  animation: status-dot-connect 1.6s ease forwards;
+}
+
+/* Table rows — rhythm improvements */
+tbody tr {
+  min-height: var(--row-height);
+}
+
+tbody tr + tr {
+  border-top: 1px solid var(--border-subtle);
+}
+
 @keyframes statusTickerFadeIn {
   from {
     opacity: 0;
@@ -954,11 +984,12 @@ tr:focus-within .table-row-actions {
   to { transform: rotate(360deg); }
 }
 
-/* ── Settings step slider ── */
+/* ── Settings step slider — 240px track ── */
 .settings-step-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 100%;
+  width: 240px;
+  max-width: 240px;
   height: 4px;
   border-radius: 2px;
   background: var(--surface-3);

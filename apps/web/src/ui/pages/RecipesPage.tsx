@@ -52,7 +52,7 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
   const selectedIngredient = getIngredientById(selectedIngredientId) ?? visibleIngredients[0] ?? INGREDIENT_CATALOG[0];
 
   return (
-    <VStack align="stretch" h="100%" minH={0} gap="0" px={{ base: '3', lg: '4' }} pt={{ base: '2', lg: '3' }}>
+    <VStack align="stretch" h="100%" minH={0} gap="0">
       {/* Tab bar — block style matching Tools */}
       <Box mb="3" flexShrink={0}>
         <Tabs.Root
@@ -78,7 +78,7 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
           {/* Full-width scrollable gallery — no preview panel */}
           <ScrollArea.Root flex="1" minH={0} variant="hover">
             <ScrollArea.Viewport>
-              <Box px={{ base: '3', lg: '4' }} pb="6" pt="1">
+              <Box pb="6" pt="1">
                 <RecipeTemplateGallery
                   templates={visibleTemplates}
                   activeCategory={category}
@@ -107,7 +107,7 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
           {/* Full-width scrollable gallery — no preview panel */}
           <ScrollArea.Root flex="1" minH={0} variant="hover">
             <ScrollArea.Viewport>
-              <Box px={{ base: '3', lg: '4' }} pb="6" pt="1">
+              <Box pb="6" pt="1">
                 <IngredientGallery
                   ingredients={visibleIngredients}
                   activeGroup={ingredientGroup}

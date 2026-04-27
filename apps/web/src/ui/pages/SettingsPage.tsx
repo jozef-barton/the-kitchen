@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Badge, Box, Button, Checkbox, Drawer, Field, Grid, HStack, Input, NumberInput, NativeSelect, ScrollArea, Spinner, Table, Tabs, Text, VStack } from '@chakra-ui/react';
 
-/* ── Discrete step slider ── */
+/* ── Discrete step slider — 240px track + inline value badge ── */
 function StepSlider({
   steps,
   value,
@@ -15,36 +15,57 @@ function StepSlider({
   disabled?: boolean;
 }) {
   const idx = Math.max(0, steps.findIndex((s) => String(s.value) === value));
+  const currentStep = steps[idx];
+  const minLabel = steps[0]?.label;
+  const maxLabel = steps[steps.length - 1]?.label;
   return (
-    <Box w="100%">
-      <input
-        type="range"
-        min={0}
-        max={steps.length - 1}
-        step={1}
-        value={idx}
-        disabled={disabled}
-        className="settings-step-slider"
-        onChange={(e) => {
-          const step = steps[Number(e.target.value)];
-          if (step) onChange(String(step.value));
-        }}
-      />
-      <HStack justify="space-between" mt="0.5" px="0.5">
-        {steps.map((s, i) => (
-          <Text
-            key={s.value}
-            fontSize="10px"
-            fontWeight={i === idx ? '600' : '400'}
-            color={i === idx ? 'var(--text-primary)' : 'var(--text-muted)'}
-          >
-            {s.label}
-          </Text>
-        ))}
+    <Box>
+      <HStack gap="3" align="center">
+        <input
+          type="range"
+          min={0}
+          max={steps.length - 1}
+          step={1}
+          value={idx}
+          disabled={disabled}
+          className="settings-step-slider"
+          onChange={(e) => {
+            const step = steps[Number(e.target.value)];
+            if (step) onChange(String(step.value));
+          }}
+        />
+        <Text fontSize="13px" fontWeight="500" color="var(--text-primary)" minW="28px">
+          {currentStep?.label ?? value}
+        </Text>
       </HStack>
+      {minLabel && maxLabel ? (
+        <Text fontSize="11px" color="var(--text-muted)" mt="1">
+          Range: {minLabel}–{maxLabel}
+        </Text>
+      ) : null}
     </Box>
   );
 }
+
+function msToHuman(ms: string): string {
+  const n = Number.parseInt(ms, 10);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n >= 60000 && n % 60000 === 0) return `${n / 60000}m`;
+  if (n >= 60000) return `${(n / 60000).toFixed(1)}m`;
+  if (n >= 1000 && n % 1000 === 0) return `${n / 1000}s`;
+  return `${n}ms`;
+}
+
+function parseHumanToMs(str: string): number | null {
+  const s = str.trim().toLowerCase();
+  if (/^\d+$/.test(s)) return Number.parseInt(s, 10);
+  const sec = s.match(/^(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?$/u);
+  if (sec) return Math.round(parseFloat(sec[1]) * 1000);
+  const min = s.match(/^(\d+(?:\.\d+)?)\s*m(?:in(?:utes?)?)?$/u);
+  if (min) return Math.round(parseFloat(min[1]) * 60000);
+  return null;
+}
+
 import { useHermesTheme } from '@hermes-recipes/ui';
 import type {
   AccessAuditSummary,
@@ -150,6 +171,11 @@ export function SettingsPage({
   const [recipeOperationTimeoutMs, setRecipeOperationTimeoutMs] = useState('180000');
   const [unrestrictedTimeoutMs, setUnrestrictedTimeoutMs] = useState('1800000');
   const [restrictedChatMaxTurns, setRestrictedChatMaxTurns] = useState('8');
+  /* Human-readable display values for timeout inputs */
+  const [chatTimeoutDisplay, setChatTimeoutDisplay] = useState(() => msToHuman('180000'));
+  const [discoveryTimeoutDisplay, setDiscoveryTimeoutDisplay] = useState(() => msToHuman('240000'));
+  const [nearbySearchTimeoutDisplay, setNearbySearchTimeoutDisplay] = useState(() => msToHuman('300000'));
+  const [recipeOperationTimeoutDisplay, setRecipeOperationTimeoutDisplay] = useState(() => msToHuman('180000'));
   const [unrestrictedAccessEnabled, setUnrestrictedAccessEnabled] = useState(false);
 
   const [defaultModel, setDefaultModel] = useState('');
@@ -375,6 +401,12 @@ export function SettingsPage({
     providerDrawerOpen
   ]);
 
+  /* Sync display values when underlying ms state changes (e.g. on settings load) */
+  useEffect(() => { setChatTimeoutDisplay(msToHuman(chatTimeoutMs)); }, [chatTimeoutMs]);
+  useEffect(() => { setDiscoveryTimeoutDisplay(msToHuman(discoveryTimeoutMs)); }, [discoveryTimeoutMs]);
+  useEffect(() => { setNearbySearchTimeoutDisplay(msToHuman(nearbySearchTimeoutMs)); }, [nearbySearchTimeoutMs]);
+  useEffect(() => { setRecipeOperationTimeoutDisplay(msToHuman(recipeOperationTimeoutMs)); }, [recipeOperationTimeoutMs]);
+
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function scheduleSave(overrides: Partial<{
@@ -447,40 +479,29 @@ export function SettingsPage({
       minH={0}
       display="flex"
       flexDirection="column"
-      variant="line"
+      variant="plain"
       lazyMount
-      px={{ base: '4', lg: '6' }}
     >
       <Box borderBottom="1px solid var(--divider)" flexShrink={0}>
-        <Tabs.List gap="0" px="0">
-          <Tabs.Trigger
-            value="general" fontSize="13px" px="4" h="44px"
-            color="var(--text-muted)" fontWeight="400"
-            _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
-          >
-            Settings
-          </Tabs.Trigger>
-          <Tabs.Trigger
-            value="model" fontSize="13px" px="4" h="44px"
-            color="var(--text-muted)" fontWeight="400"
-            _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
-          >
-            Models
-          </Tabs.Trigger>
-          <Tabs.Trigger
-            value="access_audit" fontSize="13px" px="4" h="44px"
-            color="var(--text-muted)" fontWeight="400"
-            _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
-          >
-            Access
-          </Tabs.Trigger>
-          <Tabs.Trigger
-            value="telemetry" fontSize="13px" px="4" h="44px"
-            color="var(--text-muted)" fontWeight="400"
-            _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
-          >
-            Audit
-          </Tabs.Trigger>
+        <Tabs.List gap="0" px="0" borderBottom="none">
+          {(['general', 'model', 'access_audit', 'telemetry'] as const).map((v) => (
+            <Tabs.Trigger
+              key={v}
+              value={v}
+              fontSize="13px"
+              px="4"
+              h="44px"
+              color="var(--text-muted)"
+              fontWeight="400"
+              borderBottom="2px solid transparent"
+              mb="-1px"
+              transition="color 120ms ease, border-color 120ms ease"
+              _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
+              _hover={{ color: 'var(--text-secondary)' }}
+            >
+              {v === 'general' ? 'Settings' : v === 'model' ? 'Models' : v === 'access_audit' ? 'Access' : 'Audit'}
+            </Tabs.Trigger>
+          ))}
         </Tabs.List>
       </Box>
 
@@ -524,54 +545,70 @@ export function SettingsPage({
 
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Normal chat timeout</Field.Label>
-                <NumberInput.Root
-                  value={chatTimeoutMs}
-                  onValueChange={(d) => { setChatTimeoutMs(d.value); scheduleSave({ chatTimeoutMs: d.value }); }}
-                  min={1000}
-                  size="sm"
-                >
-                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
-                </NumberInput.Root>
-                <Field.HelperText color="var(--text-muted)">Default timeout for regular chat requests (ms).</Field.HelperText>
+                <Input
+                  value={chatTimeoutDisplay}
+                  onChange={(e) => setChatTimeoutDisplay(e.currentTarget.value)}
+                  onBlur={() => {
+                    const ms = parseHumanToMs(chatTimeoutDisplay);
+                    if (ms !== null && ms >= 1000) {
+                      const s = String(ms); setChatTimeoutMs(s); scheduleSave({ chatTimeoutMs: s });
+                    } else { setChatTimeoutDisplay(msToHuman(chatTimeoutMs)); }
+                  }}
+                  size="sm" w="160px" bg="var(--surface-2)" borderColor="var(--border-subtle)"
+                  rounded="var(--radius-control)" _placeholder={{ color: 'var(--text-muted)' }}
+                />
+                <Field.HelperText color="var(--text-muted)">Default timeout for regular chat requests — {msToHuman(chatTimeoutMs)}</Field.HelperText>
               </Field.Root>
 
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Search / discovery timeout</Field.Label>
-                <NumberInput.Root
-                  value={discoveryTimeoutMs}
-                  onValueChange={(d) => { setDiscoveryTimeoutMs(d.value); scheduleSave({ discoveryTimeoutMs: d.value }); }}
-                  min={1000}
-                  size="sm"
-                >
-                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
-                </NumberInput.Root>
-                <Field.HelperText color="var(--text-muted)">Used for broad search, lookup, research, and recommendation requests (ms).</Field.HelperText>
+                <Input
+                  value={discoveryTimeoutDisplay}
+                  onChange={(e) => setDiscoveryTimeoutDisplay(e.currentTarget.value)}
+                  onBlur={() => {
+                    const ms = parseHumanToMs(discoveryTimeoutDisplay);
+                    if (ms !== null && ms >= 1000) {
+                      const s = String(ms); setDiscoveryTimeoutMs(s); scheduleSave({ discoveryTimeoutMs: s });
+                    } else { setDiscoveryTimeoutDisplay(msToHuman(discoveryTimeoutMs)); }
+                  }}
+                  size="sm" w="160px" bg="var(--surface-2)" borderColor="var(--border-subtle)"
+                  rounded="var(--radius-control)" _placeholder={{ color: 'var(--text-muted)' }}
+                />
+                <Field.HelperText color="var(--text-muted)">Broad search & recommendations — {msToHuman(discoveryTimeoutMs)}</Field.HelperText>
               </Field.Root>
 
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Nearby / local-search timeout</Field.Label>
-                <NumberInput.Root
-                  value={nearbySearchTimeoutMs}
-                  onValueChange={(d) => { setNearbySearchTimeoutMs(d.value); scheduleSave({ nearbySearchTimeoutMs: d.value }); }}
-                  min={1000}
-                  size="sm"
-                >
-                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
-                </NumberInput.Root>
-                <Field.HelperText color="var(--text-muted)">Used for nearby places, restaurants, and local-discovery intents (ms).</Field.HelperText>
+                <Input
+                  value={nearbySearchTimeoutDisplay}
+                  onChange={(e) => setNearbySearchTimeoutDisplay(e.currentTarget.value)}
+                  onBlur={() => {
+                    const ms = parseHumanToMs(nearbySearchTimeoutDisplay);
+                    if (ms !== null && ms >= 1000) {
+                      const s = String(ms); setNearbySearchTimeoutMs(s); scheduleSave({ nearbySearchTimeoutMs: s });
+                    } else { setNearbySearchTimeoutDisplay(msToHuman(nearbySearchTimeoutMs)); }
+                  }}
+                  size="sm" w="160px" bg="var(--surface-2)" borderColor="var(--border-subtle)"
+                  rounded="var(--radius-control)" _placeholder={{ color: 'var(--text-muted)' }}
+                />
+                <Field.HelperText color="var(--text-muted)">Nearby places & local search — {msToHuman(nearbySearchTimeoutMs)}</Field.HelperText>
               </Field.Root>
 
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Recipe timeout</Field.Label>
-                <NumberInput.Root
-                  value={recipeOperationTimeoutMs}
-                  onValueChange={(d) => { setRecipeOperationTimeoutMs(d.value); scheduleSave({ recipeOperationTimeoutMs: d.value }); }}
-                  min={1000}
-                  size="sm"
-                >
-                  <NumberInput.Input bg="var(--surface-2)" borderColor="var(--border-subtle)" />
-                </NumberInput.Root>
-                <Field.HelperText color="var(--text-muted)">Used for Hermes-driven recipe creation and structured workspace updates (ms).</Field.HelperText>
+                <Input
+                  value={recipeOperationTimeoutDisplay}
+                  onChange={(e) => setRecipeOperationTimeoutDisplay(e.currentTarget.value)}
+                  onBlur={() => {
+                    const ms = parseHumanToMs(recipeOperationTimeoutDisplay);
+                    if (ms !== null && ms >= 1000) {
+                      const s = String(ms); setRecipeOperationTimeoutMs(s); scheduleSave({ recipeOperationTimeoutMs: s });
+                    } else { setRecipeOperationTimeoutDisplay(msToHuman(recipeOperationTimeoutMs)); }
+                  }}
+                  size="sm" w="160px" bg="var(--surface-2)" borderColor="var(--border-subtle)"
+                  rounded="var(--radius-control)" _placeholder={{ color: 'var(--text-muted)' }}
+                />
+                <Field.HelperText color="var(--text-muted)">Recipe creation & workspace updates — {msToHuman(recipeOperationTimeoutMs)}</Field.HelperText>
               </Field.Root>
             </VStack>
           </SectionCard>
@@ -1409,7 +1446,7 @@ function SettingsTabPanel({
     <Tabs.Content value={value} h="100%" minH={0} pt="3" _open={{ display: 'block' }}>
       <ScrollArea.Root h="100%" minH={0} variant="hover">
         <ScrollArea.Viewport data-testid="settings-scroll">
-          <VStack align="stretch" gap="4" pb="6" pr={{ base: '1', xl: '2' }}>
+          <VStack align="stretch" gap="4" pb="6" pr={{ base: '1', xl: '2' }} maxW="720px">
             {children}
           </VStack>
         </ScrollArea.Viewport>

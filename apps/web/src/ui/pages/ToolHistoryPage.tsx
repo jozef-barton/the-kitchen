@@ -111,8 +111,8 @@ export function ToolHistoryPage({
   const maxCount = Math.max(reviewedCount, runtimeCount);
 
   return (
-    <Box h="100%" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" p="4" boxShadow="var(--shadow-sm)">
-      {error ? <ErrorBanner title="Tool history failed" detail={error} /> : null}
+    <Box h="100%" minH={0} display="flex" flexDirection="column">
+      {error ? <Box mb="3"><ErrorBanner title="Tool history failed" detail={error} /></Box> : null}
 
       {!response || (response.items.length === 0 && response.runtimeItems.length === 0) ? (
         <EmptyStateCard
@@ -124,7 +124,7 @@ export function ToolHistoryPage({
           }
         />
       ) : (
-        <Box h="100%" display="flex" flexDirection="column" gap="4">
+        <Box h="100%" display="flex" flexDirection="column" gap="0" flex="1" minH={0}>
         <Tabs.Root
           defaultValue="runtime"
           h="100%"
@@ -132,23 +132,31 @@ export function ToolHistoryPage({
           display="flex"
           flexDirection="column"
           variant="plain"
-          css={{
-            '--tabs-indicator-bg': 'var(--surface-1)',
-            '--tabs-indicator-shadow': 'var(--shadow-xs)',
-            '--tabs-trigger-radius': '8px'
-          }}
         >
-          <Tabs.List rounded="8px" bg="var(--surface-2)" border="1px solid var(--border-subtle)" p="1" mb="3" flexShrink={0} w="fit-content">
-            <Tabs.Trigger value="runtime" fontSize="xs" px="3">Activity ({runtimeCount})</Tabs.Trigger>
-            <Tabs.Trigger value="reviewed" fontSize="xs" px="3">Reviewed ({reviewedCount})</Tabs.Trigger>
-            <Tabs.Indicator />
-          </Tabs.List>
+          <Box borderBottom="1px solid var(--divider)" flexShrink={0} mb="6">
+            <Tabs.List gap="0" px="0" borderBottom="none">
+              {(['runtime', 'reviewed'] as const).map((v) => (
+                <Tabs.Trigger
+                  key={v}
+                  value={v}
+                  fontSize="13px"
+                  px="4"
+                  h="36px"
+                  color="var(--text-muted)"
+                  fontWeight="400"
+                  borderBottom="2px solid transparent"
+                  mb="-1px"
+                  transition="color 120ms ease, border-color 120ms ease"
+                  _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
+                  _hover={{ color: 'var(--text-secondary)' }}
+                >
+                  {v === 'runtime' ? `Activity (${runtimeCount})` : `Reviewed (${reviewedCount})`}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+          </Box>
 
-          <Tabs.Content value="runtime" flex="1" minH={0} display="flex" flexDirection="column" gap="2">
-            <Text fontSize="sm" color="var(--text-secondary)" mb="1">
-              Tool, skill, command, and approval activity captured during chat requests.
-            </Text>
-
+          <Tabs.Content value="runtime" flex="1" minH={0} pt="0" display="flex" flexDirection="column" gap="2">
             {response.runtimeItems.length === 0 ? (
               <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
                 <Text color="var(--text-secondary)">No Hermes runtime tool or command activity has been persisted for this profile yet.</Text>
@@ -216,11 +224,7 @@ export function ToolHistoryPage({
             )}
           </Tabs.Content>
 
-          <Tabs.Content value="reviewed" flex="1" minH={0} display="flex" flexDirection="column" gap="2">
-            <Text fontSize="sm" color="var(--text-secondary)" mb="1">
-              Explicitly approved bridge-reviewed commands and their outcomes.
-            </Text>
-
+          <Tabs.Content value="reviewed" flex="1" minH={0} pt="0" display="flex" flexDirection="column" gap="2">
             {response.items.length === 0 ? (
               <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="4" py="4">
                 <Text color="var(--text-secondary)">No reviewed bridge executions have been recorded for this profile yet.</Text>

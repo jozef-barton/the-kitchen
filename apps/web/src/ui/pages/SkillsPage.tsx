@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, HStack, Menu, Portal, Table, Tabs, Text, Tooltip, VStack } from '@chakra-ui/react';
+import { Box, Button, HStack, Menu, Portal, Table, Tabs, Text, Tooltip, VStack, chakra } from '@chakra-ui/react';
 import type { Skill, SkillsResponse } from '@hermes-recipes/protocol';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
@@ -41,6 +41,15 @@ function CategoryBadge({ value }: { value: string }) {
 }
 
 
+function RefreshIcon() {
+  const Svg = chakra('svg');
+  return (
+    <Svg viewBox="0 0 16 16" boxSize="3.5" fill="none" aria-hidden="true" color="currentColor" flexShrink={0}>
+      <path d="M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M2.5 4.5V8H6M10 8h3.5v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 function SkillsIcon() {
   return (
     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -51,8 +60,8 @@ function SkillsIcon() {
 
 function InstalledSkillsTab({
   response,
-  loading,
-  onRefresh,
+  loading: _loading,
+  onRefresh: _onRefresh,
   onDeleteSkill
 }: {
   response: SkillsResponse | null;
@@ -80,19 +89,7 @@ function InstalledSkillsTab({
   }
 
   return (
-    <VStack align="stretch" h="100%" minH={0} gap="3">
-      <HStack justify="flex-end">
-        <Button
-          variant="outline"
-          size="sm"
-          rounded="8px"
-          onClick={onRefresh}
-          loading={loading}
-        >
-          Refresh
-        </Button>
-      </HStack>
-
+    <VStack align="stretch" h="100%" minH={0} gap="2">
       {actionError ? <ErrorBanner title="Skill update failed" detail={actionError} /> : null}
 
       <Box flex="1" minH={0} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" overflow="hidden" boxShadow="var(--shadow-sm)">
@@ -115,7 +112,6 @@ function InstalledSkillsTab({
                 <Table.Row>
                   <Table.ColumnHeader>Name</Table.ColumnHeader>
                   <Table.ColumnHeader>Category</Table.ColumnHeader>
-                  <Table.ColumnHeader>Source</Table.ColumnHeader>
                   <Table.ColumnHeader>Trust</Table.ColumnHeader>
                   <Table.ColumnHeader textAlign="center">Actions</Table.ColumnHeader>
                 </Table.Row>
@@ -180,9 +176,6 @@ function InstalledSkillsTab({
                       </Table.Cell>
                       <Table.Cell>
                         <CategoryBadge value={skill.category} />
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Text fontSize="xs" color="var(--text-secondary)">{skill.source}</Text>
                       </Table.Cell>
                       <Table.Cell>
                         <TrustBadge value={skill.trust} />
@@ -280,29 +273,8 @@ export function SkillsPage({
   const [activeTab, setActiveTab] = useState<SkillsTab>('installed');
 
   return (
-    <VStack align="stretch" h="100%" minH={0} gap="4">
-      <HStack
-        justify="space-between"
-        wrap="wrap"
-        gap="3"
-        rounded="8px"
-        border="1px solid var(--border-subtle)"
-        bg="var(--surface-elevated)"
-        px="4"
-        py="3.5"
-        boxShadow="var(--shadow-xs)"
-      >
-        <Box>
-          <Text fontSize="sm" fontWeight="650" color="var(--text-primary)">
-            Runtime skills
-          </Text>
-          <Text fontSize="xs" color="var(--text-secondary)" mt="0.5">
-            Skills available to the active Hermes profile.
-          </Text>
-        </Box>
-      </HStack>
-
-      {error ? <ErrorBanner title="Skills refresh failed" detail={error} /> : null}
+    <VStack align="stretch" h="100%" minH={0} gap="0">
+      {error ? <Box mb="3"><ErrorBanner title="Skills refresh failed" detail={error} /></Box> : null}
 
       <Tabs.Root
         value={activeTab}
@@ -318,23 +290,39 @@ export function SkillsPage({
           '--tabs-trigger-radius': '7px'
         }}
       >
-        <Tabs.List
-          rounded="8px"
-          bg="var(--surface-2)"
-          border="1px solid var(--border-subtle)"
-          p="1"
-          w="fit-content"
-        >
-          <Tabs.Trigger value="installed" fontSize="xs" px="3">
-            Installed Skills{response ? ` (${response.items.length})` : ''}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="finder" fontSize="xs" px="3">
-            Skill Finder
-          </Tabs.Trigger>
-          <Tabs.Indicator />
-        </Tabs.List>
+        {/* Tabs row with Refresh icon right-aligned */}
+        <HStack justify="space-between" align="center" mb="6" flexShrink={0}>
+          <Tabs.List
+            rounded="8px"
+            bg="var(--surface-2)"
+            border="1px solid var(--border-subtle)"
+            p="1"
+            w="fit-content"
+          >
+            <Tabs.Trigger value="installed" fontSize="xs" px="3">
+              Installed Skills{response ? ` (${response.items.length})` : ''}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="finder" fontSize="xs" px="3">
+              Skill Finder
+            </Tabs.Trigger>
+            <Tabs.Indicator />
+          </Tabs.List>
+          <Button
+            variant="ghost"
+            w="8" h="8" minW="0" px="0"
+            rounded="var(--radius-control)"
+            color="var(--text-muted)"
+            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+            onClick={onRefresh}
+            loading={loading}
+            title="Refresh"
+            aria-label="Refresh"
+          >
+            <RefreshIcon />
+          </Button>
+        </HStack>
 
-        <Tabs.Content value="installed" flex="1" minH={0} pt="4">
+        <Tabs.Content value="installed" flex="1" minH={0} pt="0">
           <InstalledSkillsTab
             response={response}
             loading={loading}
@@ -343,7 +331,7 @@ export function SkillsPage({
           />
         </Tabs.Content>
 
-        <Tabs.Content value="finder" flex="1" minH={0} pt="4">
+        <Tabs.Content value="finder" flex="1" minH={0} pt="0">
           {activeProfileId ? (
             <SkillFinderTab profileId={activeProfileId} />
           ) : (

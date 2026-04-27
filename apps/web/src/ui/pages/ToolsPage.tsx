@@ -51,8 +51,8 @@ export function ToolsPage({
   const groups = Object.entries(grouped);
 
   return (
-    <div className="page-content" style={{ paddingTop: 0 }}>
-      {error ? <Box mb="3" pt="6" flexShrink={0}><ErrorBanner title="Tools refresh failed" detail={error} /></Box> : null}
+    <div className="page-content">
+      {error ? <Box mb="3" flexShrink={0}><ErrorBanner title="Tools refresh failed" detail={error} /></Box> : null}
 
       <Tabs.Root
         value={toolsTab}
@@ -61,33 +61,29 @@ export function ToolsPage({
         minH={0}
         display="flex"
         flexDirection="column"
-        variant="line"
+        variant="plain"
         pt="0"
       >
         <Box borderBottom="1px solid var(--divider)" flexShrink={0}>
-          <Tabs.List gap="0" px="0">
-            <Tabs.Trigger
-              value="all"
-              fontSize="13px"
-              px="4"
-              h="44px"
-              color="var(--text-muted)"
-              fontWeight="400"
-              _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
-            >
-              All Tools
-            </Tabs.Trigger>
-            <Tabs.Trigger
-              value="history"
-              fontSize="13px"
-              px="4"
-              h="44px"
-              color="var(--text-muted)"
-              fontWeight="400"
-              _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
-            >
-              Tool History
-            </Tabs.Trigger>
+          <Tabs.List gap="0" px="0" borderBottom="none">
+            {(['all', 'history'] as const).map((v) => (
+              <Tabs.Trigger
+                key={v}
+                value={v}
+                fontSize="13px"
+                px="4"
+                h="44px"
+                color="var(--text-muted)"
+                fontWeight="400"
+                borderBottom="2px solid transparent"
+                mb="-1px"
+                transition="color 120ms ease, border-color 120ms ease"
+                _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
+                _hover={{ color: 'var(--text-secondary)' }}
+              >
+                {v === 'all' ? 'All Tools' : 'Tool History'}
+              </Tabs.Trigger>
+            ))}
           </Tabs.List>
         </Box>
 

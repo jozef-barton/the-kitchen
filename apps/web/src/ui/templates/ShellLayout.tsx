@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, CloseButton, Drawer, Flex, HStack, Portal, Text, chakra } from '@chakra-ui/react';
 import type { ConnectionState } from '@hermes-recipes/protocol';
 import type { ReactNode } from 'react';
@@ -33,15 +33,28 @@ function GatewayBanner({ detail, onDismiss }: { detail: string; onDismiss?: () =
   );
 }
 
-/* Minimal connection indicator — dot only when connected, full pill when not */
+/* Minimal connection indicator — dot with one-time pulse on connect */
 function ConnectionIndicator({ status }: { status: string }) {
   const isConnected = status === 'connected' || status === 'healthy';
   const isReconnecting = status === 'degraded' || status === 'paused';
+  const prevStatusRef = useRef<string>(status);
+  const [pulse, setPulse] = useState(isConnected);
+
+  useEffect(() => {
+    if (!isConnected) { prevStatusRef.current = status; return; }
+    if (prevStatusRef.current !== status) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 1800);
+      prevStatusRef.current = status;
+      return () => clearTimeout(t);
+    }
+  }, [status, isConnected]);
+
   if (isConnected) {
     return (
       <Box
         as="span"
-        className="status-dot status-dot--connected"
+        className={`status-dot status-dot--connected${pulse ? ' status-dot--connected-pulse' : ''}`}
         title="Connected"
         aria-label="Connected"
       />
@@ -86,6 +99,7 @@ export function ShellLayout({
   activeModelLabel: _activeModelLabel,
   sidebarCollapsed: _sidebarCollapsed = false,
   onToggleSidebar: _onToggleSidebar,
+  noGutter = false,
   children
 }: {
   connection: ConnectionState;
@@ -103,6 +117,7 @@ export function ShellLayout({
   activeModelLabel?: string | null;
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  noGutter?: boolean;
   children: ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -268,9 +283,23 @@ export function ShellLayout({
 
         {tabBar ?? null}
 
-        {/* Main content */}
+        {/* Main content — noGutter for chat, padded for all other pages */}
         <Box flex="1" minH={0} overflow="hidden" display="flex" flexDirection="column">
-          {children}
+          {noGutter ? children : (
+            <Box
+              flex="1"
+              minH={0}
+              overflow="hidden"
+              display="flex"
+              flexDirection="column"
+              px={{ base: '4', md: '8' }}
+              pt={{ base: '5', md: '8' }}
+              maxW="1280px"
+              w="100%"
+            >
+              {children}
+            </Box>
+          )}
         </Box>
       </Flex>
     </Flex>
