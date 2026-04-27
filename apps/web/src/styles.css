@@ -8,6 +8,7 @@ body,
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DESIGN TOKENS — light (default)
+   Warm neutral base (hue 40), solid tints, tuned for light-mode depth
    ───────────────────────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
@@ -24,70 +25,70 @@ body,
   --accent-800: hsl(245, 48%, 27%);
   --accent-900: hsl(245, 45%, 17%);
 
-  /* Background layers — cool blue-gray, hsl(220, *, *) */
-  --app-bg:         hsl(220, 18%, 97%);
-  --shell-bg:       hsl(220, 18%, 100%);
-  --sidebar-bg:     hsl(220, 16%, 96%);
-  --surface-1:      hsl(220, 18%, 100%);
-  --surface-2:      hsl(220, 14%, 93%);
-  --surface-3:      hsl(220, 12%, 86%);
-  --surface-elevated: rgba(255, 255, 255, 0.97);
+  /* Background layers — warm neutral, hue 40 */
+  --app-bg:          hsl(40, 18%, 97%);    /* warm off-white canvas */
+  --shell-bg:        hsl(40, 12%, 100%);   /* top bar — pure white */
+  --sidebar-bg:      hsl(40, 14%, 96%);    /* sidebar panel */
+  --surface-1:       hsl(40, 14%, 96%);    /* main panels */
+  --surface-2:       hsl(40, 12%, 100%);   /* cards, elevated — pure white */
+  --surface-3:       hsl(40, 10%, 92%);    /* deeper layers / pressed */
+  --surface-elevated: hsl(40, 12%, 100%);  /* popovers, dropdowns */
 
-  /* Semantic surfaces */
-  --surface-hover:    hsla(220, 14%, 0%, 0.04);
-  --surface-active:   hsla(220, 14%, 0%, 0.07);
-  --surface-selected: hsla(245, 52%, 47%, 0.10);
-  --surface-accent:   hsla(245, 52%, 47%, 0.10);
-  --surface-warning:  hsla(38, 75%, 44%, 0.09);
-  --surface-danger:   hsla(0, 65%, 50%, 0.07);
+  /* Semantic surfaces — solid colors, not opacity overlays */
+  --surface-hover:    hsl(40, 12%, 94%);
+  --surface-active:   hsl(245, 40%, 95%);   /* accent-hue tint for active row */
+  --surface-selected: hsl(245, 50%, 91%);   /* stronger accent tint */
+  --surface-accent:   hsl(245, 50%, 91%);
+  --surface-warning:  hsl(38, 80%, 93%);
+  --surface-danger:   hsl(0, 70%, 95%);
 
-  /* Border scale */
-  --border-subtle:  hsla(220, 10%, 0%, 0.08);
-  --border-default: hsla(220, 10%, 0%, 0.13);
-  --border-strong:  hsla(220, 10%, 0%, 0.20);
-  --border-danger:  hsla(0, 65%, 50%, 0.22);
+  /* Border scale — warm hairlines */
+  --border-subtle:  hsla(40, 10%, 0%, 0.06);
+  --border-default: hsla(40, 10%, 0%, 0.11);
+  --border-strong:  hsla(40, 10%, 0%, 0.20);
+  --border-danger:  hsla(0, 70%, 50%, 0.25);
 
-  /* Text scale — cool blue-gray */
-  --text-primary:   hsl(220, 14%, 10%);
-  --text-secondary: hsl(220, 10%, 38%);
-  --text-muted:     hsl(220, 8%, 55%);
-  --text-inverse:   hsl(220, 14%, 97%);
+  /* Text — warm neutrals, same family as backgrounds */
+  --text-primary:   hsl(40, 15%, 12%);
+  --text-secondary: hsl(40, 8%, 38%);
+  --text-muted:     hsl(40, 6%, 56%);
+  --text-inverse:   hsl(40, 18%, 98%);
 
-  /* Accent — light mode uses accent-600 */
-  --accent:          hsl(245, 52%, 47%);
-  --accent-strong:   hsl(245, 50%, 37%);
-  --accent-contrast: hsl(245, 55%, 97%);
-  --accent-soft:     hsla(245, 52%, 47%, 0.10);
+  /* Accent — darker + more saturated for visibility on white */
+  --accent:          hsl(245, 60%, 55%);
+  --accent-strong:   hsl(245, 60%, 48%);
+  --accent-contrast: hsl(40, 18%, 98%);
+  --accent-soft:     hsl(245, 60%, 95%);   /* solid tint, not opacity */
 
-  /* Semantic status — desaturated */
-  --status-success:    hsl(142, 50%, 40%);
-  --status-success-bg: hsla(142, 50%, 40%, 0.09);
-  --status-warning:    hsl(38, 75%, 44%);
-  --status-warning-bg: hsla(38, 75%, 44%, 0.09);
-  --status-danger:     hsl(0, 65%, 50%);
-  --status-danger-bg:  hsla(0, 65%, 50%, 0.09);
-  --status-info:       hsl(210, 65%, 48%);
-  --status-info-bg:    hsla(210, 65%, 48%, 0.09);
-  --status-neutral:    hsl(220, 8%, 52%);
-  --status-neutral-bg: hsla(220, 8%, 52%, 0.09);
+  /* Status — darker + solid pastel backgrounds */
+  --status-success:    hsl(142, 60%, 38%);
+  --status-success-bg: hsl(142, 50%, 92%);
+  --status-warning:    hsl(38, 85%, 45%);
+  --status-warning-bg: hsl(38, 80%, 92%);
+  --status-danger:     hsl(0, 70%, 50%);
+  --status-danger-bg:  hsl(0, 70%, 95%);
+  --status-info:       hsl(210, 65%, 45%);
+  --status-info-bg:    hsl(210, 60%, 93%);
+  --status-neutral:    hsl(40, 8%, 48%);
+  --status-neutral-bg: hsl(40, 8%, 92%);
 
-  /* User bubble — accent tint */
-  --user-bubble-bg:          hsla(245, 52%, 47%, 0.14);
-  --user-bubble-bg-selected: hsla(245, 52%, 47%, 0.24);
-  --user-bubble-fg:          hsl(220, 14%, 10%);
+  /* User bubble — solid accent tint */
+  --user-bubble-bg:          hsl(245, 60%, 93%);
+  --user-bubble-bg-selected: hsl(245, 50%, 87%);
+  --user-bubble-fg:          hsl(40, 15%, 12%);
 
   /* Legacy */
   --coral: #e85935;
   --amber: #b7791f;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-sm: 0 4px 16px rgba(16, 24, 40, 0.07);
-  --shadow-md: 0 12px 40px rgba(16, 24, 40, 0.10);
-  --shadow-lg: 0 24px 64px rgba(16, 24, 40, 0.14);
+  /* Shadows — warm-toned, used on elevated elements only */
+  --shadow-xs: 0 1px 2px hsla(40, 10%, 0%, 0.05);
+  --shadow-sm: 0 1px 3px hsla(40, 10%, 0%, 0.06), 0 1px 2px hsla(40, 10%, 0%, 0.04);
+  --shadow-md: 0 4px 8px  hsla(40, 10%, 0%, 0.07), 0 1px 3px hsla(40, 10%, 0%, 0.04);
+  --shadow-lg: 0 12px 24px hsla(40, 10%, 0%, 0.08), 0 2px 4px hsla(40, 10%, 0%, 0.05);
 
   /* Focus — indigo glow */
-  --focus-ring: 0 0 0 3px hsla(245, 50%, 37%, 0.35);
+  --focus-ring: 0 0 0 3px hsla(245, 60%, 55%, 0.28);
 
   /* Radii */
   --radius-xs: 3px;
@@ -106,8 +107,8 @@ body,
   --page-pad-x: 32px;
   --page-pad-x-sm: 16px;
 
-  /* Dividers — subtler than border-subtle, for internal structural lines */
-  --divider: rgba(0, 0, 0, 0.06);
+  /* Dividers */
+  --divider: hsla(40, 10%, 0%, 0.06);
 
   /* Transitions */
   --transition-fast: 120ms ease;
