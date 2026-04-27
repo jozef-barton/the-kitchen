@@ -3455,13 +3455,18 @@ export class HermesCli {
 
   streamInstall(onOutput: (line: string) => void): Promise<void> {
     // CI=1 and HERMES_SKIP_SETUP=1 suppress the interactive setup wizard.
-    // We configure providers via the app's Settings page after install.
+    // GIT_TERMINAL_PROMPT=0 and GIT_ASKPASS prevent git from hanging waiting
+    // for credentials when stdin is /dev/null (which it is in our subprocess).
     const installEnv = {
       ...process.env,
       CI: '1',
       HERMES_SKIP_SETUP: '1',
       HERMES_NO_WIZARD: '1',
       DEBIAN_FRONTEND: 'noninteractive',
+      // Prevent git from prompting for credentials — fails fast instead of hanging
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_ASKPASS: '/bin/echo',
+      GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no',
     };
 
     const runStep = (label: string, cmd: string): Promise<void> => {
@@ -3474,10 +3479,23 @@ export class HermesCli {
         child.stdout.setEncoding('utf-8');
         child.stderr.setEncoding('utf-8');
         child.stdout.on('data', (chunk: string) => {
-          for (const line of chunk.split('\n')) { if (line.trim()) onOutput(line); }
+          for (const line of chunk.split('\n')) {
+            if (!line.trim()) continue;
+            onOutput(line);
+            // Warn when git clone starts — it can take 2-5 minutes on slow connections
+            if (line.includes("Cloning into")) {
+              onOutput("  (cloning repository — this may take 2–5 minutes, please wait…)");
+            }
+          }
         });
         child.stderr.on('data', (chunk: string) => {
-          for (const line of chunk.split('\n')) { if (line.trim()) onOutput(line); }
+          for (const line of chunk.split('\n')) {
+            if (!line.trim()) continue;
+            onOutput(line);
+            if (line.includes("Cloning into")) {
+              onOutput("  (cloning repository — this may take 2–5 minutes, please wait…)");
+            }
+          }
         });
         child.on('close', (code) => {
           if (code === 0) resolve();
