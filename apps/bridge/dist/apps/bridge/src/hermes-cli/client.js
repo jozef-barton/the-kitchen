@@ -1184,9 +1184,15 @@ function isLocalSearchIntent(content) {
 }
 export function classifyStructuredRecipeIntent(content, hasRecipeContext = false) {
     // --- Domain-specific templates — checked first so generic keywords can't hijack them ---
-    // Inbox triage / email cleanup  →  inbox-triage-board
+    // Inbox triage / email cleanup / queue prioritization  →  inbox-triage-board
     if (/\b(inbox triage|inbox triaging|inbox cleanup|email triage|triage my emails?|triage.*inbox|unread email|bulk archive|sender cleanup|clean up.*inbox|manage my inbox|email cleanup)\b/i.test(content) ||
-        (isEmailIntent(content) && /\b(triaging?|clean up|cleanup|organize|sort|archive|manage|filter)\b/i.test(content))) {
+        (isEmailIntent(content) && /\b(triaging?|clean up|cleanup|organize|sort|archive|manage|filter)\b/i.test(content)) ||
+        /\b(triage|prioritize|sort\s+through|categorize)\b.*\b(tickets?|issues?|requests?|submissions?|applications?|prs?|pull\s+requests?|messages?)\b/i.test(content) ||
+        /\b(tickets?|issues?|requests?|submissions?|applications?|prs?|pull\s+requests?)\b.*\b(triage|prioritize|categorize|sort)\b/i.test(content) ||
+        /\bsort\b.*\b(tickets?|issues?|requests?|messages?|applications?)\b/i.test(content) ||
+        /\b(which|what).*\bneed[s]?\b.*\battention\b/i.test(content) ||
+        /\b(rank|sort)\b.*\bby\s+(fit|urgency|priority|sentiment)\b/i.test(content) ||
+        /\bcategorize\b.*\bby\s+sentiment\b/i.test(content)) {
         return {
             category: 'results',
             preferredContentFormat: 'card',
@@ -1194,7 +1200,12 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     // Security review / audit  →  security-review-board
-    if (/\b(security review|security audit|threat findings?|audit board|severity triage|vulnerability scan|penetration test|pentest|CVE|OWASP|threat model)\b/i.test(content)) {
+    if (/\b(security review|security audit|threat findings?|audit board|severity triage|vulnerability scan|penetration test|pentest|CVE|OWASP|threat model)\b/i.test(content) ||
+        /\b(over-permissive|leaked?\s+secrets?|exposed\s+secrets?|security\s+issues?)\b/i.test(content) ||
+        /misconfigur/i.test(content) ||
+        /\bvulnerabilit(ies|y)\b/i.test(content) ||
+        /\b(audit)\b.*\b(IAM|roles?|policies?|permissions?|packages?)\b/i.test(content) ||
+        /\bred\s+flags?\b.*\b(library|package|repo|code|adopt|dependenc)\b|\b(library|package)\b.*\bred\s+flags?\b/i.test(content)) {
         return {
             category: 'plan',
             preferredContentFormat: 'table',
@@ -1202,7 +1213,12 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     // Job search / career pipeline  →  job-search-pipeline
-    if (/\b(job search|job listings?|job postings?|career opportunities|open positions?|job hunt|job pipeline|find.*jobs?|apply.*jobs?|hiring pipeline)\b/i.test(content)) {
+    if (/\b(job search|job listings?|job postings?|career opportunities|open positions?|job hunt|job pipeline|find.*jobs?|apply.*jobs?|hiring pipeline)\b/i.test(content) ||
+        /\b(job applications?|job offers?|open roles?|job roles?|recruiting process|Glassdoor|applied to.*compan)\b/i.test(content) ||
+        /\b(roles?)\b.*\b(match|matching|resume|strengths?)\b/i.test(content) ||
+        /\b(resume)\b.*\b(roles?|positions?|jobs?)\b/i.test(content) ||
+        /\b(salary range|remote.*polic)\b.*\b(compan|job|role)\b/i.test(content) ||
+        /\b(remote|senior|frontend|backend|engineering|fullstack|full.stack)\b.*\broles?\b|\broles?\b.*\b(remote|senior|frontend|backend|engineering)\b/i.test(content)) {
         return {
             category: 'results',
             preferredContentFormat: 'card',
@@ -1211,7 +1227,12 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
     }
     // Flight comparison  →  flight-comparison
     if (/\b(flight comparison|compare flights?|airline options?|compare itineraries|outbound.*return|round.?trip.*flights?)\b/i.test(content) ||
-        (/\b(flights?|airlines?)\b/i.test(content) && /\b(compare|book|options?|itinerary|search|find)\b/i.test(content))) {
+        (/\b(flights?|airlines?)\b/i.test(content) && /\b(compare|book|options?|itinerary|search|find)\b/i.test(content)) ||
+        /\bround.?trip\b/i.test(content) ||
+        /\bred.?eye\b/i.test(content) ||
+        /\bfrom\s+\w[\w\s]{1,25}\bto\s+\w[\w\s]{1,25}\b.*\b(cheapest|cheaply|fly|flight|airline|routing?)\b/i.test(content) ||
+        /\bcheapest\s+(way\s+)?to\s+(get|travel|fly)\b/i.test(content) ||
+        /\befficient\s+routing\b/i.test(content)) {
         return {
             category: 'places',
             preferredContentFormat: 'table',
@@ -1219,7 +1240,18 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     // Travel itinerary / trip planning  →  travel-itinerary-planner  (before generic plan)
-    if (/\b(trip itinerary|travel itinerary|travel planner|travel plan|itinerary for.*trip|plan.*trip|trip plan|packing list|bookings? and packing|trip notes|travel notes)\b/i.test(content)) {
+    if (/\b(trip itinerary|travel itinerary|travel planner|travel plan|itinerary for.*trip|plan.*trip|trip plan|packing list|bookings? and packing|trip notes|travel notes)\b/i.test(content) ||
+        /\bitinerary\b/i.test(content) ||
+        /\broad.?trip\b/i.test(content) ||
+        /\b\d+\s*days?\s+in\s+/i.test(content) ||
+        /\bday.by.day\b/i.test(content) ||
+        /\b\d+[\s-]day\s+(trip|travel|visit)\b/i.test(content) ||
+        /\b\d+[\s-]week.*\b(trip|travel)\b/i.test(content) ||
+        /\blong\s+weekend\b.*\bin\s+/i.test(content) ||
+        /\bweekend\s+(ski|beach|trip|getaway)\b/i.test(content) ||
+        /\bsolo\s+(europe|asia|africa|trip|travel|backpack)\b/i.test(content) ||
+        /\bwhere\s+should\s+I\s+go\b/i.test(content) ||
+        /\bstops\s+worth\s+visiting\b/i.test(content)) {
         return {
             category: 'places',
             preferredContentFormat: 'card',
@@ -1227,23 +1259,25 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     // Event planning  →  event-planner  (before generic plan)
-    if (/\b(event planner|plan.*event|event checklist|venue and guests|plan.*party|plan.*wedding|plan.*birthday|plan.*conference|plan.*dinner party|host.*event|plan.*celebration)\b/i.test(content)) {
+    if (/\b(event planner|plan.*event|event checklist|venue and guests|plan.*party|plan.*wedding|plan.*birthday|plan.*conference|plan.*dinner party|host.*event|plan.*celebration)\b/i.test(content) ||
+        /\b(team\s+)?offsite\b/i.test(content) ||
+        /\bhackathon\b/i.test(content) ||
+        /\borganize\b.*\b(conference|summit|seminar|hackathon|retreat|gathering)\b/i.test(content) ||
+        /\bvirtual\s+(conference|summit|event|workshop)\b/i.test(content) ||
+        /\bwedding\b.*\b(plan|checklist|venue|months?|budget)\b|\b(plan|checklist|organize)\b.*\bwedding\b/i.test(content) ||
+        /\bthrowing\s+a\b.*\b(party|dinner|birthday|celebration)\b/i.test(content) ||
+        /\bhosting\s+a?\b.*\b(party|dinner|event|gathering|celebration)\b/i.test(content)) {
         return {
             category: 'plan',
             preferredContentFormat: 'card',
             label: 'event planner'
         };
     }
-    // Content / campaign planning  →  content-campaign-planner
-    if (/\b(campaign planner|content plan|content calendar|campaign ideas?|marketing plan|newsletter plan|content ideas?|drafts? and schedule|social media plan|launch campaign)\b/i.test(content)) {
-        return {
-            category: 'plan',
-            preferredContentFormat: 'card',
-            label: 'campaign planner'
-        };
-    }
-    // Price comparison (specific shopping intent)  →  price-comparison-grid
-    if (/\b(price comparison|compare prices?|cheapest|best price|merchant grid|same product|best deal)\b/i.test(content)) {
+    // Price comparison (consumer/financial plans)  →  price-comparison-grid
+    if (/\b(price comparison|compare prices?|best price|merchant grid|same product|best deal)\b/i.test(content) ||
+        /\b(compare|comparison|vs\.?|versus)\b.*\b(plans?|insurance|mortgage|premiums?|deductibles?|subscriptions?|tiers?)\b/i.test(content) ||
+        /\bstreaming\s+service\b.*\b(value|worth|compare|vs\.?|best)\b|\b(compare|vs\.?)\b.*\bstreaming\b/i.test(content) ||
+        /\b(standing desk|office chair|espresso machine|coffee maker)\b.*\b(comparison|compare|vs\.?)\b|\b(compare|vs\.?)\b.*\b(standing desk|office chair)\b/i.test(content)) {
         return {
             category: 'shopping',
             preferredContentFormat: 'table',
@@ -1253,7 +1287,15 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
     // --- Local discovery templates — specific before generic ---
     // Restaurant finder  →  restaurant-finder
     if (/\b(restaurants? nearby|restaurants? near|dinner options?|places to eat|restaurant shortlist|find.*restaurants?)\b/i.test(content) ||
-        (/\b(restaurants?|brunch|dinner)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content))) {
+        /\brestaurants?\b.*\b(in|near|around|at)\b/i.test(content) ||
+        (/\b(restaurants?|brunch|dinner)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content)) ||
+        /\b(brunch|lunch|dinner|dining)\s+(spot|place|room|options?|venue)\b/i.test(content) ||
+        /\b(ramen|sushi|pizza|tacos?|burger|pasta|steak|dim\s+sum|tapas?)\s+(spots?|place|restaurant|options?)\b/i.test(content) ||
+        /\bdate.night.*\b(restaurant|dining|dinner)\b|\b(restaurant|dining)\b.*\bdate.night\b/i.test(content) ||
+        /\bplace\s+(for|to)\s+(eat|dine|lunch|dinner|brunch)\b/i.test(content) ||
+        /\bprivate\s+dining\b/i.test(content) ||
+        /\b(business\s+lunch|client\s+dinner)\b/i.test(content) ||
+        /\b(suggest|recommend)\b.*\brestaurants?\b/i.test(content)) {
         return {
             category: 'places',
             preferredContentFormat: 'card',
@@ -1261,8 +1303,11 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     // Hotel shortlist  →  hotel-shortlist
-    if (/\b(hotel shortlist|where to stay|compare hotels?|lodging options?|hotels? near|hotels? in)\b/i.test(content) ||
-        (/\b(hotels?|lodging|accommodation)\b/i.test(content) && /\b(nearby|near me|around me)\b/i.test(content))) {
+    if (/\b(hotel shortlist|where to stay|compare hotels?|lodging options?)\b/i.test(content) ||
+        /\b(hotels?|resort)\b.*\b(in|near|at|under|with)\b/i.test(content) ||
+        /\b(hotels?|lodging|accommodation)\b.*\b(nearby|near me|around me)\b/i.test(content) ||
+        /\bAirbnb\b.*\b(alternative|stay|rent|month)\b/i.test(content) ||
+        /\b(boutique|luxury|budget|family.friendly)\s+hotel\b/i.test(content)) {
         return {
             category: 'places',
             preferredContentFormat: 'card',
@@ -1271,7 +1316,10 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
     }
     // General local discovery  →  local-discovery-comparison
     if (isLocalSearchIntent(content) ||
-        /\b(lodging|lodgings?|stay|stays|places? nearby|venues?|coffee shops?|cafes?|service providers?|venue shortlist)\b/i.test(content)) {
+        /\b(lodging|lodgings?|stay|stays|places? nearby|venues?|coffee shops?|cafes?|service providers?|venue shortlist)\b/i.test(content) ||
+        /\b(gyms?|fitness center|co.?working\s+space|yoga\s+studios?|pilates\s+studio)\b.*\b(near|in|around|best|find)\b|\b(best|find)\b.*\b(gyms?|co.?working|yoga\s+studio|fitness)\b/i.test(content) ||
+        /\b(urgent\s+care|walk.in\s+clinic|farmers?\s+markets?|repair\s+shop)\b/i.test(content) ||
+        /\b(near|nearby|near\s+me|around\s+me)\b.*\b(clinics?|studios?|shops?|spaces?|markets?|centers?)\b/i.test(content)) {
         return {
             category: 'places',
             preferredContentFormat: 'card',
@@ -1305,11 +1353,36 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
     }
     // Step-by-step instructions  →  step-by-step-instructions
     // "guide" excluded — too generic and causes false positives across domain-specific templates
-    if (/\b(how to|step by step|step-by-step|tutorial|walkthrough|set up|install|configure|deploy|getting started|quick start)\b/i.test(content)) {
+    if (/\b(how to|step by step|step-by-step|instructions?|tutorial|walkthrough|walk\s+(me\s+)?through|procedure|troubleshoot|set up|install|configure|deploy|getting started|quick start)\b/i.test(content)) {
         return {
             category: 'plan',
             preferredContentFormat: 'table',
             label: 'step by step'
+        };
+    }
+    // Vendor / service evaluation matrix  →  vendor-evaluation-matrix
+    // Checked before generic recommend→research so "evaluate X" lands on the matrix, not research notebook
+    if ((/\b(evaluate|vet|assess)\b/i.test(content) &&
+        /\b(vendor|vendors?|agency|agencies|firm|firms|provider|providers?|developers?|contractor|tool|tools?|service|platform|options?)\b/i.test(content)) ||
+        (/\b(compare|comparison|vs\.?|versus)\b/i.test(content) &&
+            /\b(frameworks?|vendors?|technologies|tools?|libraries?|services?|platforms?|apps?|phones?|devices?|agencies|firms?|providers?|developers?|contractor)\b/i.test(content)) ||
+        /\b(help\s+me\s+(pick|choose)|choose\s+between)\b.*\b(provider|agency|agencies|firm|vendor|developers?|contractor)\b/i.test(content) ||
+        /\bwhich\b.*\b(CRM|ERP|tool|platform|service|software|framework|library|provider)\b.*\b(best|pick|use|choose|recommend)\b/i.test(content) ||
+        /\b(iPhone|Samsung|Galaxy|Pixel|OnePlus)\b.*\bvs\.?\b|\bvs\.?\b.*\b(iPhone|Samsung|Galaxy|Pixel)\b/i.test(content)) {
+        return {
+            category: 'shopping',
+            preferredContentFormat: 'table',
+            label: 'comparison matrix'
+        };
+    }
+    // Explicit product/gift shopping — checked before recommend→research to avoid misfires
+    if (/\b(gifts?\s+for|gift\s+ideas?)\b/i.test(content) ||
+        /\b(best|find|suggest|recommend)\b.*\b(mechanical\s+keyboard|noise.canceling|office\s+chair|ergonomic\s+chair|espresso\s+machine|coffee\s+maker|air\s+fryer|standing\s+desk|camera\s+kit|dash\s+cam)\b/i.test(content) ||
+        /\b(espresso\s+machine|coffee\s+maker|air\s+fryer|office\s+chair|ergonomic\s+chair)\b/i.test(content)) {
+        return {
+            category: 'shopping',
+            preferredContentFormat: 'card',
+            label: 'shopping results'
         };
     }
     if (/\b(recommend|suggestion|advice|what should I|which should I|best approach|best practice)\b/i.test(content)) {
@@ -1327,14 +1400,15 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
             label: 'financial breakdown'
         };
     }
-    // --- Comparison / shopping templates ---
-    // Technology / vendor comparison matrix  →  vendor-evaluation-matrix  (before generic comparison)
-    if (/\b(compare|comparison|vs\.?|versus)\b/i.test(content) &&
-        /\b(frameworks?|vendors?|technologies|tools?|libraries?|services?|platforms?|apps?)\b/i.test(content)) {
+    // --- Shopping templates ---
+    // Retailer-specific product search — any query mentioning a specific online retailer or marketplace
+    // combined with a discovery verb should route to shopping-shortlist, not a plain text list.
+    if (/\b(amazon|ebay|etsy|walmart|target|bestbuy|best\s+buy|wayfair|shopify|aliexpress)\b/i.test(content) &&
+        isDiscoveryIntent(content)) {
         return {
             category: 'shopping',
-            preferredContentFormat: 'table',
-            label: 'comparison matrix'
+            preferredContentFormat: 'card',
+            label: 'shopping results'
         };
     }
     // Generic shopping / comparison  →  shopping-shortlist
@@ -1346,12 +1420,11 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
         };
     }
     // Natural-language product browsing — no explicit shopping verb but clear product intent.
-    // Requires a product category noun AND at least one soft framing word to avoid false positives
-    // (e.g. "some gym shorts I normally wear" or "headphones for running under $100").
+    // Requires a product category noun AND at least one soft framing word to avoid false positives.
     if (/\b(shorts?|shirt|shirts|pants|jeans|jacket|jackets|shoes|sneakers|boots|dress|dresses|hoodie|hoodies|sweater|leggings|activewear|sportswear|gym\s+\w+|workout\s+\w+|running\s+\w+)\b/i.test(content) ||
-        /\b(headphones?|earbuds?|laptop|laptops?|monitor|keyboard|mouse|tablet|phone|speaker|camera|smartwatch|charger)\b/i.test(content) ||
+        /\b(headphones?|earbuds?|laptop|laptops?|monitor|keyboard|mouse|tablet|phone|speaker|camera|smartwatch|charger|noise.canceling)\b/i.test(content) ||
         /\b(backpack|bag|bags|wallet|purse|sunglasses|jewelry|supplement|protein|vitamins?)\b/i.test(content)) {
-        if (/\b(some|for\s+(?:me|my|the|gym|running|work|summer|winter|training)|I\s+(?:wear|use|like|need|want|normally|usually)|normally\s+wear|usually\s+wear|looking\s+for|gift\s+for|under\s+\$?\d|around\s+\$?\d)\b/i.test(content)) {
+        if (/\b(some|for\s+(?:me|my|the|gym|running|work|summer|winter|training|travel)|I\s+(?:wear|use|like|need|want|normally|usually|travel)|normally\s+wear|usually\s+wear|looking\s+for|gift\s+for|under\s+\$?\d|around\s+\$?\d|find\s+(?:me|the)\s+best|show\s+me|get\s+me|recommend)\b/i.test(content)) {
             return {
                 category: 'shopping',
                 preferredContentFormat: 'card',
@@ -1359,10 +1432,27 @@ export function classifyStructuredRecipeIntent(content, hasRecipeContext = false
             };
         }
     }
+    // General "find me" / "find the best" product search
+    if (/\b(find\s+(?:me|the\s+best)|show\s+me|get\s+me|look\s+for|search\s+for)\b/i.test(content) &&
+        isDiscoveryIntent(content) &&
+        !/\b(restaurant|hotel|coffee|cafe|bar|brunch|dinner|lunch|flight|place|venue|job|email)\b/i.test(content)) {
+        return {
+            category: 'shopping',
+            preferredContentFormat: 'card',
+            label: 'shopping results'
+        };
+    }
     // Research notebook  →  research-notebook
-    if (/\b(research|sources?|papers?|studies?|summary|summaries|tradeoffs?|pros and cons|claims?|notes?|notebook|follow-?ups?)\b/i.test(content) &&
+    if ((/\b(research|sources?|papers?|studies?|summary|summaries|tradeoffs?|pros and cons|claims?|notes?|notebook|follow-?ups?)\b/i.test(content) &&
         (isDiscoveryIntent(content) ||
-            /\b(create|build|make|organize|gather|track|capture)\b.*\b(research|notes?|notebook|sources?|claims?|follow-?ups?)\b/i.test(content))) {
+            /\b(create|build|make|organize|gather|track|capture)\b.*\b(research|notes?|notebook|sources?|claims?|follow-?ups?)\b/i.test(content))) ||
+        /\bdeep\s+dive\b/i.test(content) ||
+        /\bwhat\s+do\s+we\s+know\s+(about|on)\b/i.test(content) ||
+        /\b(current|scientific|academic)\s+consensus\b/i.test(content) ||
+        /\bregulatory\s+(environment|landscape|framework)\b/i.test(content) ||
+        /\bstate\s+of\s+(research|science|the\s+art|the\s+field)\b/i.test(content) ||
+        /\bkey\s+(arguments?|findings?|evidence|debate)\b/i.test(content) ||
+        /\b(summarize|explain)\b.*\b(history|background|mechanics?|evolution|causes?|timeline)\b/i.test(content)) {
         return {
             category: 'research',
             preferredContentFormat: 'markdown',
@@ -1556,6 +1646,8 @@ Metadata: ${JSON.stringify(spaceContext.metadata)}
 Data snapshot:
 ${spaceContext.data}
 
+If the user refers to anything they see in their space, recipe, or the UI shown to them (e.g. "this list", "the results", "what's shown", "the current recipe"), treat the data snapshot above as the authoritative view of that content and use it to inform your answer before responding.
+
 ${spaceDataInstruction}`
         : `${spaceDataInstruction}`;
     const refreshInstruction = refreshContext
@@ -1674,6 +1766,7 @@ ${activeProfileInstruction}
 ${recipeInstruction}
 ${refreshInstruction}
 ${isSimpleRecipeWorkflowIntent(intentContent, Boolean(spaceContext)) ? 'Treat this as a single-step recipe action when possible. Do not expand into a longer autonomous workflow.' : ''}
+When your answer includes products, services, places, bookings, events, or anything a user might want to follow up on — include a direct link (URL) where the user can take action: a purchase link, a booking link, a listing, a review page, or a reference page. Only include links you have verified are real; do not fabricate URLs.
 Return only the final assistant answer.
   Do not include CLI startup banners, tool inventories, tool output, scripts, JSON blobs, or turn-limit summaries in the final answer.`;
 }
@@ -1937,6 +2030,49 @@ export class HermesCli {
         }
         return detailedProfiles;
     }
+    async quickModelTest(profile, signal) {
+        const env = buildProfileEnvironment(profile);
+        const startedAt = Date.now();
+        let result;
+        try {
+            result = await this.run(['chat', '-Q', '--max-turns', '1', '--source', 'tool', '-q', 'Reply with only the single word: ok'], env, signal);
+        }
+        catch (err) {
+            return {
+                ok: false,
+                latencyMs: Date.now() - startedAt,
+                errorMessage: err instanceof Error ? err.message : 'Model test request timed out or failed.'
+            };
+        }
+        const latencyMs = Date.now() - startedAt;
+        if (result.exitCode !== 0) {
+            const raw = (result.stderr.trim() || result.stdout.trim() || 'The model returned an error.').slice(0, 400);
+            return { ok: false, latencyMs, errorMessage: raw };
+        }
+        if (!normalizeOutput(result.stdout).trim()) {
+            return { ok: false, latencyMs, errorMessage: 'The model returned no output.' };
+        }
+        return { ok: true, latencyMs };
+    }
+    async createProfile(name, signal) {
+        if (!name || !/^[a-z0-9_-]+$/i.test(name)) {
+            throw new Error('Profile name must be non-empty and contain only letters, numbers, hyphens, or underscores.');
+        }
+        const result = await this.run(['profile', 'create', name, '--clone', '--no-alias'], process.env, signal);
+        if (result.exitCode !== 0) {
+            throw new Error(result.stderr.trim() || `Failed to create Hermes profile "${name}".`);
+        }
+        return this.listProfiles(signal);
+    }
+    async deleteProfile(id, signal) {
+        if (!id)
+            throw new Error('Profile ID is required.');
+        const result = await this.run(['profile', 'delete', '--yes', id], process.env, signal);
+        if (result.exitCode !== 0) {
+            throw new Error(result.stderr.trim() || `Failed to delete Hermes profile "${id}".`);
+        }
+        return this.listProfiles(signal);
+    }
     async listSessions(profile, limit = 500, signal) {
         const timestamp = this.now();
         const env = buildProfileEnvironment(profile);
@@ -2093,6 +2229,73 @@ export class HermesCli {
             throw new Error(`${commandLabel} returned invalid authoritative action output. ${detail}`);
         }
     }
+    resolveAutoProvider(dumpOutput, profile) {
+        // When hermes shows provider=(auto), the profile uses credential pooling instead of
+        // an explicit provider. We do NOT parse generic "provider:" keys from config.yaml
+        // because tts.provider, stt.provider, delegation.provider, auxiliary.*.provider
+        // all sit at the same indent depth and would give wrong results.
+        // credential_pool_strategies names the actual backing provider.
+        if (profile.path) {
+            try {
+                const configPath = path.join(profile.path, 'config.yaml');
+                if (fs.existsSync(configPath)) {
+                    const yaml = fs.readFileSync(configPath, 'utf8');
+                    const poolProvider = yaml.match(/^credential_pool_strategies:\s*\n\s+(\S+):/m)?.[1]?.trim();
+                    if (poolProvider) {
+                        return poolProvider;
+                    }
+                }
+            }
+            catch {
+                // best-effort
+            }
+        }
+        // Fall back to the first provider that has its API key marked "set" in the dump.
+        const NON_MODEL = new Set(['firecrawl', 'tavily', 'browserbase', 'fal', 'elevenlabs', 'github', 'anthropic_token']);
+        const apiKeysMatch = dumpOutput.match(/^api_keys:\n((?: {2}.+\n)*)/m);
+        if (apiKeysMatch?.[1]) {
+            for (const line of apiKeysMatch[1].split('\n').filter(Boolean)) {
+                const m = line.match(/^\s+(\S+)\s+set\s*$/);
+                if (m?.[1] && !NON_MODEL.has(m[1])) {
+                    return m[1];
+                }
+            }
+        }
+        return null;
+    }
+    resolveHermesHome(profile) {
+        if (profile.path) {
+            // Default profile: path IS the home dir (contains models_dev_cache.json directly)
+            if (fs.existsSync(path.join(profile.path, 'models_dev_cache.json'))) {
+                return profile.path;
+            }
+            // Non-default profiles live at <home>/profiles/<name> — go up two levels
+            const candidateHome = path.resolve(profile.path, '../..');
+            if (fs.existsSync(path.join(candidateHome, 'models_dev_cache.json'))) {
+                return candidateHome;
+            }
+        }
+        return path.join(os.homedir(), '.hermes');
+    }
+    loadModelsFromDevCache(hermesHome, providerId) {
+        try {
+            const cachePath = path.join(hermesHome, 'models_dev_cache.json');
+            if (!fs.existsSync(cachePath))
+                return [];
+            const raw = fs.readFileSync(cachePath, 'utf8');
+            const cache = JSON.parse(raw);
+            const entry = cache[providerId];
+            if (!entry?.models)
+                return [];
+            return Object.entries(entry.models).map(([id, model]) => ({
+                value: id,
+                label: model.name ?? id
+            }));
+        }
+        catch {
+            return [];
+        }
+    }
     parseDumpProviders(dumpOutput, profileId, activeProvider, now) {
         const apiKeysMatch = dumpOutput.match(/^api_keys:\n((?: {2}.+\n)*)/m);
         const providers = [];
@@ -2121,7 +2324,8 @@ export class HermesCli {
                     displayName,
                     authKind: authKind,
                     status: connected ? 'connected' : 'missing',
-                    source: 'hermes_dump',
+                    source: 'local_config',
+                    credentialLabel: connected ? 'API key set' : undefined,
                     supportsApiKey: meta?.supportsApiKey ?? true,
                     supportsOAuth,
                     lastSyncedAt: now,
@@ -2153,7 +2357,7 @@ export class HermesCli {
                 displayName: meta.displayName,
                 authKind: 'oauth',
                 status: 'missing',
-                source: 'hermes_dump',
+                source: 'local_config',
                 supportsApiKey: meta.supportsApiKey,
                 supportsOAuth: true,
                 lastSyncedAt: now,
@@ -2177,7 +2381,8 @@ export class HermesCli {
                 displayName: meta?.displayName ?? activeProvider,
                 authKind: 'api_key',
                 status: 'connected',
-                source: 'hermes_dump',
+                source: 'local_config',
+                credentialLabel: 'API key set',
                 supportsApiKey: true,
                 supportsOAuth: false,
                 lastSyncedAt: now,
@@ -2326,6 +2531,15 @@ export class HermesCli {
             const dumpOutput = normalizeOutput(dumpResult.stdout);
             const now = this.now();
             const config = this.parseDumpConfig(dumpOutput, profile.id, now);
+            // '(auto)' means hermes is routing through a credential pool rather than an
+            // explicit provider setting. Resolve it to the real backing provider so we can
+            // find its entry, load cached models, and populate configurationFields correctly.
+            if (config.provider === '(auto)' || config.provider === 'unknown') {
+                const resolved = this.resolveAutoProvider(dumpOutput, profile);
+                if (resolved) {
+                    config.provider = resolved;
+                }
+            }
             const providers = this.parseDumpProviders(dumpOutput, profile.id, config.provider, now);
             // Try to read config.yaml for base_url and api_mode before building fields
             if (profile.path) {
@@ -2350,30 +2564,42 @@ export class HermesCli {
             // Populate the active provider with model data and configuration fields
             const activeProviderEntry = providers.find((p) => p.id === config.provider);
             if (activeProviderEntry && config.defaultModel !== 'unknown') {
+                const hermesHome = this.resolveHermesHome(profile);
+                const cachedModelOptions = this.loadModelsFromDevCache(hermesHome, config.provider);
+                const hasCachedModels = cachedModelOptions.length > 0;
                 activeProviderEntry.supportsModelDiscovery = true;
-                activeProviderEntry.models = [{
-                        id: config.defaultModel,
-                        label: config.defaultModel,
+                activeProviderEntry.models = hasCachedModels
+                    ? cachedModelOptions.map((opt) => ({
+                        id: opt.value,
+                        label: opt.label,
                         providerId: config.provider,
                         disabled: false,
                         supportsReasoningEffort: false,
                         reasoningEffortOptions: [],
                         metadata: {}
-                    }];
+                    }))
+                    : [{
+                            id: config.defaultModel,
+                            label: config.defaultModel,
+                            providerId: config.provider,
+                            disabled: false,
+                            supportsReasoningEffort: false,
+                            reasoningEffortOptions: [],
+                            metadata: {}
+                        }];
                 activeProviderEntry.configurationFields = [
                     {
                         key: 'defaultModel',
                         label: 'Default model',
-                        input: 'select',
+                        input: hasCachedModels ? 'select' : 'text',
                         required: true,
                         secret: false,
                         disabled: false,
+                        placeholder: hasCachedModels ? undefined : 'e.g. openai/gpt-4o',
                         value: config.defaultModel,
-                        options: [{
-                                value: config.defaultModel,
-                                label: config.defaultModel,
-                                disabled: false
-                            }]
+                        options: hasCachedModels
+                            ? cachedModelOptions.map((opt) => ({ value: opt.value, label: opt.label, disabled: false }))
+                            : [{ value: config.defaultModel, label: config.defaultModel, disabled: false }]
                     },
                     {
                         key: 'baseUrl',

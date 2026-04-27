@@ -1,6 +1,13 @@
 # The Kitchen
 
+[![CI](https://github.com/jozef-barton/the-kitchen/actions/workflows/ci.yml/badge.svg)](https://github.com/jozef-barton/the-kitchen/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)](https://nodejs.org)
+[![Hermes CLI](https://img.shields.io/badge/hermes--cli-%3E%3D0.9.0-brightgreen)](https://hermes-agent.nousresearch.com/)
+
 A local-first browser frontend for [Hermes Agent](https://hermes-agent.nousresearch.com/) — streaming chat, structured recipe workspaces, provider settings, and a recipe template gallery.
+
+> **Status:** pre-1.0. The protocol, persistence schema, and bridge surface area can change between releases. Pin to a commit if you depend on it.
 
 ## Requirements
 
@@ -17,26 +24,48 @@ A local-first browser frontend for [Hermes Agent](https://hermes-agent.nousresea
 
 ## Quick start
 
+The friendliest single-command path — builds the workspace and opens the app in your browser:
+
 ```bash
 pnpm install
+pnpm kitchen
+```
+
+`pnpm kitchen` runs `pnpm build`, starts the bridge serving the built web app, picks a free port if 8787 is busy, and opens your default browser. Ctrl-C shuts it down cleanly.
+
+For development with hot reload (web on 5173, bridge on 8787):
+
+```bash
 pnpm dev
 ```
 
-- Web app: **http://127.0.0.1:5173**
-- Bridge API: **http://127.0.0.1:8787**
+Or build and serve the production bundle manually:
 
 ```bash
-# Or build and serve the production bundle:
 pnpm build
 pnpm start
 ```
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRIDGE_PORT` | `8787` | Bridge HTTP port. `pnpm kitchen` falls back to a free ephemeral port if this one is busy. |
+| `BRIDGE_DB_PATH` | See below | Path to the local SQLite database. |
+| `HERMES_CLI_PATH` | `hermes` | Path to the Hermes binary if it isn't on `PATH`. |
+
+Default database location:
+
+- **macOS:** `~/Library/Application Support/Hermes Recipes Browser/hermes-recipes.db`
+- **Linux:** `~/.local/share/Hermes Recipes Browser/hermes-recipes.db`
+- **Windows:** `%APPDATA%\Hermes Recipes Browser\hermes-recipes.db`
 
 ## Troubleshooting
 
 **Bridge exits with code 1 immediately**
 - Check Node.js version: `node --version` — must be ≥ 22.5
 - Make sure the repo path has no spaces
-- Make sure `hermes` is in your PATH: `hermes --version`
+- Make sure `hermes` is on your `PATH`: `hermes --version`
 
 **"Hermes is not fully healthy" banner**
 - Run `hermes profile list` in your terminal to confirm Hermes works
@@ -46,25 +75,13 @@ pnpm start
 - Open Settings and configure a provider API key
 - Run `hermes config show` to verify your current model and provider
 
-## Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `BRIDGE_PORT` | `8787` | Bridge HTTP port |
-| `BRIDGE_DB_PATH` | See below | Path to SQLite database |
-| `HERMES_CLI_PATH` | `hermes` | Path to Hermes binary |
-
-Default database location:
-- macOS: `~/Library/Application Support/Hermes Recipes Browser/hermes-recipes.db`
-- Linux: `~/.local/share/Hermes Recipes Browser/hermes-recipes.db`
-- Windows: `%APPDATA%\Hermes Recipes Browser\hermes-recipes.db`
-
 ## How it works
 
 - **Chat** — streaming responses from Hermes via SSE. Full Markdown rendering with syntax highlighting, tables, and lists.
 - **Recipes** — structured workspaces Hermes generates during chat. Select a template from the Recipe Book tab, or let Hermes generate one based on your request. Recipes are attached to sessions and persist across restarts.
 - **Settings** — configure Hermes providers with step-by-step guided setup for every supported provider, including API key links and example `hermes config set` commands.
-- All state persists in a local SQLite database. The bridge accepts connections from `localhost`/`127.0.0.1` only.
+
+All state persists in a local SQLite database. The bridge accepts connections from `localhost` / `127.0.0.1` only.
 
 ## Architecture
 
@@ -87,7 +104,7 @@ Canonical specs live under [`docs/specs`](docs/specs):
 - [hermes-ui-workspaces.md](docs/specs/hermes-ui-workspaces.md) — Hermes-to-bridge space data contract.
 - [threat-model.md](docs/specs/threat-model.md) — threats, mitigations, and reviewed-tool allowlist.
 
-## Verification
+## Development
 
 ```bash
 pnpm lint
@@ -96,18 +113,32 @@ pnpm test
 pnpm build
 ```
 
-The full path used by CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) is:
+The full path used by [CI](.github/workflows/ci.yml) bundles those into one command:
 
 ```bash
-pnpm ci:full
+pnpm ci:full   # lint + typecheck + unit tests + security check
 ```
 
-which additionally runs `pnpm test:integration` (Playwright) and `pnpm security`.
+End-to-end Playwright tests live under [`apps/web/e2e`](apps/web/e2e) and run against a fixture bridge configured in [`playwright.config.ts`](playwright.config.ts). Run them locally with `pnpm exec playwright test`; they are not currently part of `pnpm ci:full`.
 
 ## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, and pull-request expectations. A few load-bearing project rules to keep in mind:
 
 - The browser app only talks to the bridge over HTTP/SSE. The bridge is the only place that calls the Hermes CLI.
 - Persistence is SQLite-backed via Node.js `node:sqlite`. Do not add file-system state outside the database.
 - Provider API keys flow through Hermes auth/config only — the bridge caches only masked metadata locally.
-- Recipes must stay schema-driven. The production path is template selection + structured fill/update JSON with bridge-owned normalization and rendering.
+- Recipes must stay schema-driven. The production path is template selection plus structured fill/update JSON with bridge-owned normalization and rendering.
 - Reviewed shell execution is intentionally narrow. Expand the allowlist only with tests.
+
+## Security
+
+The bridge binds to `127.0.0.1` only and accepts same-origin requests. To report a vulnerability, see [SECURITY.md](SECURITY.md). Do not file public issues for security problems.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
+
+## Acknowledgements
+
+Built around [Hermes Agent](https://hermes-agent.nousresearch.com/) by Nous Research.

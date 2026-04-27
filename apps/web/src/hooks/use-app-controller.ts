@@ -875,6 +875,68 @@ export function useAppController() {
     };
   }, [activeProfileId, hydrateRuntimeRequestState, page, sessionPayload, toolsTab]);
 
+  // Poll for completion when we load a session that has a running request but no active SSE stream.
+  // This handles the case where the user refreshes mid-request: the new page sees status='running'
+  // in the DB but has no open SSE connection to receive the completion event.
+  useEffect(() => {
+    const hasOrphanedRunningRequest =
+      sessionPayload?.runtimeRequests.some((r) => r.status === 'running') ?? false;
+
+    if (
+      page !== 'chat' ||
+      !activeProfileId ||
+      !sessionPayload ||
+      sessionPayload.session.id !== activeSessionIdRef.current ||
+      !hasOrphanedRunningRequest ||
+      chatSending
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: number | null = null;
+
+    const pollForRequestCompletion = async () => {
+      try {
+        const nextSessionPayload = await getSessionMessages(activeProfileId, sessionPayload.session.id);
+        if (cancelled || activeSessionIdRef.current !== nextSessionPayload.session.id) {
+          return;
+        }
+
+        setSessionPayload(nextSessionPayload);
+        hydrateRuntimeRequestState(nextSessionPayload);
+        setBootstrap((currentBootstrap) =>
+          mergeSessionIntoBootstrap(currentBootstrap, activeProfileId, nextSessionPayload.session, 'chat', toolsTab)
+        );
+
+        if (!nextSessionPayload.runtimeRequests.some((r) => r.status === 'running')) {
+          return;
+        }
+      } catch {
+        if (cancelled) {
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        timeoutId = window.setTimeout(() => {
+          void pollForRequestCompletion();
+        }, 2000);
+      }
+    };
+
+    timeoutId = window.setTimeout(() => {
+      void pollForRequestCompletion();
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeProfileId, chatSending, hydrateRuntimeRequestState, page, sessionPayload, toolsTab]);
+
   const ensureRuntimeRequestBucket = useCallback(
     (
       sessionId: string,

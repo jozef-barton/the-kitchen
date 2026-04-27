@@ -265,29 +265,6 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY = {
         },
         transitions: []
     }),
-    'content-campaign-planner': withDefaults({
-        id: 'content-campaign-planner',
-        name: 'Content / Campaign Planner',
-        useCase: 'Track campaign ideas, drafts, schedule, email, and notes.',
-        selectionSignals: ['campaign planner', 'content ideas', 'drafts and schedule', 'launch email'],
-        slots: [
-            { id: 'campaign-tabs', kind: 'tabs', required: true }
-        ],
-        allowedUpdateOps: ['set_header', 'set_active_tab', 'upsert_cards', 'upsert_timeline_items', 'append_note_lines', 'remove_items'],
-        actions: {
-            'flesh-out-idea': bridgeAction('flesh-out-idea', 'Flesh out', 'expand_template_idea', {
-                intent: 'primary',
-                visibility: { requiresSelection: 'single' },
-                prompt: { promptTemplate: 'Expand the selected content idea into a full brief with goals, audience, format, key messages, and a draft outline.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: ['raw_data', 'normalized_data'], outboundRequestsAllowed: false, expectedOutput: 'recipe_data_update', timeoutMs: 60_000, retryable: true }
-            }),
-            'write-campaign-email': bridgeAction('write-campaign-email', 'Write email', 'generate_campaign_email', {
-                intent: 'primary',
-                visibility: { requiresSelection: 'single' },
-                prompt: { promptTemplate: 'Write a complete campaign email for the selected idea: subject line, body copy, and a clear CTA.', includeInputs: ['selected_items', 'original_prompt'], allowedMutations: [], outboundRequestsAllowed: false, expectedOutput: 'assistant_only', timeoutMs: 60_000, retryable: true }
-            })
-        },
-        transitions: []
-    }),
     'local-discovery-comparison': withDefaults({
         id: 'local-discovery-comparison',
         name: 'Local Discovery Comparison',

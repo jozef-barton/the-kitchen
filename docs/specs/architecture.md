@@ -163,4 +163,5 @@ Connected, degraded, disconnected, and error states are explicit in the UI and g
 
 - Vitest covers protocol validation, database persistence, bridge integration, migration, local-origin policy, provider/model state, unread-email regressions, transcript/runtime separation, space CRUD, space chat context, and browser unit behavior
 - Playwright covers browser shell loading, session browse/resume, streaming chat, spaces flows, jobs/tools/tool-history/skills flows, disconnected states, and internal scrolling
-- `pnpm ci:full` runs the local verification path end to end
+- `pnpm ci:full` runs the local verification path mirrored by GitHub Actions: lint, typecheck, unit tests (Vitest), and the security check
+- Playwright e2e is not part of `pnpm ci:full` today and is not gated by CI; run it locally with `pnpm exec playwright test` when changing the e2e surface
