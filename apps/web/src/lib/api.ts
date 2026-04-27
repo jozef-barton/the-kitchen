@@ -27,6 +27,8 @@ import type {
   UpdateRuntimeModelConfigRequest
 } from '@hermes-recipes/protocol';
 export type { FileRef, UploadedFile };
+import type { GetSoulMdResponse, UpdateSoulMdResponse } from '@hermes-recipes/protocol';
+export type { GetSoulMdResponse, UpdateSoulMdResponse };
 import {
   AuditEventsResponseSchema,
   RecipeEntryActionResponseSchema,
@@ -55,7 +57,9 @@ import {
   ToolExecutionSchema,
   ToolHistoryResponseSchema,
   ToolsResponseSchema,
-  UiStateSchema
+  UiStateSchema,
+  GetSoulMdResponseSchema,
+  UpdateSoulMdResponseSchema
 } from '@hermes-recipes/protocol';
 
 interface ApiErrorShape {
@@ -609,5 +613,23 @@ export function uploadFiles(
 
 export function getUploadUrl(fileId: string): string {
   return `/api/uploads/${encodeURIComponent(fileId)}/content`;
+}
+
+export async function getSoulMd(profileId: string): Promise<GetSoulMdResponse> {
+  return parseJsonResponse(
+    await apiFetch(`/api/soul-md?profileId=${encodeURIComponent(profileId)}`),
+    GetSoulMdResponseSchema
+  );
+}
+
+export async function updateSoulMd(profileId: string, content: string): Promise<UpdateSoulMdResponse> {
+  return parseJsonResponse(
+    await apiFetch('/api/soul-md', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ profileId, content })
+    }),
+    UpdateSoulMdResponseSchema
+  );
 }
 

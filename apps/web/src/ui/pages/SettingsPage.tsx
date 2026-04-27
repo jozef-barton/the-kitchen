@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Badge, Box, Button, Checkbox, Drawer, Field, Grid, HStack, Input, NumberInput, NativeSelect, ScrollArea, Spinner, Table, Tabs, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, Checkbox, Drawer, Field, Grid, HStack, Input, NumberInput, NativeSelect, ScrollArea, Spinner, Table, Tabs, Text, Textarea, VStack } from '@chakra-ui/react';
 
 /* ── Discrete step slider — 240px track + inline value badge ── */
 function StepSlider({
@@ -77,7 +77,7 @@ import type {
 import { EmptyStateCard } from '../molecules/EmptyStateCard';
 import { ErrorBanner } from '../molecules/ErrorBanner';
 
-type SettingsTabValue = 'general' | 'model' | 'access_audit' | 'telemetry';
+type SettingsTabValue = 'general' | 'model' | 'soul_md' | 'access_audit' | 'telemetry';
 
 export function SettingsPage({
   settings,
@@ -108,7 +108,14 @@ export function SettingsPage({
   onBeginProviderAuth,
   onPollProviderAuth,
   onRefreshProviders,
-  onInspectProvider
+  onInspectProvider,
+  activeProfileId,
+  soulMdContent,
+  soulMdLoading,
+  soulMdSaving,
+  soulMdError,
+  onLoadSoulMd,
+  onUpdateSoulMd
 }: {
   settings: AppSettings | null;
   accessAudit: AccessAuditSummary | null;
@@ -159,6 +166,13 @@ export function SettingsPage({
   ) => Promise<unknown> | void;
   onRefreshProviders: () => Promise<void> | void;
   onInspectProvider: (providerId: string) => Promise<unknown> | void;
+  activeProfileId: string | null;
+  soulMdContent: string | null;
+  soulMdLoading: boolean;
+  soulMdSaving: boolean;
+  soulMdError: string | null;
+  onLoadSoulMd: (profileId: string) => void;
+  onUpdateSoulMd: (content: string) => Promise<void>;
 }) {
   const [currentTab, setCurrentTab] = useState<SettingsTabValue>('general');
   const { themeMode: activeThemeMode } = useHermesTheme();
@@ -195,6 +209,36 @@ export function SettingsPage({
   const [apiKey, setApiKey] = useState('');
   const providerDrawerFinalFocusRef = useRef<HTMLElement | null>(null);
   const showModelProviderErrorBanner = Boolean(modelProviderError && runtimeConfigGate.status === 'blocked');
+
+  // Soul MD local draft — syncs from parent state when the Persona tab opens
+  const [soulMdDraft, setSoulMdDraft] = useState('');
+  const soulMdDraftInitialized = useRef(false);
+
+  useEffect(() => {
+    if (currentTab === 'soul_md' && activeProfileId) {
+      if (soulMdContent === null && !soulMdLoading) {
+        onLoadSoulMd(activeProfileId);
+        soulMdDraftInitialized.current = false;
+      } else if (soulMdContent !== null && !soulMdDraftInitialized.current) {
+        setSoulMdDraft(soulMdContent);
+        soulMdDraftInitialized.current = true;
+      }
+    }
+  }, [currentTab, activeProfileId, soulMdContent, soulMdLoading, onLoadSoulMd]);
+
+  // When content arrives from the server, sync it to the draft if not yet initialized
+  useEffect(() => {
+    if (soulMdContent !== null && !soulMdDraftInitialized.current) {
+      setSoulMdDraft(soulMdContent);
+      soulMdDraftInitialized.current = true;
+    }
+  }, [soulMdContent]);
+
+  // Reset draft tracking when profile changes
+  useEffect(() => {
+    soulMdDraftInitialized.current = false;
+    setSoulMdDraft('');
+  }, [activeProfileId]);
   const runtimeConfigBlockedTitle =
     runtimeConfigGate.code === 'runtime_state_unavailable' ? 'Runtime configuration unavailable' : 'Runtime configuration required';
 
@@ -484,7 +528,7 @@ export function SettingsPage({
     >
       <Box borderBottom="1px solid var(--divider)" flexShrink={0}>
         <Tabs.List gap="0" px="0" borderBottom="none">
-          {(['general', 'model', 'access_audit', 'telemetry'] as const).map((v) => (
+          {(['general', 'model', 'soul_md', 'access_audit', 'telemetry'] as const).map((v) => (
             <Tabs.Trigger
               key={v}
               value={v}
@@ -499,7 +543,7 @@ export function SettingsPage({
               _selected={{ color: 'var(--text-primary)', fontWeight: '500', borderBottomColor: 'var(--accent)' }}
               _hover={{ color: 'var(--text-secondary)' }}
             >
-              {v === 'general' ? 'Settings' : v === 'model' ? 'Models' : v === 'access_audit' ? 'Access' : 'Audit'}
+              {v === 'general' ? 'Settings' : v === 'model' ? 'Models' : v === 'soul_md' ? 'Persona' : v === 'access_audit' ? 'Access' : 'Audit'}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
@@ -1302,6 +1346,72 @@ export function SettingsPage({
               </Drawer.Content>
             </Drawer.Positioner>
           </Drawer.Root>
+        </SettingsTabPanel>
+
+        <SettingsTabPanel value="soul_md">
+          <SectionCard
+            title="Agent Persona"
+            description={`Customize how Hermes communicates for the ${activeProfileId ?? 'active'} profile. Loaded fresh on every message — changes take effect immediately.`}
+            action={
+              <Button
+                size="xs"
+                h="7"
+                px="3"
+                rounded="8px"
+                bg="var(--accent)"
+                color="var(--accent-contrast)"
+                fontWeight="500"
+                fontSize="xs"
+                _hover={{ bg: 'var(--accent-strong)' }}
+                loading={soulMdSaving}
+                disabled={soulMdLoading || soulMdContent === null}
+                onClick={() => void onUpdateSoulMd(soulMdDraft)}
+              >
+                Save Persona
+              </Button>
+            }
+          >
+            <VStack align="stretch" gap="3">
+              {soulMdError ? (
+                <Box px="3" py="2" rounded="8px" bg="var(--status-error-surface)" border="1px solid var(--status-error)">
+                  <Text fontSize="sm" color="var(--status-error)">{soulMdError}</Text>
+                </Box>
+              ) : null}
+              {soulMdLoading ? (
+                <HStack gap="2" py="4" justify="center">
+                  <Spinner size="sm" color="var(--text-muted)" />
+                  <Text fontSize="sm" color="var(--text-muted)">Loading persona…</Text>
+                </HStack>
+              ) : (
+                <Field.Root>
+                  <Textarea
+                    value={soulMdDraft}
+                    onChange={(e) => setSoulMdDraft(e.currentTarget.value)}
+                    placeholder={`# Hermes Agent Persona\n\nWrite anything here to shape how Hermes speaks to you.\n\nExamples:\n  - "You are a concise technical expert. No fluff, just facts."\n  - "You speak like a friendly coworker who knows everything."\n  - "You are warm and playful, and use kaomoji occasionally."\n\nDelete the contents (or leave empty) to use the default personality.`}
+                    minH="360px"
+                    resize="vertical"
+                    fontSize="sm"
+                    fontFamily="monospace"
+                    lineHeight="1.6"
+                    bg="var(--surface-2)"
+                    borderColor="var(--border-subtle)"
+                    color="var(--text-primary)"
+                    _placeholder={{ color: 'var(--text-muted)', fontFamily: 'monospace' }}
+                    _focus={{ borderColor: 'var(--border-default)', boxShadow: 'var(--focus-ring)' }}
+                    spellCheck={false}
+                  />
+                  <HStack justify="space-between" mt="1">
+                    <Text fontSize="xs" color="var(--text-muted)">
+                      Markdown supported. Saved to <Text as="span" fontFamily="monospace" fontSize="xs">SOUL.md</Text> in the profile directory.
+                    </Text>
+                    <Text fontSize="xs" color="var(--text-muted)">
+                      {soulMdDraft.length.toLocaleString()} chars
+                    </Text>
+                  </HStack>
+                </Field.Root>
+              )}
+            </VStack>
+          </SectionCard>
         </SettingsTabPanel>
 
         <SettingsTabPanel value="access_audit">

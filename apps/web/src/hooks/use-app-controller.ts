@@ -57,6 +57,8 @@ import {
   updateRecipe,
   updateRuntimeModelConfig,
   updateSettings,
+  getSoulMd,
+  updateSoulMd,
   updateUiState
 } from '../lib/api';
 import { useFileUploadQueue } from './use-file-upload-queue';
@@ -565,6 +567,10 @@ export function useAppController() {
   const [telemetryPage, setTelemetryPage] = useState(1);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [soulMdContent, setSoulMdContent] = useState<string | null>(null);
+  const [soulMdLoading, setSoulMdLoading] = useState(false);
+  const [soulMdSaving, setSoulMdSaving] = useState(false);
+  const [soulMdError, setSoulMdError] = useState<string | null>(null);
   const [profileMetrics, setProfileMetrics] = useState<Array<{ profileId: string; sessionCount: number; messageCount: number; recipeCount: number }>>([]);
   const [modelProviderResponse, setModelProviderResponse] = useState<ModelProviderResponse | null>(null);
   const [modelProviderLoading, setModelProviderLoading] = useState(false);
@@ -1151,6 +1157,7 @@ export function useAppController() {
         setInspectedProviderId(null);
         setRuntimeReadinessHydratingProfileId(nextActiveProfileId);
         setRuntimeReadinessCheckedProfileId(null);
+        setSoulMdContent(null);
       }
 
       if (options.openPreferredSession === false || nextPage !== 'chat' || !nextActiveProfileId || !preferredSessionId) {
@@ -2700,6 +2707,36 @@ export function useAppController() {
     }
   }, [accessAuditEventsPage, activeProfileId, loadAccessAuditEventsState]);
 
+  const loadSoulMd = useCallback(async (profileId: string) => {
+    setSoulMdLoading(true);
+    setSoulMdError(null);
+    try {
+      const result = await getSoulMd(profileId);
+      setSoulMdContent(result.content);
+    } catch (error) {
+      setSoulMdError(getErrorMessage(error, 'Failed to load agent persona.'));
+    } finally {
+      setSoulMdLoading(false);
+    }
+  }, []);
+
+  const handleUpdateSoulMd = useCallback(async (content: string) => {
+    if (!activeProfileId) return;
+    setSoulMdSaving(true);
+    setSoulMdError(null);
+    try {
+      const result = await updateSoulMd(activeProfileId, content);
+      setSoulMdContent(result.content);
+      toaster.success({ title: 'Persona saved', description: 'Agent persona updated for this profile.', closable: true });
+    } catch (error) {
+      const message = getErrorMessage(error, 'Failed to save agent persona.');
+      setSoulMdError(message);
+      defaultToastError(message);
+    } finally {
+      setSoulMdSaving(false);
+    }
+  }, [activeProfileId]);
+
   const handleUpdateRuntimeModelConfig = useCallback(
     async (
       nextConfig: Omit<UpdateRuntimeModelConfigRequest, 'profileId'>,
@@ -3011,6 +3048,12 @@ export function useAppController() {
     telemetryPage,
     settingsSaving,
     settingsError,
+    soulMdContent,
+    soulMdLoading,
+    soulMdSaving,
+    soulMdError,
+    loadSoulMd,
+    handleUpdateSoulMd,
     modelProviderResponse: activeModelProviderResponse,
     modelProviderLoading,
     modelProviderError,

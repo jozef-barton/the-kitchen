@@ -358,6 +358,13 @@ export function App() {
             onPollProviderAuth={(providerId, authSessionId, options) => controller.handlePollProviderAuth(providerId, authSessionId, options)}
             onRefreshProviders={() => controller.handleModelProvidersRefresh()}
             onInspectProvider={(providerId) => controller.handleInspectProvider(providerId)}
+            activeProfileId={controller.activeProfileId}
+            soulMdContent={controller.soulMdContent}
+            soulMdLoading={controller.soulMdLoading}
+            soulMdSaving={controller.soulMdSaving}
+            soulMdError={controller.soulMdError}
+            onLoadSoulMd={(profileId) => controller.loadSoulMd(profileId)}
+            onUpdateSoulMd={(content) => controller.handleUpdateSoulMd(content)}
           />
         ) : null}
 
