@@ -238,7 +238,7 @@ function createBootstrapResponse(
       restrictedChatMaxTurns: 8,
       unrestrictedAccessEnabled: false
     },
-    hermesVersion: null,
+    hermesVersion: '0.11.0',
     expectedHermesVersion: null,
     uiState,
     ...restOverrides

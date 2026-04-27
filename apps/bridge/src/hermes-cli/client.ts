@@ -3013,6 +3013,17 @@ export class HermesCli {
     return null;
   }
 
+  private writeEnvVarDirect(profile: Pick<Profile, 'path'>, key: string, value: string): void {
+    const hermesHome = path.join(os.homedir(), '.hermes');
+    fs.mkdirSync(hermesHome, { recursive: true });
+    const envPath = path.join(hermesHome, '.env');
+    let existing = '';
+    try { existing = fs.readFileSync(envPath, 'utf-8'); } catch { /* new file */ }
+    const lines = existing.split('\n').filter(l => l.trim() && !l.startsWith(`${key}=`));
+    lines.push(`${key}=${value}`);
+    fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf-8');
+  }
+
   private resolveHermesHome(profile: Pick<Profile, 'path'>): string {
     if (profile.path) {
       // Default profile: path IS the home dir (contains models_dev_cache.json directly)
@@ -3311,13 +3322,34 @@ export class HermesCli {
     };
   }
 
+  private buildNotInstalledProviderState(profileId: string): RuntimeProviderDiscoveryResult {
+    const now = this.now();
+    return {
+      config: { profileId, provider: 'unknown', defaultModel: 'unknown', maxTurns: 150, lastSyncedAt: now },
+      providers: [],
+      runtimeReadiness: { ready: false, code: 'runtime_state_unavailable', message: 'Hermes is not installed. Use the Setup screen to install it.', providerId: null, modelId: null },
+      inspectedProviderId: null,
+      discoveredAt: now
+    };
+  }
+
   private async runRuntimeProviderDiscoveryDump(
     profile: Profile,
     _inspectedProviderId?: string | null,
     signal?: AbortSignal
   ) {
     const env = buildProfileEnvironment(profile);
-    const dumpResult = await this.run(['dump'], env, signal);
+    let dumpResultOrNull: HermesCliExecutionResult | null = null;
+    try {
+      dumpResultOrNull = await this.run(['dump'], env, signal);
+    } catch (error) {
+      // If hermes binary is not found, return empty state so the Settings page can still show
+      if (error instanceof Error && (error.message.includes('ENOENT') || error.message.includes('not found') || error.message.includes('Cannot find'))) {
+        return this.buildNotInstalledProviderState(profile.id);
+      }
+      throw error;
+    }
+    const dumpResult = dumpResultOrNull;
     const dumpOutput = normalizeOutput(dumpResult.stdout);
     const now = this.now();
 
@@ -3421,6 +3453,33 @@ export class HermesCli {
     return this.runRuntimeProviderDiscoveryDump(profile, inspectedProviderId, signal);
   }
 
+  streamInstall(onOutput: (line: string) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const shell = process.platform === 'win32' ? 'cmd' : '/bin/bash';
+      const args = process.platform === 'win32'
+        ? ['/c', 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash']
+        : ['-c', 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash'];
+      const child = spawn(shell, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout.setEncoding('utf-8');
+      child.stderr.setEncoding('utf-8');
+      child.stdout.on('data', (chunk: string) => {
+        for (const line of chunk.split('\n')) {
+          if (line.trim()) onOutput(line);
+        }
+      });
+      child.stderr.on('data', (chunk: string) => {
+        for (const line of chunk.split('\n')) {
+          if (line.trim()) onOutput(line);
+        }
+      });
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Install exited with code ${code}`));
+      });
+      child.on('error', reject);
+    });
+  }
+
   async getRuntimeModelConfig(profile: Profile) {
     return (await this.discoverRuntimeProviderState(profile)).config;
   }
@@ -3492,17 +3551,30 @@ export class HermesCli {
         ? input.label
         : meta?.envVar;
       if (envVarName) {
-        await this.run(['config', 'set', envVarName, input.apiKey], env, signal);
+        try {
+          await this.run(['config', 'set', envVarName, input.apiKey], env, signal);
+        } catch {
+          // Hermes not installed — write directly to ~/.hermes/.env
+          this.writeEnvVarDirect(profile, envVarName, input.apiKey);
+        }
       }
     }
 
     // If baseUrl or apiMode are provided, persist them via model config
     if (input.baseUrl || input.apiMode) {
       if (input.baseUrl) {
-        await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+        try {
+          await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+        } catch {
+          // Hermes not installed — skip; can be configured once Hermes is installed
+        }
       }
       if (input.apiMode) {
-        await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+        try {
+          await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+        } catch {
+          // Hermes not installed — skip; can be configured once Hermes is installed
+        }
       }
     }
 

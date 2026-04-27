@@ -633,3 +633,37 @@ export async function updateSoulMd(profileId: string, content: string): Promise<
   );
 }
 
+export type HermesInstallEvent =
+  | { type: 'output'; line: string }
+  | { type: 'complete' }
+  | { type: 'error'; detail: string };
+
+export async function streamHermesInstall(onEvent: (event: HermesInstallEvent) => void): Promise<void> {
+  const response = await apiFetch('/api/hermes/install', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({})
+  });
+  if (!response.ok) throw new Error(`Install request failed: ${response.status}`);
+  if (!response.body) throw new Error('No response body');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx = buffer.indexOf('\n\n');
+    while (idx >= 0) {
+      const chunk = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 2);
+      if (chunk.startsWith('data:')) {
+        try {
+          onEvent(JSON.parse(chunk.slice(5).trim()) as HermesInstallEvent);
+        } catch { /* ignore parse errors */ }
+      }
+      idx = buffer.indexOf('\n\n');
+    }
+  }
+}
+
