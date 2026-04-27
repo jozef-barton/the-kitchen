@@ -1122,6 +1122,48 @@ export declare const RecipeTemplateSectionSchema: z.ZodType<({
         label: string;
         url?: string;
     }>;
+}) | ({
+    slotId: string;
+    kind: 'video';
+    title: string;
+    src: string;
+    poster?: string;
+    subtitle?: string;
+}) | ({
+    slotId: string;
+    kind: 'file-attachment';
+    title: string;
+    files: Array<{
+        id: string;
+        filename: string;
+        mimeType: string;
+        size: number;
+        kind: string;
+        url: string;
+    }>;
+}) | ({
+    slotId: string;
+    kind: 'pdf-viewer';
+    title: string;
+    src: string;
+    filename?: string;
+}) | ({
+    slotId: string;
+    kind: 'code-block';
+    title: string;
+    language: string;
+    code: string;
+    filename?: string;
+}) | ({
+    slotId: string;
+    kind: 'data-table';
+    title: string;
+    columns: Array<{
+        key: string;
+        label: string;
+    }>;
+    rows: Array<Record<string, string | number | null>>;
+    filename?: string;
 }), z.ZodTypeDef, unknown>;
 export type RecipeTemplateSection = z.infer<typeof RecipeTemplateSectionSchema>;
 export declare const RecipeTemplateTransitionRecordSchema: z.ZodObject<{
@@ -1355,6 +1397,48 @@ export declare const RecipeTemplateStateSchema: z.ZodObject<{
             label: string;
             url?: string;
         }>;
+    } | {
+        slotId: string;
+        kind: "video";
+        title: string;
+        src: string;
+        poster?: string;
+        subtitle?: string;
+    } | {
+        slotId: string;
+        kind: "file-attachment";
+        title: string;
+        files: Array<{
+            id: string;
+            filename: string;
+            mimeType: string;
+            size: number;
+            kind: string;
+            url: string;
+        }>;
+    } | {
+        slotId: string;
+        kind: "pdf-viewer";
+        title: string;
+        src: string;
+        filename?: string;
+    } | {
+        slotId: string;
+        kind: "code-block";
+        title: string;
+        language: string;
+        code: string;
+        filename?: string;
+    } | {
+        slotId: string;
+        kind: "data-table";
+        title: string;
+        columns: Array<{
+            key: string;
+            label: string;
+        }>;
+        rows: Array<Record<string, string | number | null>>;
+        filename?: string;
     }, z.ZodTypeDef, unknown>, "many">>;
     transitionTargets: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     transitionHistory: z.ZodDefault<z.ZodArray<z.ZodObject<{
@@ -1571,6 +1655,48 @@ export declare const RecipeTemplateStateSchema: z.ZodObject<{
             label: string;
             url?: string;
         }>;
+    } | {
+        slotId: string;
+        kind: "video";
+        title: string;
+        src: string;
+        poster?: string;
+        subtitle?: string;
+    } | {
+        slotId: string;
+        kind: "file-attachment";
+        title: string;
+        files: Array<{
+            id: string;
+            filename: string;
+            mimeType: string;
+            size: number;
+            kind: string;
+            url: string;
+        }>;
+    } | {
+        slotId: string;
+        kind: "pdf-viewer";
+        title: string;
+        src: string;
+        filename?: string;
+    } | {
+        slotId: string;
+        kind: "code-block";
+        title: string;
+        language: string;
+        code: string;
+        filename?: string;
+    } | {
+        slotId: string;
+        kind: "data-table";
+        title: string;
+        columns: Array<{
+            key: string;
+            label: string;
+        }>;
+        rows: Array<Record<string, string | number | null>>;
+        filename?: string;
     })[];
     transitionTargets: string[];
     transitionHistory: {

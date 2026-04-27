@@ -3019,6 +3019,19 @@ export class HermesBridge {
             metadata
         });
     }
+    resolveAttachmentContexts(fileRefs) {
+        return fileRefs.map((ref) => {
+            const record = this.options.database.getUploadedFile(ref.id);
+            const storagePath = this.options.database.getUploadedFileStoragePath(ref.id);
+            return {
+                filename: ref.filename,
+                kind: ref.kind,
+                parsedText: record?.parsedText ?? null,
+                transcriptionText: record?.transcriptionText ?? null,
+                imagePath: ref.kind === 'image' && storagePath ? storagePath : null
+            };
+        });
+    }
     buildRecipeChatContext(recipe) {
         const contentTab = getRecipeContentTab(recipe);
         const dataSnapshot = JSON.stringify({
@@ -10196,7 +10209,8 @@ Emit one corrected TSX module now.`;
             createdAt: this.now(),
             requestId: `request-${randomUUID()}`,
             visibility: 'transcript',
-            kind: 'conversation'
+            kind: 'conversation',
+            attachments: input.attachments ?? []
         });
         const requestId = userMessage.requestId ?? userMessage.id;
         this.options.database.appendMessage(userMessage);
@@ -10318,12 +10332,14 @@ Emit one corrected TSX module now.`;
                 });
             }
         }
+        const hermesAttachments = this.resolveAttachmentContexts(input.attachments ?? []);
         try {
             const chatResult = await this.options.hermesCli.streamChat({
                 profile,
                 runtimeSessionId: session.runtimeSessionId,
                 content: hermesContent,
                 requestMode,
+                attachments: hermesAttachments,
                 spaceContext: activeRecipe ? this.buildRecipeChatContext(activeRecipe) : null,
                 refreshContext,
                 requestId,
@@ -10828,7 +10844,8 @@ Emit one corrected TSX module now.`;
             transcriptContent: input.content,
             hermesContent: input.content,
             intentContent: input.intentContent ?? input.content,
-            mode: input.mode
+            mode: input.mode,
+            attachments: input.attachments ?? []
         }, onEvent);
     }
     async streamBuilderChat(input, onEvent) {

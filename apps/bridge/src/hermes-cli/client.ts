@@ -621,7 +621,9 @@ function parseProfileList(output: string): HermesCliProfileRecord[] {
       const trimmed = line.trimStart();
       const marker = trimmed.startsWith('◆') ? '◆' : '';
       const withoutMarker = marker ? trimmed.slice(1).trimStart() : trimmed;
-      const [profileId, model = '', gateway = '', alias = ''] = splitCliCells(withoutMarker);
+      const [profileId, rawModel = '', gateway = '', alias = ''] = splitCliCells(withoutMarker);
+      // '—' is what Hermes prints when no model is configured on a fresh install
+      const model = rawModel === '—' ? '' : rawModel;
 
       return profileId
         ? [
@@ -2541,6 +2543,48 @@ export interface HermesCliOptions {
   now?: () => string;
 }
 
+function resolveRuntimeReadiness(
+  config: RuntimeModelConfig,
+  providers: RuntimeProviderOption[]
+): RuntimeReadiness {
+  const hasModel = config.defaultModel !== 'unknown';
+  const hasConnectedProvider = providers.some((p) => p.ready);
+  const autoProvider = config.provider === '(auto)';
+
+  if (!hasModel) {
+    // No model is configured at all — user must run setup.
+    const noKeys = providers.length > 0 && providers.every((p) => !p.ready);
+    return {
+      ready: false,
+      code: noKeys ? 'config_error' as const : 'model_missing' as const,
+      message: noKeys
+        ? 'No model or provider credentials are configured. Open Settings to add an API key and select a model.'
+        : 'No model is selected. Open Settings to pick a model for the active provider.',
+      providerId: autoProvider ? null : config.provider,
+      modelId: null
+    };
+  }
+
+  if (!hasConnectedProvider && !autoProvider) {
+    // A model is set but its provider has no credentials.
+    return {
+      ready: false,
+      code: 'provider_auth_required',
+      message: `${config.provider} needs credentials. Open Settings to add an API key.`,
+      providerId: config.provider,
+      modelId: config.defaultModel
+    };
+  }
+
+  return {
+    ready: true,
+    code: 'ready',
+    message: `${config.provider} / ${config.defaultModel}`,
+    providerId: config.provider,
+    modelId: config.defaultModel
+  };
+}
+
 export class HermesCli {
   private readonly runner: HermesCliRunner;
   private readonly cliPath: string;
@@ -3192,7 +3236,7 @@ export class HermesCli {
     return steps;
   }
 
-  private parseDumpConfig(dumpOutput: string, profileId: string, now: string): RuntimeModelConfig & { baseUrl?: string; apiMode?: string; reasoningEffort?: string; toolUseEnforcement?: string } {
+  private parseDumpConfig(dumpOutput: string, profileId: string, now: string): RuntimeModelConfig & {baseUrl?: string; apiMode?: string; reasoningEffort?: string; toolUseEnforcement?: string} {
     const modelMatch = dumpOutput.match(/^model:\s+(.+)$/m);
     const providerMatch = dumpOutput.match(/^provider:\s+(.+)$/m);
 
@@ -3367,13 +3411,7 @@ export class HermesCli {
       return {
         config,
         providers,
-        runtimeReadiness: {
-          ready: true,
-          code: 'ready' as const,
-          message: `${config.provider} / ${config.defaultModel}`,
-          providerId: config.provider,
-          modelId: config.defaultModel
-        },
+        runtimeReadiness: resolveRuntimeReadiness(config, providers),
         inspectedProviderId: config.provider,
         discoveredAt: now
       } satisfies RuntimeProviderDiscoveryResult;
@@ -3443,7 +3481,31 @@ export class HermesCli {
   }
 
   async connectProvider(profile: Profile, input: ConnectProviderRequest, signal?: AbortSignal) {
-    // v0.9.0+: API keys are set via hermes config or .env
+    const env = buildProfileEnvironment(profile);
+
+    // Write the API key to the profile's .env file via 'hermes config set <ENV_VAR> <key>'.
+    // The caller may supply a specific env var name via input.label; fall back to the
+    // registry's primary env var for the provider.
+    if (input.apiKey) {
+      const meta = HERMES_PROVIDER_REGISTRY[input.provider];
+      const envVarName = (input.label && /^[A-Z][A-Z0-9_]*$/.test(input.label))
+        ? input.label
+        : meta?.envVar;
+      if (envVarName) {
+        await this.run(['config', 'set', envVarName, input.apiKey], env, signal);
+      }
+    }
+
+    // If baseUrl or apiMode are provided, persist them via model config
+    if (input.baseUrl || input.apiMode) {
+      if (input.baseUrl) {
+        await this.run(['config', 'set', 'model.base_url', input.baseUrl], env, signal);
+      }
+      if (input.apiMode) {
+        await this.run(['config', 'set', 'model.api_mode', input.apiMode], env, signal);
+      }
+    }
+
     return this.discoverRuntimeProviderState(profile, input.provider, signal);
   }
 

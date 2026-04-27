@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AuditEventSchema, AccessAuditSummarySchema, AppSettingsSchema, ChatActivitySchema, ChatMessageSchema, ConnectionStateSchema, JobsFreshnessSchema, JobSchema, ProfileSchema, RuntimeActivityHistoryEntrySchema, RuntimeModelConfigSchema, RuntimeReadinessSchema, RuntimeRequestSchema, RuntimeProviderOptionSchema, SessionDeletionModeSchema, SessionFilterSummarySchema, SessionSchema, RecipeContentFormatSchema, RecipeBuildSchema, RecipeEventSchema, RecipeMetadataSchema, RecipeSchema, RecipeStatusSchema, RecipeTabSchema, RecipeUiStateSchema, SkillSchema, TelemetryEventSchema, ThemeModeSchema, ToolExecutionSchema, ToolSchema, ToolsTabSchema, UiStateSchema } from './schemas';
+import { AuditEventSchema, AccessAuditSummarySchema, AppSettingsSchema, ChatActivitySchema, ChatMessageSchema, ConnectionStateSchema, JobsFreshnessSchema, JobSchema, ProfileSchema, RuntimeActivityHistoryEntrySchema, RuntimeModelConfigSchema, RuntimeReadinessSchema, RuntimeRequestSchema, RuntimeProviderOptionSchema, SessionDeletionModeSchema, SessionFilterSummarySchema, SessionSchema, RecipeContentFormatSchema, RecipeBuildSchema, RecipeEventSchema, RecipeMetadataSchema, RecipeSchema, RecipeStatusSchema, RecipeTabSchema, RecipeUiStateSchema, SkillSchema, TelemetryEventSchema, ThemeModeSchema, ToolExecutionSchema, ToolSchema, ToolsTabSchema, UiStateSchema, FileRefSchema, UploadedFileSchema } from './schemas';
 import { RecipeTemplateStateSchema } from './recipe-template-schemas';
 export const ApiErrorSchema = z.object({
     code: z.string().min(1),
@@ -271,7 +271,14 @@ export const ChatStreamRequestSchema = z.object({
     recipeId: z.string().min(1).optional(),
     content: z.string().min(1).max(20_000),
     intentContent: z.string().min(1).max(500).optional(),
-    mode: ChatRequestModeSchema.default('chat')
+    mode: ChatRequestModeSchema.default('chat'),
+    attachments: z.array(FileRefSchema).optional()
+});
+export const UploadFileResponseSchema = z.object({
+    file: UploadedFileSchema
+});
+export const GetUploadedFileResponseSchema = z.object({
+    file: UploadedFileSchema
 });
 export const ToolExecutionPrepareRequestSchema = z.object({
     toolId: z.string().min(1),

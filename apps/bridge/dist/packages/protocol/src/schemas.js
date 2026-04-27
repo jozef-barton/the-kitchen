@@ -52,6 +52,39 @@ export const SessionFilterSummarySchema = z.object({
 });
 export const ChatMessageVisibilitySchema = z.enum(['transcript', 'runtime']);
 export const ChatMessageKindSchema = z.enum(['conversation', 'notice', 'technical']);
+export const UploadedFileKindSchema = z.enum([
+    'image',
+    'audio',
+    'video',
+    'pdf',
+    'text',
+    'code',
+    'spreadsheet',
+    'archive',
+    'document',
+    'unknown'
+]);
+export const FileRefSchema = z.object({
+    id: z.string().min(1),
+    filename: z.string().min(1),
+    mimeType: z.string().min(1),
+    size: z.number().int().nonnegative(),
+    kind: UploadedFileKindSchema
+});
+export const UploadedFileSchema = z.object({
+    id: z.string().min(1),
+    profileId: z.string().min(1),
+    sessionId: z.string().min(1).nullable(),
+    filename: z.string().min(1),
+    mimeType: z.string().min(1),
+    size: z.number().int().nonnegative(),
+    kind: UploadedFileKindSchema,
+    parseStatus: z.enum(['pending', 'processing', 'done', 'failed', 'not_applicable']),
+    parsedText: z.string().nullable(),
+    transcriptionStatus: z.enum(['none', 'pending', 'processing', 'done', 'failed']),
+    transcriptionText: z.string().nullable(),
+    createdAt: z.string().datetime()
+});
 export const ChatMessageSchema = z.object({
     id: z.string().min(1),
     sessionId: z.string().min(1),
@@ -61,7 +94,8 @@ export const ChatMessageSchema = z.object({
     status: z.enum(['completed', 'error']).default('completed'),
     requestId: z.string().min(1).nullable().default(null),
     visibility: ChatMessageVisibilitySchema.default('transcript'),
-    kind: ChatMessageKindSchema.default('conversation')
+    kind: ChatMessageKindSchema.default('conversation'),
+    attachments: z.array(FileRefSchema).optional()
 });
 export const JobSchema = z.object({
     id: z.string().min(1),

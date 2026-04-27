@@ -697,6 +697,32 @@ function writeConfigFile(profile) {
   );
 }
 
+// Maps env var names (as used by 'hermes config set <VAR> <value>') to provider IDs
+const ENV_VAR_TO_PROVIDER = {
+  OPENROUTER_API_KEY: 'openrouter',
+  VOICE_TOOLS_OPENAI_KEY: 'openai',
+  OPENAI_API_KEY: 'openai',
+  ANTHROPIC_API_KEY: 'anthropic',
+  ANTHROPIC_TOKEN: 'anthropic_token',
+  GLM_API_KEY: 'glm/zai',
+  ZAI_API_KEY: 'zai',
+  KIMI_API_KEY: 'kimi',
+  MINIMAX_API_KEY: 'minimax',
+  DEEPSEEK_API_KEY: 'deepseek',
+  DASHSCOPE_API_KEY: 'dashscope',
+  HF_TOKEN: 'huggingface',
+  AI_GATEWAY_API_KEY: 'ai_gateway',
+  OPENCODE_ZEN_API_KEY: 'opencode_zen',
+  OPENCODE_GO_API_KEY: 'opencode_go',
+  KILOCODE_API_KEY: 'kilocode',
+  GEMINI_API_KEY: 'gemini',
+  GOOGLE_API_KEY: 'gemini',
+  XAI_API_KEY: 'xai',
+  NVIDIA_API_KEY: 'nvidia',
+  STEPFUN_API_KEY: 'stepfun',
+  OLLAMA_API_KEY: 'ollama-cloud'
+};
+
 function configSet(key, value) {
   if (shouldFail('config')) {
     process.stderr.write('Fixture failed to update config.\n');
@@ -721,11 +747,20 @@ function configSet(key, value) {
     profile.runtimeConfig.reasoningEffort = value;
   } else if (key === 'agent.tool_use_enforcement') {
     profile.runtimeConfig.toolUseEnforcement = value;
+  } else if (ENV_VAR_TO_PROVIDER[key]) {
+    // Writing an API key env var — mark that provider as connected in the fixture state
+    const providerId = ENV_VAR_TO_PROVIDER[key];
+    const authProviders = getAuthProvidersForProfile(state, profile.id);
+    authProviders[providerId] = {
+      credentialLabel: key,
+      source: 'env',
+      maskedCredential: value ? `${value.slice(0, 4)}...${value.slice(-4)}` : '****'
+    };
   }
 
   writeConfigFile(profile);
   saveState(state);
-  print(`Updated ${key} = ${value}`);
+  print(`✓ Set ${key} in fixture config`);
 }
 
 function authList() {

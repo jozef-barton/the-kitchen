@@ -7,17 +7,23 @@ const defaultImageResolver = createUnsplashSourceResolver();
 // Prime the disk recipe registry on startup so user recipes and builtin recipe JSON files participate
 // in template-definition lookups without waiting for the first request.
 void refreshDiskRecipeRegistry();
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import { HermesBridge, BridgeError } from '../services/hermes-bridge-service';
 import { BridgeDatabase } from '../data/bridge-database';
 import { HermesCli } from '../hermes-cli/client';
 import { migrateLegacySnapshotIfNeeded } from '../legacy-snapshot';
 import { resolveLegacySnapshotCandidates } from '../paths';
-import { evaluateLocalOriginPolicy } from './origin-policy';
+import { evaluateLocalOriginPolicy, createCorsHeaders } from './origin-policy';
 import { validateRecipeId, resolveWithinRoot, validateVersion, PathValidationError } from './path-validation';
 import { readJsonBody, PayloadTooLargeError } from './request-body';
 import { sendJson, sendSseHeaders, writeSseEvent } from './response';
 import { serveStaticAsset } from './static-assets';
 import { buildRecipeBuilderSystemPrompt } from '../services/recipes/recipe-builder-prompt';
+import { BlobStore, classifyFileKind } from '../services/uploads/blob-store';
+import { parseMultipartUpload } from '../services/uploads/multipart';
+import { parseAttachment } from '../services/uploads/attachment-parser';
+import { scheduleTranscription } from '../services/uploads/transcription-service';
 function toApiErrorPayload(error) {
     if (error instanceof BridgeError) {
         return {
@@ -125,6 +131,8 @@ export function createBridgeServer(options) {
     migrateLegacySnapshotIfNeeded(database, {
         snapshotPaths: options.legacySnapshotPaths ?? resolveLegacySnapshotCandidates()
     });
+    const uploadsRoot = path.join(path.dirname(options.databasePath), 'uploads');
+    const blobStore = new BlobStore(uploadsRoot);
     const hermesCli = new HermesCli({
         cliPath: options.cliPath
     });
@@ -711,6 +719,119 @@ export function createBridgeServer(options) {
                     }
                 }
                 response.end();
+                return;
+            }
+            // POST /api/uploads — multipart file upload
+            if (request.method === 'POST' && pathname === '/api/uploads') {
+                const profileId = searchParams.get('profileId');
+                const sessionId = searchParams.get('sessionId') ?? null;
+                if (!profileId)
+                    throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId query param is required.');
+                const profile = database.getProfile(profileId);
+                if (!profile)
+                    throw new BridgeError(404, 'PROFILE_NOT_FOUND', `Profile ${profileId} not found.`);
+                const uploadedFiles = [];
+                // Map from storage path → fileId so we can correlate after busboy finishes
+                const pathToFileId = new Map();
+                const formData = await parseMultipartUpload(request, (filename, _mimeType) => {
+                    const fileId = `upload-${randomUUID()}`;
+                    const storagePath = blobStore.resolveStoragePath(profileId, fileId, filename);
+                    pathToFileId.set(storagePath, fileId);
+                    return storagePath;
+                }, { maxFiles: 20 });
+                const now = new Date().toISOString();
+                for (const part of formData.files) {
+                    const fileId = pathToFileId.get(part.storagePath) ?? `upload-${randomUUID()}`;
+                    const kind = classifyFileKind(part.mimeType, part.filename);
+                    const storagePath = part.storagePath;
+                    database.insertUploadedFile({
+                        id: fileId,
+                        profileId,
+                        sessionId,
+                        filename: part.filename,
+                        mimeType: part.mimeType,
+                        fileKind: kind,
+                        fileSize: part.bytesWritten,
+                        storagePath,
+                        createdAt: now
+                    });
+                    const record = database.getUploadedFile(fileId);
+                    if (record)
+                        uploadedFiles.push(record);
+                    // Start async parsing (non-blocking)
+                    parseAttachment(storagePath, kind, part.mimeType)
+                        .then((result) => {
+                        if (result) {
+                            database.updateUploadedFileParse(fileId, {
+                                status: 'done',
+                                parsedText: result.text,
+                                parseError: null
+                            });
+                        }
+                        else {
+                            database.updateUploadedFileParse(fileId, { status: 'not_applicable' });
+                        }
+                    })
+                        .catch(() => {
+                        database.updateUploadedFileParse(fileId, { status: 'failed', parseError: 'Parsing failed.' });
+                    });
+                    // Schedule async audio transcription
+                    if (kind === 'audio') {
+                        const openAiKey = process.env.VOICE_TOOLS_OPENAI_KEY ?? process.env.OPENAI_API_KEY;
+                        void scheduleTranscription(fileId, storagePath, part.filename, database, openAiKey);
+                    }
+                }
+                sendJson(response, 200, { files: uploadedFiles }, originDecision.allowOrigin);
+                return;
+            }
+            // GET /api/uploads/:id — fetch upload metadata/status
+            if (request.method === 'GET' && /^\/api\/uploads\/[^/]+$/.test(pathname)) {
+                const fileId = decodeURIComponent(pathname.split('/')[3] ?? '');
+                const record = database.getUploadedFile(fileId);
+                if (!record)
+                    throw new BridgeError(404, 'UPLOAD_NOT_FOUND', `Upload ${fileId} not found.`);
+                sendJson(response, 200, { file: record }, originDecision.allowOrigin);
+                return;
+            }
+            // GET /api/uploads/:id/content — stream the file bytes
+            if (request.method === 'GET' && /^\/api\/uploads\/[^/]+\/content$/.test(pathname)) {
+                const fileId = decodeURIComponent(pathname.split('/')[3] ?? '');
+                const record = database.getUploadedFile(fileId);
+                if (!record)
+                    throw new BridgeError(404, 'UPLOAD_NOT_FOUND', `Upload ${fileId} not found.`);
+                const storagePath = database.getUploadedFileStoragePath(fileId);
+                if (!storagePath)
+                    throw new BridgeError(404, 'UPLOAD_NOT_FOUND', `File storage path not found.`);
+                const fileStat = await fs.promises.stat(storagePath).catch(() => null);
+                if (!fileStat)
+                    throw new BridgeError(404, 'UPLOAD_NOT_FOUND', `File not found on disk.`);
+                const rangeHeader = request.headers.range;
+                let start = 0;
+                let end = fileStat.size - 1;
+                let statusCode = 200;
+                if (rangeHeader) {
+                    const match = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
+                    if (match) {
+                        start = parseInt(match[1] ?? '0', 10);
+                        end = match[2] ? parseInt(match[2], 10) : fileStat.size - 1;
+                        statusCode = 206;
+                    }
+                }
+                const corsHeaders = createCorsHeaders(originDecision.allowOrigin);
+                const headers = {
+                    'content-type': record.mimeType,
+                    'content-length': end - start + 1,
+                    'accept-ranges': 'bytes',
+                    'cache-control': 'private, max-age=3600',
+                    'content-disposition': `inline; filename="${encodeURIComponent(record.filename)}"`,
+                    ...corsHeaders
+                };
+                if (statusCode === 206) {
+                    headers['content-range'] = `bytes ${start}-${end}/${fileStat.size}`;
+                }
+                response.writeHead(statusCode, headers);
+                const readStream = blobStore.createReadStream(storagePath, { start, end });
+                readStream.pipe(response);
                 return;
             }
             if (request.method === 'GET' && !pathname.startsWith('/api/') && options.staticDirectory) {

@@ -422,6 +422,48 @@ export const RecipeTemplateSectionSchema = z.lazy(() => z.discriminatedUnion('ki
             label: z.string().min(1),
             url: OptionalTextSchema
         }).strict()).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('video'),
+        title: z.string().min(1),
+        src: z.string().min(1),
+        poster: OptionalTextSchema,
+        subtitle: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('file-attachment'),
+        title: z.string().min(1),
+        files: z.array(z.object({
+            id: z.string().min(1),
+            filename: z.string().min(1),
+            mimeType: z.string().min(1),
+            size: z.number().int().nonnegative(),
+            kind: z.string().min(1),
+            url: z.string().min(1)
+        }).strict()).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('pdf-viewer'),
+        title: z.string().min(1),
+        src: z.string().min(1),
+        filename: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('code-block'),
+        title: z.string().min(1),
+        language: z.string().min(1),
+        code: z.string().min(1),
+        filename: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+        kind: z.literal('data-table'),
+        title: z.string().min(1),
+        columns: z.array(z.object({
+            key: z.string().min(1),
+            label: z.string().min(1)
+        }).strict()).default([]),
+        rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.null()]))).default([]),
+        filename: OptionalTextSchema
     }).strict()
 ]));
 export const RecipeTemplateTransitionRecordSchema = z

@@ -1643,6 +1643,24 @@ function buildBridgeChatQuery(profile, content, spaceContext, refreshContext, op
     const intentContent = resolveIntentContent(content, refreshContext);
     const structuredRecipeIntent = classifyStructuredRecipeIntent(intentContent, Boolean(spaceContext));
     const activeProfileInstruction = `Bridge execution note: The active Hermes profile is ${profile.id}. Use only this active profile's auth state, sessions, tools, skills, and HERMES_HOME. Do not inspect or use other Hermes profiles, do not run profile-discovery checks, and do not report results from any other profile.`;
+    // Build attachment context blocks to prepend to the user message
+    const attachmentContextLines = [];
+    if (options.attachments && options.attachments.length > 0) {
+        for (const att of options.attachments) {
+            const body = att.transcriptionText ?? att.parsedText;
+            if (body && body.trim()) {
+                attachmentContextLines.push(`<attachment filename="${att.filename}" kind="${att.kind}">\n${body}\n</attachment>`);
+            }
+            else if (att.kind !== 'image') {
+                attachmentContextLines.push(`<attachment filename="${att.filename}" kind="${att.kind}">[Attached — no text could be extracted]</attachment>`);
+            }
+        }
+    }
+    const attachmentContext = attachmentContextLines.length > 0
+        ? `The following files were attached to this message:\n\n${attachmentContextLines.join('\n\n')}\n\n`
+        : '';
+    // Redefine content with attachments prepended so all return paths include it
+    content = `${attachmentContext}${content}`;
     if (options.structuredArtifactOnly) {
         return `${content}
 
@@ -3183,9 +3201,15 @@ export class HermesCli {
         if (preloadedSkills.length > 0) {
             args.push('-s', preloadedSkills.join(','));
         }
+        // Pass the first image attachment via --image flag (Hermes CLI supports one image per query)
+        const imageAttachment = options.attachments?.find((a) => a.kind === 'image' && a.imagePath);
+        if (imageAttachment?.imagePath) {
+            args.push('--image', imageAttachment.imagePath);
+        }
         args.push('--source', 'tool', '-q', buildBridgeChatQuery(options.profile, options.content, options.spaceContext, options.refreshContext, {
             structuredArtifactOnly: options.structuredArtifactOnly,
-            recipeAppletStage: options.recipeAppletStage
+            recipeAppletStage: options.recipeAppletStage,
+            attachments: options.attachments
         }));
         let streamedOutput = '';
         let stdoutLineBuffer = '';

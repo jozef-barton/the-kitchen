@@ -653,6 +653,30 @@ export class BridgeDatabase {
 
       CREATE INDEX IF NOT EXISTS telemetry_events_request_idx
         ON telemetry_events(request_id, created_at ASC);
+
+      CREATE TABLE IF NOT EXISTS uploaded_files (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        session_id TEXT,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_kind TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        storage_path TEXT NOT NULL,
+        parse_status TEXT NOT NULL DEFAULT 'pending',
+        parsed_text TEXT,
+        parse_error TEXT,
+        transcription_status TEXT NOT NULL DEFAULT 'none',
+        transcription_text TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS uploaded_files_profile_idx
+        ON uploaded_files(profile_id, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS uploaded_files_session_idx
+        ON uploaded_files(session_id, created_at DESC)
+        WHERE session_id IS NOT NULL;
     `);
         this.database.exec('DROP TABLE IF EXISTS space_reminder_jobs;');
         this.ensureColumn('sessions', 'associated_profile_ids_json', `associated_profile_ids_json TEXT NOT NULL DEFAULT '[]'`);
@@ -1011,7 +1035,8 @@ export class BridgeDatabase {
             status: row.status,
             requestId: metadata.requestId ?? null,
             visibility: metadata.visibility ?? 'transcript',
-            kind: metadata.kind ?? 'conversation'
+            kind: metadata.kind ?? 'conversation',
+            attachments: Array.isArray(metadata.attachments) ? metadata.attachments : undefined
         });
     }
     rowToJob(row) {
@@ -2893,7 +2918,8 @@ export class BridgeDatabase {
             .run(normalizedMessage.id, normalizedMessage.sessionId, normalizedMessage.role, normalizedMessage.content, normalizedMessage.createdAt, normalizedMessage.status, JSON.stringify({
             requestId: normalizedMessage.requestId,
             visibility: normalizedMessage.visibility,
-            kind: normalizedMessage.kind
+            kind: normalizedMessage.kind,
+            ...(normalizedMessage.attachments?.length ? { attachments: normalizedMessage.attachments } : {})
         }));
         const session = this.getSession(normalizedMessage.sessionId);
         if (session) {
@@ -3820,6 +3846,52 @@ export class BridgeDatabase {
             latestEvents,
             unrestrictedAccessLastEnabledAt: latestEnabled?.created_at,
             unrestrictedAccessLastUsedAt: latestUsed?.created_at
+        };
+    }
+    insertUploadedFile(file) {
+        this.database
+            .prepare(`INSERT INTO uploaded_files (id, profile_id, session_id, filename, mime_type, file_kind, file_size, storage_path, parse_status, transcription_status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'none', ?)`)
+            .run(file.id, file.profileId, file.sessionId, file.filename, file.mimeType, file.fileKind, file.fileSize, file.storagePath, file.createdAt);
+    }
+    getUploadedFile(id) {
+        const row = this.database.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(id);
+        return row ? this.rowToUploadedFile(row) : null;
+    }
+    getUploadedFileStoragePath(id) {
+        const row = this.database.prepare('SELECT storage_path FROM uploaded_files WHERE id = ?').get(id);
+        return row ? String(row.storage_path) : null;
+    }
+    listUploadedFilesBySession(sessionId) {
+        const rows = this.database
+            .prepare('SELECT * FROM uploaded_files WHERE session_id = ? ORDER BY created_at ASC')
+            .all(sessionId);
+        return rows.map((row) => this.rowToUploadedFile(row));
+    }
+    updateUploadedFileParse(id, update) {
+        this.database
+            .prepare('UPDATE uploaded_files SET parse_status = ?, parsed_text = ?, parse_error = ? WHERE id = ?')
+            .run(update.status, update.parsedText ?? null, update.parseError ?? null, id);
+    }
+    updateUploadedFileTranscription(id, update) {
+        this.database
+            .prepare('UPDATE uploaded_files SET transcription_status = ?, transcription_text = ? WHERE id = ?')
+            .run(update.status, update.transcriptionText ?? null, id);
+    }
+    rowToUploadedFile(row) {
+        return {
+            id: String(row.id),
+            profileId: String(row.profile_id),
+            sessionId: row.session_id != null ? String(row.session_id) : null,
+            filename: String(row.filename),
+            mimeType: String(row.mime_type),
+            size: Number(row.file_size),
+            kind: String(row.file_kind),
+            parseStatus: String(row.parse_status),
+            parsedText: row.parsed_text != null ? String(row.parsed_text) : null,
+            transcriptionStatus: String(row.transcription_status),
+            transcriptionText: row.transcription_text != null ? String(row.transcription_text) : null,
+            createdAt: String(row.created_at)
         };
     }
 }

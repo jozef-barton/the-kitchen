@@ -1353,12 +1353,20 @@ Quarterly planning review                           9m ago                      
     });
   });
 
-  it('parses model and provider from hermes dump output', async () => {
+  it('parses model and provider from hermes dump output and reports ready when provider is connected', async () => {
     const runner: HermesCliRunner = {
       async run(args) {
         if (args.join(' ') === 'dump') {
           return {
-            stdout: 'model: openai/gpt-5.4\nprovider: openrouter\n',
+            stdout: [
+              'model: openai/gpt-5.4',
+              'provider: openrouter',
+              'api_keys:',
+              '  openrouter           set',
+              '  anthropic            not set',
+              'features:',
+              '  toolsets:           hermes-cli',
+            ].join('\n'),
             stderr: '',
             exitCode: 0
           };
@@ -1384,6 +1392,73 @@ Quarterly planning review                           9m ago                      
     expect(response.config.defaultModel).toBe('openai/gpt-5.4');
     expect(response.config.provider).toBe('openrouter');
     expect(response.runtimeReadiness.ready).toBe(true);
+  });
+
+  it('returns ready: false when model is not set (fresh install)', async () => {
+    const runner: HermesCliRunner = {
+      async run(args) {
+        if (args.join(' ') === 'dump') {
+          return {
+            stdout: [
+              'model: (not set)',
+              'provider: (auto)',
+              'api_keys:',
+              '  openrouter           not set',
+              '  anthropic            not set',
+              'features:',
+              '  toolsets:           hermes-cli',
+            ].join('\n'),
+            stderr: '',
+            exitCode: 0
+          };
+        }
+        throw new Error(`Unexpected command: ${args.join(' ')}`);
+      },
+      async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+    };
+
+    const cli = new HermesCli({ runner, workingDirectory: process.cwd(), now: () => '2026-04-10T18:00:00.000Z' });
+    const response = await cli.discoverRuntimeProviderState(
+      { id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true },
+      null
+    );
+
+    expect(response.runtimeReadiness.ready).toBe(false);
+    expect(response.runtimeReadiness.code).toBe('config_error');
+    expect(response.config.defaultModel).toBe('unknown');
+  });
+
+  it('returns ready: false with provider_auth_required when model is set but provider has no key', async () => {
+    const runner: HermesCliRunner = {
+      async run(args) {
+        if (args.join(' ') === 'dump') {
+          return {
+            stdout: [
+              'model: anthropic/claude-sonnet-4',
+              'provider: anthropic',
+              'api_keys:',
+              '  openrouter           not set',
+              '  anthropic            not set',
+              'features:',
+              '  toolsets:           hermes-cli',
+            ].join('\n'),
+            stderr: '',
+            exitCode: 0
+          };
+        }
+        throw new Error(`Unexpected command: ${args.join(' ')}`);
+      },
+      async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+    };
+
+    const cli = new HermesCli({ runner, workingDirectory: process.cwd(), now: () => '2026-04-10T18:00:00.000Z' });
+    const response = await cli.discoverRuntimeProviderState(
+      { id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true },
+      'anthropic'
+    );
+
+    expect(response.runtimeReadiness.ready).toBe(false);
+    expect(response.runtimeReadiness.code).toBe('provider_auth_required');
   });
 
   it('marks provider connected when api key is set in dump', async () => {
@@ -1431,7 +1506,14 @@ Quarterly planning review                           9m ago                      
   it('uses login --provider and dump for OAuth provider auth begin and poll', async () => {
     const calls: string[] = [];
     let dumpCallCount = 0;
-    const dumpOutput = 'model: openai/gpt-5.4\nprovider: openrouter\n';
+    const dumpOutput = [
+      'model: openai/gpt-5.4',
+      'provider: openrouter',
+      'api_keys:',
+      '  openrouter           set',
+      'features:',
+      '  toolsets:           hermes-cli',
+    ].join('\n');
 
     const runner: HermesCliRunner = {
       async run(args) {
@@ -1557,16 +1639,32 @@ Quarterly planning review                           9m ago                      
     expect(response.config.defaultModel).toBe('unknown');
   });
 
-  it('connectProvider delegates to dump-based discovery', async () => {
+  it('connectProvider writes API key via config set and calls dump-based discovery', async () => {
+    const calls: string[] = [];
     const runner: HermesCliRunner = {
       async run(args) {
-        if (args.join(' ') === 'dump') {
+        const command = args.join(' ');
+        calls.push(command);
+
+        if (command.startsWith('config set ')) {
+          return { stdout: '', stderr: '', exitCode: 0 };
+        }
+
+        if (command === 'dump') {
           return {
-            stdout: 'model: openai/gpt-5.4\nprovider: openrouter\n',
+            stdout: [
+              'model: openai/gpt-5.4',
+              'provider: openrouter',
+              'api_keys:',
+              '  openrouter           set',
+              'features:',
+              '  toolsets:           hermes-cli',
+            ].join('\n'),
             stderr: '',
             exitCode: 0
           };
         }
+
         throw new Error(`Unexpected command: ${args.join(' ')}`);
       },
       async stream() {
@@ -1578,9 +1676,10 @@ Quarterly planning review                           9m ago                      
 
     const result = await cli.connectProvider(
       { id: 'jbarton', name: 'jbarton', description: 'real profile', path: '/tmp/jbarton', isActive: true },
-      { profileId: 'jbarton', provider: 'openrouter', apiKey: 'some-key' }
+      { profileId: 'jbarton', provider: 'openrouter', apiKey: 'sk-or-test-1234' }
     );
 
+    expect(calls).toContain('config set OPENROUTER_API_KEY sk-or-test-1234');
     expect(result.runtimeReadiness.ready).toBe(true);
   });
 });

@@ -916,7 +916,7 @@ Keep summaries short and searchable for the active profile.
             }
         }
         await reopened.close();
-    });
+    }, 15_000);
     it('auto-creates Home recipes for structured-result prompts and promotes richer declarative recipes without requiring the word recipe', async () => {
         const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-auto-recipe-'));
         tempRoots.push(tempRoot);

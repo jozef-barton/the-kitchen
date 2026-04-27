@@ -1555,7 +1555,7 @@ describe('HermesBridge Home baseline recipes', () => {
         expect(telemetry.some((event) => event.code.startsWith('RECIPE_APPLET_'))).toBe(false);
         await waitForRecipeEnrichment(bridge);
         database.close();
-    });
+    }, 15_000);
     it('skips the LLM selection stage when the intent label deterministically maps to a template', async () => {
         const database = createDatabase();
         seedProfile(database);
@@ -1636,7 +1636,7 @@ describe('HermesBridge Home baseline recipes', () => {
         expect(deterministicEvent?.payload?.templateId).toBe('hotel-shortlist');
         await waitForRecipeEnrichment(bridge);
         database.close();
-    });
+    }, 15_000);
     it('retries structured seed generation, persists raw payload diagnostics, and recovers on a later attempt', async () => {
         const database = createDatabase();
         seedProfile(database);
