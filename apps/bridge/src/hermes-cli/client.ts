@@ -9,7 +9,6 @@ import type {
   ChatMessage,
   ConnectProviderRequest,
   HermesCliActionResult,
-  HermesCliModelDiscovery,
   Job,
   Profile,
   RecipeMutationIntent,
@@ -22,7 +21,7 @@ import type {
   Skill,
   Tool
 } from '@hermes-recipes/protocol';
-import { HermesCliActionResultSchema, HermesCliModelDiscoverySchema, RECIPE_REFRESH_USER_MESSAGE } from '@hermes-recipes/protocol';
+import { HermesCliActionResultSchema, RECIPE_REFRESH_USER_MESSAGE } from '@hermes-recipes/protocol';
 export type { RecipeMutationIntent };
 import {
   classifyImportedMessageKind,
@@ -31,7 +30,7 @@ import {
   sanitizeImportedMessageContent
 } from '../transcript-runtime';
 
-export const HERMES_EXPECTED_VERSION = '0.9.0';
+export const HERMES_EXPECTED_VERSION = '0.11.0';
 
 interface HermesProviderMeta {
   displayName: string;
@@ -212,6 +211,66 @@ const HERMES_PROVIDER_REGISTRY: Record<string, HermesProviderMeta> = {
     supportsApiKey: true,
     supportsOAuth: false,
     description: 'KiloCode API provider.'
+  },
+  gemini: {
+    displayName: 'Google AI Studio',
+    envVar: 'GEMINI_API_KEY',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    authKind: 'api_key',
+    supportsApiKey: true,
+    supportsOAuth: false,
+    exampleModel: 'gemini/gemini-2.5-pro-preview',
+    description: 'Google AI Studio — Gemini models via API key.'
+  },
+  'google/gemini': {
+    displayName: 'Google AI Studio',
+    envVar: 'GEMINI_API_KEY',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    authKind: 'api_key',
+    supportsApiKey: true,
+    supportsOAuth: false,
+    exampleModel: 'gemini/gemini-2.5-pro-preview',
+    description: 'Google AI Studio — Gemini models via API key.'
+  },
+  xai: {
+    displayName: 'xAI',
+    envVar: 'XAI_API_KEY',
+    keyUrl: 'https://console.x.ai',
+    authKind: 'api_key',
+    supportsApiKey: true,
+    supportsOAuth: false,
+    exampleModel: 'xai/grok-3',
+    description: 'xAI — Grok models.'
+  },
+  nvidia: {
+    displayName: 'NVIDIA NIM',
+    envVar: 'NVIDIA_API_KEY',
+    keyUrl: 'https://build.nvidia.com',
+    authKind: 'api_key',
+    supportsApiKey: true,
+    supportsOAuth: false,
+    exampleModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    description: 'NVIDIA NIM — hosted open-source models.'
+  },
+  stepfun: {
+    displayName: 'StepFun',
+    envVar: 'STEPFUN_API_KEY',
+    keyUrl: 'https://platform.stepfun.ai',
+    authKind: 'api_key',
+    supportsApiKey: true,
+    supportsOAuth: false,
+    exampleModel: 'stepfun/step-2-16k',
+    description: 'StepFun Step Plan — reasoning models.'
+  },
+  'ollama-cloud': {
+    displayName: 'Ollama Cloud',
+    envVar: 'OLLAMA_API_KEY',
+    keyUrl: 'https://ollama.com',
+    authKind: 'api_key',
+    supportsApiKey: true,
+    supportsOAuth: false,
+    exampleModel: 'ollama/llama3.2',
+    description: 'Ollama Cloud — run open models in the cloud.'
   }
 };
 
@@ -1454,102 +1513,6 @@ function parseSkillInspect(output: string, identifier: string): SkillInspectData
   const trust = trustMatch?.[1]?.trim() ?? 'unknown';
 
   return { identifier, name, description, source, trust };
-}
-
-function mapCliConfigToRuntimeConfig(profileId: string, config: HermesCliModelDiscovery['config']): RuntimeModelConfig {
-  return {
-    profileId,
-    defaultModel: config.defaultModel,
-    provider: config.provider,
-    baseUrl: config.baseUrl,
-    apiMode: config.apiMode,
-    maxTurns: config.maxTurns,
-    reasoningEffort: config.reasoningEffort,
-    toolUseEnforcement: config.toolUseEnforcement,
-    lastSyncedAt: config.lastSyncedAt
-  };
-}
-
-function mapCliProviderToRuntimeProvider(profileId: string, provider: HermesCliModelDiscovery['providers'][number]): RuntimeProviderOption {
-  return {
-    id: provider.id,
-    profileId,
-    displayName: provider.displayName,
-    authKind: provider.authKind,
-    status: provider.status,
-    credentialLabel: provider.credentialLabel,
-    maskedCredential: provider.maskedCredential,
-    source: provider.source,
-    supportsApiKey: provider.supportsApiKey,
-    supportsOAuth: provider.supportsOAuth,
-    description: provider.description,
-    notes: provider.notes,
-    disabled: provider.disabled,
-    disabledReason: provider.disabledReason,
-    state: provider.state,
-    stateMessage: provider.stateMessage,
-    ready: provider.ready,
-    modelSelectionMode: provider.modelSelectionMode,
-    supportsDisconnect: provider.supportsDisconnect,
-    validation: provider.validation,
-    authSession: provider.authSession,
-    supportsModelDiscovery: provider.supportsModelDiscovery,
-    models: provider.models.map((model) => ({
-      id: model.id,
-      label: model.label,
-      providerId: model.providerId ?? provider.id,
-      description: model.description,
-      disabled: model.disabled,
-      disabledReason: model.disabledReason,
-      supportsReasoningEffort: model.supportsReasoningEffort,
-      reasoningEffortOptions: model.reasoningEffortOptions,
-      metadata: model.metadata
-    })),
-    configurationFields: provider.configurationFields.map((field) => ({
-      key: field.key,
-      label: field.label,
-      description: field.description,
-      input: field.input,
-      required: field.required,
-      secret: field.secret,
-      placeholder: field.placeholder,
-      value: field.value,
-      options: field.options,
-      disabled: field.disabled,
-      disabledReason: field.disabledReason
-    })),
-    setupSteps: provider.setupSteps.map((step) => ({
-      id: step.id,
-      kind: step.kind,
-      title: step.title,
-      description: step.description,
-      status: step.status,
-      actionLabel: step.actionLabel,
-      actionUrl: step.actionUrl,
-      command: step.command,
-      metadata: step.metadata
-    })),
-    lastSyncedAt: provider.lastSyncedAt
-  };
-}
-
-function mapCliDiscoveryToRuntimeState(profileId: string, discovery: HermesCliModelDiscovery): RuntimeProviderDiscoveryResult {
-  const config = mapCliConfigToRuntimeConfig(profileId, discovery.config);
-  const providers = discovery.providers.map((provider) => mapCliProviderToRuntimeProvider(profileId, provider));
-
-  return {
-    config,
-    providers,
-    runtimeReadiness: {
-      ready: discovery.runtimeReadiness.ready,
-      code: discovery.runtimeReadiness.code,
-      message: discovery.runtimeReadiness.message,
-      providerId: discovery.runtimeReadiness.providerId,
-      modelId: discovery.runtimeReadiness.modelId
-    },
-    inspectedProviderId: discovery.inspectedProviderId,
-    discoveredAt: discovery.discoveredAt
-  };
 }
 
 function isEmailIntent(content: string) {
@@ -2951,25 +2914,6 @@ export class HermesCli {
     }
   }
 
-  private parseDiscoveryJsonResult(args: string[], result: HermesCliExecutionResult): HermesCliModelDiscovery {
-    const stdout = normalizeOutput(result.stdout);
-    const combinedOutput = combineCliOutput(result);
-    const commandLabel = formatCliCommand(args);
-
-    if (stdout.length === 0) {
-      throw new Error(
-        `${commandLabel} did not return authoritative structured JSON. ${combinedOutput || 'The Hermes backend returned no JSON output.'}`
-      );
-    }
-
-    try {
-      return HermesCliModelDiscoverySchema.parse(JSON.parse(stdout));
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Unknown JSON validation failure.';
-      throw new Error(`${commandLabel} returned invalid authoritative discovery output. ${detail}`);
-    }
-  }
-
   private parseStructuredActionResult(args: string[], result: HermesCliExecutionResult): HermesCliActionResult {
     const stdout = normalizeOutput(result.stdout);
     const combinedOutput = combineCliOutput(result);
@@ -3295,17 +3239,9 @@ export class HermesCli {
     signal?: AbortSignal
   ) {
     const env = buildProfileEnvironment(profile);
-    // Try JSON discovery first (hermes model --json), fall back to dump parsing
-    try {
-      const jsonArgs = ['model', '--json'];
-      const jsonResult = await this.run(jsonArgs, env, signal);
-      const discovery = this.parseDiscoveryJsonResult(jsonArgs, jsonResult);
-      return mapCliDiscoveryToRuntimeState(profile.id, discovery);
-    } catch {
-      // Fall back to hermes dump for v0.9.0+
-      const dumpResult = await this.run(['dump'], env, signal);
-      const dumpOutput = normalizeOutput(dumpResult.stdout);
-      const now = this.now();
+    const dumpResult = await this.run(['dump'], env, signal);
+    const dumpOutput = normalizeOutput(dumpResult.stdout);
+    const now = this.now();
 
       const config = this.parseDumpConfig(dumpOutput, profile.id, now);
 
@@ -3427,7 +3363,6 @@ export class HermesCli {
         inspectedProviderId: config.provider,
         discoveredAt: now
       } satisfies RuntimeProviderDiscoveryResult;
-    }
   }
 
   async discoverRuntimeProviderState(profile: Profile, inspectedProviderId?: string | null, signal?: AbortSignal) {
@@ -3447,7 +3382,7 @@ export class HermesCli {
   ) {
     const env = buildProfileEnvironment(profile);
 
-    // v0.9.0+: use 'config set' for model/provider changes
+    // Use 'hermes config set' for model/provider changes
     if (input.defaultModel) {
       await this.run(['config', 'set', 'model', input.defaultModel], env, signal);
     }
