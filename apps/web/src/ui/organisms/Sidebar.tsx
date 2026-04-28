@@ -30,13 +30,13 @@ function ExpandIcon() {
 }
 
 /* All nav items in a single flat list */
-const allNav: Array<{ page: AppPage; label: string; icon: SidebarIconName; shortcut?: string }> = [
-  { page: 'sessions', label: 'All sessions', icon: 'sessions', shortcut: '⌘⇧S' },
-  { page: 'recipes', label: 'Recipes', icon: 'recipes', shortcut: '⌘R' },
-  { page: 'jobs', label: 'Jobs', icon: 'jobs' },
-  { page: 'tools', label: 'Tools', icon: 'tools' },
-  { page: 'skills', label: 'Skills', icon: 'skills' },
-  { page: 'settings', label: 'Settings', icon: 'settings' },
+const allNav: Array<{ page: AppPage; label: string; icon: SidebarIconName; shortcut?: string; requiresRuntime: boolean }> = [
+  { page: 'sessions', label: 'All sessions', icon: 'sessions', shortcut: '⌘⇧S', requiresRuntime: true },
+  { page: 'recipes', label: 'Recipes', icon: 'recipes', shortcut: '⌘R', requiresRuntime: false },
+  { page: 'jobs', label: 'Jobs', icon: 'jobs', requiresRuntime: true },
+  { page: 'tools', label: 'Tools', icon: 'tools', requiresRuntime: true },
+  { page: 'skills', label: 'Skills', icon: 'skills', requiresRuntime: true },
+  { page: 'settings', label: 'Settings', icon: 'settings', requiresRuntime: false },
 ];
 
 export type ProfileMetrics = {
@@ -63,7 +63,8 @@ export function Sidebar({
   onRenameSession,
   onDeleteSession,
   onCreateProfile,
-  onDeleteProfile
+  onDeleteProfile,
+  isRuntimeReady = true
 }: {
   profiles: Profile[];
   activeProfileId: string | null;
@@ -82,6 +83,7 @@ export function Sidebar({
   onDeleteSession: (sessionId: string) => Promise<void> | void;
   onCreateProfile?: (name: string) => Promise<void> | void;
   onDeleteProfile?: (profileId: string) => Promise<void> | void;
+  isRuntimeReady?: boolean;
 }) {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -136,6 +138,7 @@ export function Sidebar({
     return (
       <>
         <Flex
+          className="sidebar-theme"
           direction="column"
           width={sidebarWidth}
           minWidth={sidebarWidth}
@@ -169,10 +172,13 @@ export function Sidebar({
             variant="ghost"
             w="8" h="8" minW="0" px="0" rounded="var(--radius-control)"
             color="var(--text-muted)"
-            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-            onClick={onCreateSession}
-            title="New session (⌘N)"
+            _hover={isRuntimeReady ? { bg: 'var(--surface-hover)', color: 'var(--text-primary)' } : {}}
+            onClick={isRuntimeReady ? onCreateSession : undefined}
+            title={isRuntimeReady ? 'New session (⌘N)' : 'Set up a model to create sessions'}
             aria-label="New session"
+            aria-disabled={!isRuntimeReady}
+            cursor={isRuntimeReady ? 'pointer' : 'not-allowed'}
+            opacity={isRuntimeReady ? 1 : 0.35}
             mb="3"
           >
             <SidebarIcon name="new-session" />
@@ -204,21 +210,27 @@ export function Sidebar({
             borderTop="1px solid var(--divider)"
             w="100%"
           >
-            {allNav.map((item) => (
-              <Button
-                key={item.page}
-                variant="ghost"
-                w="8" h="8" minW="0" px="0" rounded="var(--radius-control)"
-                color={activePage === item.page ? 'var(--text-primary)' : 'var(--text-muted)'}
-                bg={activePage === item.page ? 'var(--surface-active)' : 'transparent'}
-                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-                title={item.label}
-                aria-label={item.label}
-                onClick={() => onOpenPage(item.page)}
-              >
-                <SidebarIcon name={item.icon} />
-              </Button>
-            ))}
+            {allNav.map((item) => {
+              const navDisabled = item.requiresRuntime && !isRuntimeReady;
+              return (
+                <Button
+                  key={item.page}
+                  variant="ghost"
+                  w="8" h="8" minW="0" px="0" rounded="var(--radius-control)"
+                  color={activePage === item.page ? 'var(--text-primary)' : 'var(--text-muted)'}
+                  bg={activePage === item.page ? 'var(--surface-active)' : 'transparent'}
+                  _hover={navDisabled ? {} : { bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                  title={navDisabled ? 'Set up a model to access this page' : item.label}
+                  aria-label={item.label}
+                  aria-disabled={navDisabled}
+                  opacity={navDisabled ? 0.35 : 1}
+                  cursor={navDisabled ? 'not-allowed' : 'pointer'}
+                  onClick={navDisabled ? undefined : () => onOpenPage(item.page)}
+                >
+                  <SidebarIcon name={item.icon} />
+                </Button>
+              );
+            })}
           </VStack>
         </Flex>
 
@@ -240,6 +252,7 @@ export function Sidebar({
   return (
     <>
       <Flex
+        className="sidebar-theme"
         direction="column"
         width={drawerMode ? '100%' : sidebarWidth}
         minWidth={drawerMode ? '0' : sidebarWidth}
@@ -353,15 +366,18 @@ export function Sidebar({
             py="2"
             rounded="var(--radius-control)"
             color="var(--text-muted)"
-            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-secondary)' }}
-            onClick={onCreateSession}
-            title="New session (⌘N)"
+            _hover={isRuntimeReady ? { bg: 'var(--surface-hover)', color: 'var(--text-secondary)' } : {}}
+            onClick={isRuntimeReady ? onCreateSession : undefined}
+            title={isRuntimeReady ? 'New session (⌘N)' : 'Set up a model to create sessions'}
             aria-label="New session"
+            aria-disabled={!isRuntimeReady}
+            cursor={isRuntimeReady ? 'pointer' : 'not-allowed'}
+            opacity={isRuntimeReady ? 1 : 0.35}
           >
             <HStack gap="2" w="100%">
               <SidebarIcon name="new-session" />
               <Text fontSize="13px" fontWeight="400" color="inherit" lineHeight="1">New session</Text>
-              <Box ml="auto" fontSize="10px" fontWeight="400" opacity={0.4}>⌘N</Box>
+              {isRuntimeReady ? <Box ml="auto" fontSize="10px" fontWeight="400" opacity={0.4}>⌘N</Box> : null}
             </HStack>
           </Button>
         </Box>
@@ -392,7 +408,12 @@ export function Sidebar({
 
         <ScrollArea.Root flex="1" minH={0} variant="hover" overflow="hidden" maxW="100%">
           <ScrollArea.Viewport style={{ overflowX: 'hidden', maxWidth: '100%' }}>
-            <VStack align="stretch" gap="0" px="2" pt="0.5" pb="1" minW={0} w="100%" maxW="100%">
+            <VStack
+              align="stretch" gap="0" px="2" pt="0.5" pb="1" minW={0} w="100%" maxW="100%"
+              opacity={isRuntimeReady ? 1 : 0.4}
+              pointerEvents={isRuntimeReady ? undefined : 'none'}
+              title={!isRuntimeReady ? 'Set up a model to open sessions' : undefined}
+            >
               {filteredSessions.length === 0 ? (
                 <Text px="2" py="2" fontSize="11px" color="var(--text-muted)" opacity={0.6}>
                   {sessionSearch ? 'No matching sessions.' : 'No sessions yet.'}
@@ -434,6 +455,7 @@ export function Sidebar({
                 icon={item.icon}
                 shortcut={item.shortcut}
                 active={activePage === item.page}
+                disabled={item.requiresRuntime && !isRuntimeReady}
                 onClick={() => onOpenPage(item.page)}
               />
             ))}
@@ -672,12 +694,13 @@ function MetricChip({ value, label }: { value: number; label: string }) {
 
 /* ── NavButton ── */
 function NavButton({
-  label, icon, shortcut, active, onClick
+  label, icon, shortcut, active, disabled, onClick
 }: {
   label: string;
   icon: SidebarIconName;
   shortcut?: string;
   active: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -699,14 +722,18 @@ function NavButton({
       overflow="hidden"
       textAlign="left"
       aria-label={label}
-      _hover={{ bg: active ? 'var(--surface-active)' : 'var(--surface-hover)', color: 'var(--text-primary)' }}
-      onClick={onClick}
+      opacity={disabled ? 0.35 : 1}
+      cursor={disabled ? 'not-allowed' : 'pointer'}
+      _hover={disabled ? {} : { bg: active ? 'var(--surface-active)' : 'var(--surface-hover)', color: 'var(--text-primary)' }}
+      onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled}
+      title={disabled ? 'Set up a model to access this page' : undefined}
     >
       <Box as="span" display="inline-flex" alignItems="center" flexShrink={0} color={active ? 'var(--text-secondary)' : 'var(--text-muted)'}>
         <SidebarIcon name={icon} size="sm" />
       </Box>
       <Text as="span" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" lineHeight="1">{label}</Text>
-      {shortcut ? (
+      {shortcut && !disabled ? (
         <Text as="span" fontSize="10px" color="var(--text-muted)" fontWeight="400" opacity={0.5} flexShrink={0}>{shortcut}</Text>
       ) : null}
     </Button>

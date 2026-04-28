@@ -45,6 +45,156 @@ interface HermesProviderMeta {
   description?: string;
 }
 
+type StaticModel = { value: string; label: string };
+
+const STATIC_PROVIDER_MODELS: Record<string, StaticModel[]> = {
+  anthropic: [
+    { value: 'anthropic/claude-opus-4-7', label: 'Claude Opus 4.7' },
+    { value: 'anthropic/claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { value: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4' },
+    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+    { value: 'anthropic/claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+    { value: 'anthropic/claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
+  ],
+  anthropic_token: [
+    { value: 'anthropic/claude-opus-4-7', label: 'Claude Opus 4.7' },
+    { value: 'anthropic/claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { value: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4' },
+    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+  ],
+  openai: [
+    { value: 'openai/gpt-4o', label: 'GPT-4o' },
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'openai/gpt-4.1', label: 'GPT-4.1' },
+    { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { value: 'openai/o3', label: 'o3' },
+    { value: 'openai/o3-mini', label: 'o3 Mini' },
+    { value: 'openai/o4-mini', label: 'o4 Mini' },
+    { value: 'openai/gpt-4-turbo', label: 'GPT-4 Turbo' },
+  ],
+  gemini: [
+    { value: 'gemini/gemini-2.5-pro-preview', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini/gemini-2.5-flash-preview', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini/gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini/gemini-2.0-flash-thinking-exp', label: 'Gemini 2.0 Flash Thinking' },
+    { value: 'gemini/gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini/gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+  ],
+  'google/gemini': [
+    { value: 'gemini/gemini-2.5-pro-preview', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini/gemini-2.5-flash-preview', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini/gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini/gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini/gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+  ],
+  openrouter: [
+    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4 (via OR)' },
+    { value: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (via OR)' },
+    { value: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5 (via OR)' },
+    { value: 'openai/gpt-4o', label: 'GPT-4o (via OR)' },
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (via OR)' },
+    { value: 'openai/o3', label: 'o3 (via OR)' },
+    { value: 'google/gemini-2.5-pro-preview', label: 'Gemini 2.5 Pro (via OR)' },
+    { value: 'google/gemini-2.5-flash-preview', label: 'Gemini 2.5 Flash (via OR)' },
+    { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1 (via OR)' },
+    { value: 'deepseek/deepseek-chat', label: 'DeepSeek Chat (via OR)' },
+    { value: 'x-ai/grok-3', label: 'Grok 3 (via OR)' },
+    { value: 'x-ai/grok-3-mini', label: 'Grok 3 Mini (via OR)' },
+    { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B (via OR)' },
+    { value: 'meta-llama/llama-3.1-405b-instruct', label: 'Llama 3.1 405B (via OR)' },
+    { value: 'mistralai/mistral-large-2411', label: 'Mistral Large (via OR)' },
+    { value: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen 2.5 72B (via OR)' },
+  ],
+  deepseek: [
+    { value: 'deepseek/deepseek-chat', label: 'DeepSeek Chat (V3)' },
+    { value: 'deepseek/deepseek-reasoner', label: 'DeepSeek Reasoner (R1)' },
+    { value: 'deepseek/deepseek-coder', label: 'DeepSeek Coder' },
+  ],
+  xai: [
+    { value: 'xai/grok-3', label: 'Grok 3' },
+    { value: 'xai/grok-3-mini', label: 'Grok 3 Mini' },
+    { value: 'xai/grok-2-1212', label: 'Grok 2' },
+    { value: 'xai/grok-vision-beta', label: 'Grok Vision Beta' },
+  ],
+  dashscope: [
+    { value: 'qwen/qwen-max', label: 'Qwen Max' },
+    { value: 'qwen/qwen-plus', label: 'Qwen Plus' },
+    { value: 'qwen/qwen-turbo', label: 'Qwen Turbo' },
+    { value: 'qwen/qwen2.5-72b-instruct', label: 'Qwen 2.5 72B' },
+    { value: 'qwen/qwen2.5-coder-32b-instruct', label: 'Qwen 2.5 Coder 32B' },
+  ],
+  kimi: [
+    { value: 'kimi/kimi-k2', label: 'Kimi K2' },
+    { value: 'kimi/kimi-k1.5', label: 'Kimi K1.5' },
+    { value: 'moonshot/moonshot-v1-128k', label: 'Moonshot v1 128k' },
+    { value: 'moonshot/moonshot-v1-32k', label: 'Moonshot v1 32k' },
+  ],
+  minimax: [
+    { value: 'minimax/minimax-text-01', label: 'MiniMax Text 01' },
+    { value: 'minimax/abab6.5s-chat', label: 'ABAB 6.5S Chat' },
+    { value: 'minimax/abab6.5g-chat', label: 'ABAB 6.5G Chat' },
+  ],
+  nvidia: [
+    { value: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'Nemotron 70B' },
+    { value: 'nvidia/llama-3.1-nemotron-51b-instruct', label: 'Nemotron 51B' },
+    { value: 'nvidia/mistral-nemo-12b-instruct', label: 'Mistral NeMo 12B' },
+    { value: 'nvidia/llama-3.2-nv-instruct-v1', label: 'Llama 3.2 NV Instruct' },
+  ],
+  stepfun: [
+    { value: 'stepfun/step-2-16k', label: 'Step-2 16k' },
+    { value: 'stepfun/step-1-32k', label: 'Step-1 32k' },
+    { value: 'stepfun/step-1-128k', label: 'Step-1 128k' },
+    { value: 'stepfun/step-1-8k', label: 'Step-1 8k' },
+  ],
+  zai: [
+    { value: 'glm/glm-4-plus', label: 'GLM-4 Plus' },
+    { value: 'glm/glm-4-flash', label: 'GLM-4 Flash' },
+    { value: 'glm/glm-4-0520', label: 'GLM-4 0520' },
+    { value: 'glm/glm-z1-flash', label: 'GLM Z1 Flash' },
+  ],
+  'glm/zai': [
+    { value: 'glm/glm-4-plus', label: 'GLM-4 Plus' },
+    { value: 'glm/glm-4-flash', label: 'GLM-4 Flash' },
+    { value: 'glm/glm-4-0520', label: 'GLM-4 0520' },
+    { value: 'glm/glm-z1-flash', label: 'GLM Z1 Flash' },
+  ],
+  nous: [
+    { value: 'nous/hermes-3-llama-3.1-405b', label: 'Hermes 3 Llama 3.1 405B' },
+    { value: 'nous/hermes-3-llama-3.1-70b', label: 'Hermes 3 Llama 3.1 70B' },
+    { value: 'nous/hermes-2-pro-llama-3-8b', label: 'Hermes 2 Pro Llama 3 8B' },
+  ],
+  'openai-codex': [
+    { value: 'openai/codex-mini', label: 'Codex Mini' },
+    { value: 'openai/codex-mini-latest', label: 'Codex Mini Latest' },
+  ],
+  opencode_zen: [
+    { value: 'opencode/zen', label: 'OpenCode Zen' },
+  ],
+  opencode_go: [
+    { value: 'opencode/go', label: 'OpenCode Go' },
+  ],
+  'ollama-cloud': [
+    { value: 'ollama/llama3.2', label: 'Llama 3.2' },
+    { value: 'ollama/llama3.1', label: 'Llama 3.1' },
+    { value: 'ollama/deepseek-r1', label: 'DeepSeek R1' },
+    { value: 'ollama/mistral', label: 'Mistral' },
+    { value: 'ollama/codellama', label: 'Code Llama' },
+    { value: 'ollama/phi3', label: 'Phi-3' },
+  ],
+  huggingface: [
+    { value: 'huggingface/meta-llama/Llama-3.1-70B-Instruct', label: 'Llama 3.1 70B Instruct' },
+    { value: 'huggingface/meta-llama/Llama-3.2-11B-Vision-Instruct', label: 'Llama 3.2 11B Vision' },
+    { value: 'huggingface/mistralai/Mistral-7B-Instruct-v0.3', label: 'Mistral 7B Instruct' },
+    { value: 'huggingface/Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B' },
+    { value: 'huggingface/google/gemma-2-9b-it', label: 'Gemma 2 9B' },
+    { value: 'huggingface/microsoft/Phi-3.5-mini-instruct', label: 'Phi-3.5 Mini' },
+  ],
+  // ai_gateway: intentionally omitted — custom endpoint, model is user-defined
+  // kilocode: intentionally omitted — models unknown
+};
+
 const HERMES_PROVIDER_REGISTRY: Record<string, HermesProviderMeta> = {
   openrouter: {
     displayName: 'OpenRouter',
@@ -2735,10 +2885,19 @@ export class HermesCli {
 
     const latencyMs = Date.now() - startedAt;
     if (result.exitCode !== 0) {
-      const raw = (result.stderr.trim() || result.stdout.trim() || 'The model returned an error.').slice(0, 400);
-      return { ok: false, latencyMs, errorMessage: raw };
+      // Hermes writes errors to a session log, not stderr/stdout. Strip the session_id
+      // preamble line so we don't surface it as the error message.
+      const combined = [result.stderr, result.stdout]
+        .map((s) => s.replace(/^session_id:\s+\S+\s*\n?/m, '').trim())
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+      const errorMessage = (combined || 'The model or provider rejected the request. Check the model ID and confirm the provider has access to this model.').slice(0, 400);
+      return { ok: false, latencyMs, errorMessage };
     }
-    if (!normalizeOutput(result.stdout).trim()) {
+    // Strip the session_id line before checking for actual model output
+    const output = normalizeOutput(result.stdout).replace(/^session_id:\s+\S+\s*\n?/m, '').trim();
+    if (!output) {
       return { ok: false, latencyMs, errorMessage: 'The model returned no output.' };
     }
     return { ok: true, latencyMs };
@@ -3031,6 +3190,27 @@ export class HermesCli {
     fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf-8');
   }
 
+  private clearEnvVarDirect(key: string): void {
+    const hermesHome = path.join(os.homedir(), '.hermes');
+    const envPath = path.join(hermesHome, '.env');
+    let existing = '';
+    try { existing = fs.readFileSync(envPath, 'utf-8'); } catch { return; }
+    const lines = existing.split('\n').filter(l => l.trim() && !l.startsWith(`${key}=`));
+    fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf-8');
+  }
+
+  async deleteProvider(profile: Profile, providerId: string, signal?: AbortSignal) {
+    const meta = HERMES_PROVIDER_REGISTRY[providerId];
+    if (meta?.envVar) {
+      try {
+        await this.run(['config', 'set', meta.envVar, ''], buildProfileEnvironment(profile), signal);
+      } catch {
+        this.clearEnvVarDirect(meta.envVar);
+      }
+    }
+    return this.discoverRuntimeProviderState(profile, undefined, signal);
+  }
+
   private resolveHermesHome(profile: Pick<Profile, 'path'>): string {
     if (profile.path) {
       // Default profile: path IS the home dir (contains models_dev_cache.json directly)
@@ -3182,7 +3362,7 @@ export class HermesCli {
     steps.push({
       id: `${id}:inspect`,
       kind: 'inspect',
-      title: 'Inspect Hermes runtime metadata',
+      title: 'Verify provider',
       description: `Hermes detected ${name} from the runtime configuration.`,
       status: 'completed',
       metadata: {}
@@ -3243,7 +3423,7 @@ export class HermesCli {
     steps.push({
       id: `${id}:verify`,
       kind: 'verify',
-      title: provider.ready ? 'Provider ready for chat' : 'Verify provider readiness',
+      title: 'Confirm',
       description: provider.ready
         ? `${name} is fully configured and ready to use.`
         : 'Complete the steps above, then refresh to verify the provider is ready.',
@@ -3427,71 +3607,73 @@ export class HermesCli {
 
       const providers = this.parseDumpProviders(dumpOutput, profile.id, config.provider, now);
 
-      // Populate the active provider with model data and configuration fields
-      const activeProviderEntry = providers.find((p) => p.id === config.provider);
-      if (activeProviderEntry && config.defaultModel !== 'unknown') {
-        const hermesHome = this.resolveHermesHome(profile);
-        const cachedModelOptions = this.loadModelsFromDevCache(hermesHome, config.provider);
-        const hasCachedModels = cachedModelOptions.length > 0;
+      // Populate every connected provider with model data and configuration fields.
+      // The active provider gets: cache → static fallback + baseUrl/apiMode config fields.
+      // Non-active connected providers get: static model list only.
+      const hermesHome = this.resolveHermesHome(profile);
+      for (const providerEntry of providers) {
+        if (providerEntry.status !== 'connected') continue;
 
-        activeProviderEntry.supportsModelDiscovery = true;
-        activeProviderEntry.models = hasCachedModels
-          ? cachedModelOptions.map((opt) => ({
-              id: opt.value,
-              label: opt.label,
-              providerId: config.provider,
-              disabled: false,
-              supportsReasoningEffort: false,
-              reasoningEffortOptions: [] as string[],
-              metadata: {} as Record<string, unknown>
-            }))
-          : [{
-              id: config.defaultModel,
-              label: config.defaultModel,
-              providerId: config.provider,
-              disabled: false,
-              supportsReasoningEffort: false,
-              reasoningEffortOptions: [] as string[],
-              metadata: {} as Record<string, unknown>
-            }];
+        const isActive = providerEntry.id === config.provider;
+        const cachedModelOptions = isActive ? this.loadModelsFromDevCache(hermesHome, providerEntry.id) : [];
+        const staticModels = STATIC_PROVIDER_MODELS[providerEntry.id] ?? [];
+        // Cache wins; static list is the fallback when Hermes hasn't populated the cache yet
+        const modelOptions: StaticModel[] = cachedModelOptions.length > 0 ? cachedModelOptions : staticModels;
 
-        activeProviderEntry.configurationFields = [
+        if (modelOptions.length === 0) continue; // no known models → "coming soon" in UI
+
+        providerEntry.supportsModelDiscovery = true;
+        providerEntry.models = modelOptions.map((opt) => ({
+          id: opt.value,
+          label: opt.label,
+          providerId: providerEntry.id,
+          disabled: false,
+          supportsReasoningEffort: false,
+          reasoningEffortOptions: [] as string[],
+          metadata: {} as Record<string, unknown>
+        }));
+
+        const currentModelValue = isActive && config.defaultModel !== 'unknown'
+          ? config.defaultModel
+          : undefined;
+
+        providerEntry.configurationFields = [
           {
             key: 'defaultModel',
             label: 'Default model',
-            input: hasCachedModels ? 'select' as const : 'text' as const,
+            input: 'select' as const,
             required: true,
             secret: false,
             disabled: false,
-            placeholder: hasCachedModels ? undefined : 'e.g. openai/gpt-4o',
-            value: config.defaultModel,
-            options: hasCachedModels
-              ? cachedModelOptions.map((opt) => ({ value: opt.value, label: opt.label, disabled: false }))
-              : [{ value: config.defaultModel, label: config.defaultModel, disabled: false }]
+            placeholder: undefined,
+            value: currentModelValue,
+            options: modelOptions.map((opt) => ({ value: opt.value, label: opt.label, disabled: false }))
           },
-          {
-            key: 'baseUrl',
-            label: 'Base URL',
-            input: 'url' as const,
-            required: false,
-            secret: false,
-            disabled: false,
-            value: (config as Record<string, unknown>).baseUrl as string | undefined,
-            options: []
-          },
-          {
-            key: 'apiMode',
-            label: 'API mode',
-            input: 'select' as const,
-            required: false,
-            secret: false,
-            disabled: false,
-            value: (config as Record<string, unknown>).apiMode as string | undefined,
-            options: [
-              { value: 'chat_completions', label: 'Chat Completions', disabled: false },
-              { value: 'responses', label: 'Responses', disabled: false }
-            ]
-          }
+          ...(isActive ? [
+            {
+              key: 'baseUrl' as const,
+              label: 'Base URL',
+              input: 'url' as const,
+              required: false,
+              secret: false,
+              disabled: false,
+              value: (config as Record<string, unknown>).baseUrl as string | undefined,
+              options: []
+            },
+            {
+              key: 'apiMode' as const,
+              label: 'API mode',
+              input: 'select' as const,
+              required: false,
+              secret: false,
+              disabled: false,
+              value: (config as Record<string, unknown>).apiMode as string | undefined,
+              options: [
+                { value: 'chat_completions', label: 'Chat Completions', disabled: false },
+                { value: 'responses', label: 'Responses', disabled: false }
+              ]
+            }
+          ] : [])
         ];
       }
 

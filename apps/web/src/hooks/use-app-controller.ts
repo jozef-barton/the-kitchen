@@ -31,6 +31,7 @@ import {
   getAuditEvents,
   beginProviderAuth,
   connectProvider,
+  deleteProviderConnection,
   createSession,
   deleteRecipe,
   deleteSession,
@@ -2956,6 +2957,28 @@ export function useAppController() {
     [activeProfileId, loadModelProviders]
   );
 
+  const handleDeleteProvider = useCallback(
+    async (providerId: string) => {
+      if (!activeProfileId) {
+        const message = 'Select a real Hermes profile before deleting a provider.';
+        setProviderDrawerError(message);
+        throw new Error(message);
+      }
+      setProviderDrawerLoading(true);
+      setProviderDrawerError(null);
+      try {
+        const response = await deleteProviderConnection(activeProfileId, providerId);
+        setModelProviderResponse(response);
+      } catch (err) {
+        setProviderDrawerError(err instanceof Error ? err.message : 'Failed to delete provider.');
+        throw err;
+      } finally {
+        setProviderDrawerLoading(false);
+      }
+    },
+    [activeProfileId]
+  );
+
   const openSessionInTab = useCallback(
     (sessionId: string, title: string) => {
       setOpenTabs((current) => {
@@ -3089,6 +3112,7 @@ export function useAppController() {
     handleSaveSettings,
     handleUpdateRuntimeModelConfig,
     handleConnectProvider,
+    handleDeleteProvider,
     handleBeginProviderAuth,
     handlePollProviderAuth,
     handleInspectProvider,

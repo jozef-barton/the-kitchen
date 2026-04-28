@@ -12078,9 +12078,10 @@ Emit one corrected TSX module now.`;
   async testModelConfig(input: TestModelConfigRequest): Promise<TestModelConfigResponse> {
     const profile = await this.ensureProfile(input.profileId);
 
-    // Snapshot the current model so we can restore it if the test fails.
+    // Snapshot the current config so we can restore both model and provider if the test fails.
     const previousConfig = this.options.database.getRuntimeModelConfig(profile.id);
     const previousModel = previousConfig?.defaultModel ?? null;
+    const previousProvider = previousConfig?.provider ?? null;
 
     // Apply the candidate model to the profile's config.
     await this.options.hermesCli.updateRuntimeModelConfig(profile, {
@@ -12092,10 +12093,16 @@ Emit one corrected TSX module now.`;
     const testResult = await this.options.hermesCli.quickModelTest(profile);
 
     if (!testResult.ok) {
-      // Restore previous model if there was one.
-      if (previousModel && previousModel !== 'unknown') {
+      // Restore both model and provider — only restoring model would leave the profile
+      // pointing at the wrong provider if the test changed it.
+      const restoreModel = previousModel && previousModel !== 'unknown' ? previousModel : null;
+      const restoreProvider = previousProvider && previousProvider !== 'unknown' ? previousProvider : null;
+      if (restoreModel || restoreProvider) {
         try {
-          await this.options.hermesCli.updateRuntimeModelConfig(profile, { defaultModel: previousModel });
+          await this.options.hermesCli.updateRuntimeModelConfig(profile, {
+            ...(restoreModel ? { defaultModel: restoreModel } : {}),
+            ...(restoreProvider ? { provider: restoreProvider } : {})
+          });
         } catch {
           // Restoration is best-effort; don't mask the original error.
         }
@@ -13005,6 +13012,30 @@ Emit one corrected TSX module now.`;
         }
       });
       throw new BridgeError(400, 'PROVIDER_CONNECT_FAILED', userMessage);
+    }
+  }
+
+  async deleteProvider(input: { profileId: string; providerId: string }) {
+    const profile = await this.ensureProfile(input.profileId);
+    try {
+      const runtimeState = await this.options.hermesCli.deleteProvider(profile, input.providerId);
+      this.options.database.deleteProviderConnection(profile.id, input.providerId);
+      this.invalidateRuntimeReadyCache(profile.id);
+      this.persistRuntimeProviderState(profile.id, runtimeState);
+      this.options.database.appendAuditEvent({
+        id: `audit-${randomUUID()}`,
+        type: 'provider_deleted',
+        profileId: profile.id,
+        sessionId: null,
+        message: `Deleted provider ${input.providerId} for ${profile.id}.`,
+        createdAt: this.now()
+      });
+      return this.buildModelProviderResponseFromRuntimeState(runtimeState, {
+        status: 'connected',
+        usingCachedData: false
+      });
+    } catch (error) {
+      throw new BridgeError(400, 'PROVIDER_DELETE_FAILED', error instanceof Error ? error.message : 'Failed to delete provider.');
     }
   }
 

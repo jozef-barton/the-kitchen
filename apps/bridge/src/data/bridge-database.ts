@@ -897,6 +897,14 @@ export class BridgeDatabase {
     this.ensureProfileScopedProviderConnectionsTable();
     this.syncAttachedRecipeSessionCache();
     this.backfillSessionTitlesFromRecipes();
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS provider_step_completions (
+        profile_id TEXT NOT NULL,
+        step_id TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        PRIMARY KEY (profile_id, step_id)
+      );
+    `);
   }
 
   private backfillSessionTitlesFromRecipes() {
@@ -1810,6 +1818,29 @@ export class BridgeDatabase {
       );
 
     return nextSettings;
+  }
+
+  getProviderStepCompletions(profileId: string): string[] {
+    const rows = this.database
+      .prepare('SELECT step_id FROM provider_step_completions WHERE profile_id = ?')
+      .all(profileId) as Array<{ step_id: string }>;
+    return rows.map((r) => r.step_id);
+  }
+
+  setProviderStepCompletion(profileId: string, stepId: string, completed: boolean): void {
+    if (completed) {
+      this.database
+        .prepare(
+          `INSERT INTO provider_step_completions (profile_id, step_id, completed_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(profile_id, step_id) DO UPDATE SET completed_at = excluded.completed_at`
+        )
+        .run(profileId, stepId, new Date().toISOString());
+    } else {
+      this.database
+        .prepare('DELETE FROM provider_step_completions WHERE profile_id = ? AND step_id = ?')
+        .run(profileId, stepId);
+    }
   }
 
   getUiState() {
@@ -4870,6 +4901,11 @@ export class BridgeDatabase {
 
   deleteSkill(profileId: string, skillId: string) {
     this.database.prepare('DELETE FROM skills WHERE profile_id = ? AND id = ?').run(profileId, skillId);
+  }
+
+  deleteProviderConnection(profileId: string, providerId: string) {
+    this.database.prepare('DELETE FROM provider_connections WHERE profile_id = ? AND id = ?').run(profileId, providerId);
+    this.database.prepare('DELETE FROM provider_step_completions WHERE profile_id = ? AND step_id LIKE ?').run(profileId, `${providerId}:%`);
   }
 
   replaceProviderConnections(profileId: string, providers: ProviderConnection[]) {

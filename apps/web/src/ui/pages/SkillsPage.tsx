@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Button, HStack, Menu, Portal, Table, Tabs, Text, Tooltip, VStack, chakra } from '@chakra-ui/react';
 import type { Skill, SkillsResponse } from '@hermes-recipes/protocol';
 import { ConfirmDialog } from '../molecules/ConfirmDialog';
@@ -260,6 +260,8 @@ export function SkillsPage({
   loading,
   error,
   activeProfileId,
+  activeTab: activeTabProp,
+  onTabChange,
   onRefresh,
   onDeleteSkill
 }: {
@@ -267,10 +269,19 @@ export function SkillsPage({
   loading: boolean;
   error: string | null;
   activeProfileId: string | null;
+  activeTab?: SkillsTab;
+  onTabChange?: (tab: SkillsTab) => void;
   onRefresh: () => void;
   onDeleteSkill: (skill: Skill) => Promise<void> | void;
 }) {
-  const [activeTab, setActiveTab] = useState<SkillsTab>('installed');
+  const [activeTab, setActiveTab] = useState<SkillsTab>(activeTabProp ?? 'installed');
+
+  useEffect(() => {
+    if (activeTabProp && activeTabProp !== activeTab) {
+      setActiveTab(activeTabProp);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabProp]);
 
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0">
@@ -278,7 +289,11 @@ export function SkillsPage({
 
       <Tabs.Root
         value={activeTab}
-        onValueChange={(e) => setActiveTab(e.value as SkillsTab)}
+        onValueChange={(e) => {
+          const tab = e.value as SkillsTab;
+          setActiveTab(tab);
+          onTabChange?.(tab);
+        }}
         h="100%"
         minH={0}
         display="flex"

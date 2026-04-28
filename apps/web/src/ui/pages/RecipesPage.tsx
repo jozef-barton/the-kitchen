@@ -9,7 +9,15 @@ import { IngredientPreview } from '../../features/recipe-templates/ingredient-pr
 import { INGREDIENT_CATALOG, getIngredientById, type IngredientGroup } from '../../features/recipe-templates/ingredient-catalog';
 import type { RecipeTemplateGalleryCategory, RecipeTemplateId } from '../../features/recipe-templates/types';
 
-export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfileId?: string | null }) {
+export function RecipesPage({
+  activeProfileId: _activeProfileId,
+  activeTab: activeTabProp,
+  onTabChange
+}: {
+  activeProfileId?: string | null;
+  activeTab?: 'book' | 'ingredients';
+  onTabChange?: (tab: 'book' | 'ingredients') => void;
+}) {
   const [category, setCategory] = useState<RecipeTemplateGalleryCategory>('all');
   const [selectedTemplateId, setSelectedTemplateId] = useState<RecipeTemplateId>('price-comparison-grid');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -46,7 +54,14 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
     }
   }, [selectedIngredientId, visibleIngredients]);
 
-  const [activeTab, setActiveTab] = useState<'book' | 'ingredients'>('book');
+  const [activeTab, setActiveTab] = useState<'book' | 'ingredients'>(activeTabProp ?? 'book');
+
+  useEffect(() => {
+    if (activeTabProp && activeTabProp !== activeTab) {
+      setActiveTab(activeTabProp);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabProp]);
 
   const selectedTemplate = getRecipeTemplateById(selectedTemplateId) ?? visibleTemplates[0] ?? RECIPE_TEMPLATE_REGISTRY[0];
   const selectedIngredient = getIngredientById(selectedIngredientId) ?? visibleIngredients[0] ?? INGREDIENT_CATALOG[0];
@@ -60,7 +75,11 @@ export function RecipesPage({ activeProfileId: _activeProfileId }: { activeProfi
         </Box>
         <Tabs.Root
           value={activeTab}
-          onValueChange={(e) => setActiveTab(e.value as 'book' | 'ingredients')}
+          onValueChange={(e) => {
+            const tab = e.value as 'book' | 'ingredients';
+            setActiveTab(tab);
+            onTabChange?.(tab);
+          }}
           variant="plain"
         >
           <Box borderBottom="1px solid var(--divider)" mt="3">

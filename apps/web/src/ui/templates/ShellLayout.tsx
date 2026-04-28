@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Alert, Box, Button, CloseButton, Drawer, Flex, HStack, Portal, Text, chakra } from '@chakra-ui/react';
 import type { ConnectionState } from '@hermes-recipes/protocol';
 import type { ReactNode } from 'react';
@@ -121,6 +122,13 @@ export function ShellLayout({
   children: ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const location = useLocation();
+
+  // Close mobile nav whenever the URL changes (any nav action triggers this)
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
   const versionMismatch = expectedHermesVersion && hermesVersion && hermesVersion !== expectedHermesVersion;
   const gatewayDown = connection.status !== 'connected' && connection.detail;
 
@@ -155,6 +163,7 @@ export function ShellLayout({
             <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
             <Drawer.Positioner display={{ base: 'block', lg: 'none' }}>
               <Drawer.Content
+                className="sidebar-theme"
                 maxW={{ base: '100%', sm: '300px' }}
                 h="100dvh"
                 bg="var(--sidebar-bg)"

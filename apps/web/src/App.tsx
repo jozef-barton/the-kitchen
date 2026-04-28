@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import type { AppPage } from '@hermes-recipes/protocol';
 import { testModelConfig } from './lib/api';
 import { Box, Button, Center, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
 import { useAppController } from './hooks/use-app-controller';
@@ -10,15 +12,62 @@ import { RecipesPage } from './ui/pages/RecipesPage';
 import { SettingsPage } from './ui/pages/SettingsPage';
 import { ToolsPage } from './ui/pages/ToolsPage';
 import { HermesSetupPage } from './ui/pages/HermesSetupPage';
-import { ModelSelector } from './ui/molecules/ModelSelector';
+import { ProviderModelSelector } from './ui/molecules/ModelSelector';
 import { TabBar } from './ui/molecules/TabBar';
 import { ShellLayout, Sidebar } from './ui/templates/ShellLayout';
 import { CommandPalette } from './ui/organisms/CommandPalette';
 import { AppToaster } from './ui/toaster';
 
+type SettingsTabValue = 'general' | 'model' | 'soul_md' | 'access_audit' | 'telemetry';
+
+function tabToPath(tab: SettingsTabValue): string {
+  switch (tab) {
+    case 'model': return '/settings/models';
+    case 'soul_md': return '/settings/persona';
+    case 'access_audit': return '/settings/access';
+    case 'telemetry': return '/settings/audit';
+    default: return '/settings';
+  }
+}
+
+function pathToSettingsTab(pathname: string): SettingsTabValue {
+  if (pathname === '/settings/models') return 'model';
+  if (pathname === '/settings/persona') return 'soul_md';
+  if (pathname === '/settings/access') return 'access_audit';
+  if (pathname === '/settings/audit') return 'telemetry';
+  return 'general';
+}
+
+function pathToPage(pathname: string): AppPage {
+  if (pathname.startsWith('/session/') || pathname === '/chat') return 'chat';
+  if (pathname.startsWith('/settings')) return 'settings';
+  if (pathname.startsWith('/recipes')) return 'recipes';
+  if (pathname.startsWith('/tools')) return 'tools';
+  if (pathname.startsWith('/skills')) return 'skills';
+  if (pathname === '/sessions') return 'sessions';
+  if (pathname === '/jobs') return 'jobs';
+  return 'chat';
+}
+
+function pageToPath(page: AppPage): string {
+  switch (page) {
+    case 'sessions': return '/sessions';
+    case 'recipes': return '/recipes';
+    case 'tools': return '/tools';
+    case 'skills': return '/skills';
+    case 'jobs': return '/jobs';
+    case 'settings': return '/settings';
+    default: return '/';
+  }
+}
+
+
 export function App() {
   const controller = useAppController();
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const prevActiveSessionIdRef = useRef(controller.activeSessionId);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -30,6 +79,47 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // URL → controller: sync page + session when the URL changes (back/forward, direct links)
+  useEffect(() => {
+    const page = pathToPage(location.pathname);
+    if (page !== controller.page) {
+      void controller.openPage(page);
+    }
+    if (location.pathname.startsWith('/session/')) {
+      const sessionId = location.pathname.split('/')[2];
+      if (sessionId && sessionId !== controller.activeSessionId) {
+        void controller.openSession(sessionId);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // Controller → URL: navigate when a session is created or switched programmatically
+  useEffect(() => {
+    if (
+      controller.page === 'chat' &&
+      controller.activeSessionId !== prevActiveSessionIdRef.current
+    ) {
+      prevActiveSessionIdRef.current = controller.activeSessionId;
+      if (controller.activeSessionId) {
+        const target = `/session/${controller.activeSessionId}`;
+        if (location.pathname !== target) {
+          navigate(target);
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controller.activeSessionId, controller.page]);
+
+  const settingsTabFromUrl: SettingsTabValue = location.pathname.startsWith('/settings')
+    ? pathToSettingsTab(location.pathname)
+    : 'general';
+
+  const recipesTabFromUrl = location.pathname === '/recipes/ingredients' ? 'ingredients' : 'book' as const;
+  const skillsTabFromUrl = location.pathname === '/skills/finder' ? 'finder' : 'installed' as const;
+  const toolsTabFromUrl = location.pathname === '/tools/history' ? 'history' : 'all' as const;
+
   if (controller.bootstrapStatus === 'loading' && !controller.bootstrap) {
     return (
       <Center h="100dvh" bg="transparent">
@@ -111,10 +201,12 @@ export function App() {
         <CommandPalette
           recentSessions={controller.bootstrap.recentSessions}
           onOpenSession={(sessionId) => {
+            navigate(`/session/${sessionId}`);
             void controller.openSession(sessionId);
             setCmdPaletteOpen(false);
           }}
           onOpenPage={(page) => {
+            navigate(pageToPath(page));
             void controller.openPage(page);
             setCmdPaletteOpen(false);
           }}
@@ -153,12 +245,13 @@ export function App() {
             onCollapsedChange={(collapsed) => void controller.handleSidebarCollapsedChange(collapsed)}
             onProfileChange={(profileId) => void controller.handleProfileChange(profileId)}
             onCreateSession={() => void controller.handleCreateSession()}
-            onOpenSession={(sessionId) => void controller.openSession(sessionId)}
-            onOpenPage={(page) => void controller.openPage(page)}
+            onOpenSession={(sessionId) => { navigate(`/session/${sessionId}`); void controller.openSession(sessionId); }}
+            onOpenPage={(page) => { navigate(pageToPath(page)); void controller.openPage(page); }}
             onRenameSession={(sessionId, title) => void controller.handleRenameSession(sessionId, title)}
             onDeleteSession={(sessionId) => void controller.handleDeleteSession(sessionId)}
             onCreateProfile={(name) => controller.handleCreateProfile(name)}
             onDeleteProfile={(id) => controller.handleDeleteProfile(id)}
+            isRuntimeReady={controller.runtimeConfigGate.status === 'ready'}
           />
         }
         mobileNavContent={
@@ -174,18 +267,20 @@ export function App() {
             onCollapsedChange={() => undefined}
             onProfileChange={(profileId) => void controller.handleProfileChange(profileId)}
             onCreateSession={() => void controller.handleCreateSession()}
-            onOpenSession={(sessionId) => void controller.openSession(sessionId)}
-            onOpenPage={(page) => void controller.openPage(page)}
+            onOpenSession={(sessionId) => { navigate(`/session/${sessionId}`); void controller.openSession(sessionId); }}
+            onOpenPage={(page) => { navigate(pageToPath(page)); void controller.openPage(page); }}
             onRenameSession={(sessionId, title) => void controller.handleRenameSession(sessionId, title)}
             onDeleteSession={(sessionId) => void controller.handleDeleteSession(sessionId)}
             onCreateProfile={(name) => controller.handleCreateProfile(name)}
             onDeleteProfile={(id) => controller.handleDeleteProfile(id)}
+            isRuntimeReady={controller.runtimeConfigGate.status === 'ready'}
           />
         }
         modelSelectorSlot={
-          <ModelSelector
+          <ProviderModelSelector
             modelProviderResponse={controller.modelProviderResponse}
-            activeModelId={controller.runtimeConfigGate.modelId}
+            onUpdateRuntimeModelConfig={(config, options) => controller.handleUpdateRuntimeModelConfig(config, options)}
+            onChooseProvider={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
           />
         }
         noGutter={controller.page === 'chat'}
@@ -196,7 +291,7 @@ export function App() {
             <TabBar
               tabs={controller.openTabs}
               activeTabId={controller.activeSessionId}
-              onSelectTab={(sessionId) => void controller.openSession(sessionId)}
+              onSelectTab={(sessionId) => { navigate(`/session/${sessionId}`); void controller.openSession(sessionId); }}
               onCloseTab={(sessionId) => controller.closeTab(sessionId)}
               onNewTab={() => void controller.handleCreateSession()}
               onReorderTabs={(reordered) => controller.reorderTabs(reordered)}
@@ -210,7 +305,7 @@ export function App() {
               status={controller.runtimeConfigGate.status}
               code={controller.runtimeConfigGate.code}
               message={controller.runtimeConfigGate.message}
-              onOpenSettings={() => void controller.openPage('settings')}
+              onChooseModel={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
             />
           ) : (
           <ChatPage
@@ -257,7 +352,7 @@ export function App() {
               status={controller.runtimeConfigGate.status}
               code={controller.runtimeConfigGate.code}
               message={controller.runtimeConfigGate.message}
-              onOpenSettings={() => void controller.openPage('settings')}
+              onChooseModel={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
             />
           ) : (
           <SessionsPage
@@ -268,7 +363,7 @@ export function App() {
             response={controller.sessionsResponse}
             loading={controller.sessionsLoading}
             error={controller.sessionsError}
-            onOpenSession={(sessionId) => void controller.openSession(sessionId)}
+            onOpenSession={(sessionId) => { navigate(`/session/${sessionId}`); void controller.openSession(sessionId); }}
             onRenameSession={(sessionId, title) => void controller.handleRenameSession(sessionId, title)}
             onDeleteSession={(sessionId) => void controller.handleDeleteSession(sessionId)}
           />
@@ -281,7 +376,7 @@ export function App() {
               status={controller.runtimeConfigGate.status}
               code={controller.runtimeConfigGate.code}
               message={controller.runtimeConfigGate.message}
-              onOpenSettings={() => void controller.openPage('settings')}
+              onChooseModel={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
             />
           ) : (
           <JobsPage
@@ -299,15 +394,15 @@ export function App() {
               status={controller.runtimeConfigGate.status}
               code={controller.runtimeConfigGate.code}
               message={controller.runtimeConfigGate.message}
-              onOpenSettings={() => void controller.openPage('settings')}
+              onChooseModel={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
             />
           ) : (
           <ToolsPage
             response={controller.toolsResponse}
             loading={controller.toolsLoading}
             error={controller.toolsError}
-            toolsTab={controller.toolsTab}
-            onToolsTabChange={(tab) => controller.handleToolsTabChange(tab)}
+            toolsTab={toolsTabFromUrl}
+            onToolsTabChange={(tab) => { navigate(tab === 'history' ? '/tools/history' : '/tools'); void controller.handleToolsTabChange(tab); }}
             toolHistoryResponse={controller.toolHistoryResponse}
             toolHistoryLoading={controller.toolHistoryLoading}
             toolHistoryError={controller.toolHistoryError}
@@ -323,7 +418,7 @@ export function App() {
               status={controller.runtimeConfigGate.status}
               code={controller.runtimeConfigGate.code}
               message={controller.runtimeConfigGate.message}
-              onOpenSettings={() => void controller.openPage('settings')}
+              onChooseModel={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
             />
           ) : (
           <SkillsPage
@@ -331,6 +426,8 @@ export function App() {
             loading={controller.skillsLoading}
             error={controller.skillsError}
             activeProfileId={controller.activeProfileId}
+            activeTab={skillsTabFromUrl}
+            onTabChange={(tab) => navigate(tab === 'finder' ? '/skills/finder' : '/skills')}
             onRefresh={() => void controller.handleSkillsRefresh()}
             onDeleteSkill={(skill) => void controller.handleDeleteSkill(skill)}
           />
@@ -364,6 +461,7 @@ export function App() {
             onUpdateRuntimeModelConfig={(nextConfig, options) => controller.handleUpdateRuntimeModelConfig(nextConfig, options)}
             onTestModelConfig={(profileId, model, prov) => testModelConfig(profileId, model, prov)}
             onConnectProvider={(provider, apiKey, label, options) => controller.handleConnectProvider(provider, apiKey, label, options)}
+            onDeleteProvider={(providerId) => controller.handleDeleteProvider(providerId)}
             onBeginProviderAuth={(providerId, options) => controller.handleBeginProviderAuth(providerId, options)}
             onPollProviderAuth={(providerId, authSessionId, options) => controller.handlePollProviderAuth(providerId, authSessionId, options)}
             onRefreshProviders={() => controller.handleModelProvidersRefresh()}
@@ -375,10 +473,18 @@ export function App() {
             soulMdError={controller.soulMdError}
             onLoadSoulMd={(profileId) => controller.loadSoulMd(profileId)}
             onUpdateSoulMd={(content) => controller.handleUpdateSoulMd(content)}
+            requestedTab={settingsTabFromUrl}
+            onTabChange={(tab) => navigate(tabToPath(tab), { replace: true })}
           />
         ) : null}
 
-        {controller.page === 'recipes' ? <RecipesPage activeProfileId={controller.activeProfileId} /> : null}
+        {controller.page === 'recipes' ? (
+          <RecipesPage
+            activeProfileId={controller.activeProfileId}
+            activeTab={recipesTabFromUrl}
+            onTabChange={(tab) => navigate(tab === 'ingredients' ? '/recipes/ingredients' : '/recipes')}
+          />
+        ) : null}
       </ShellLayout>
       <AppToaster />
     </>
@@ -389,19 +495,24 @@ function RuntimeConfigBlockedState({
   status,
   code,
   message,
-  onOpenSettings
+  onChooseModel
 }: {
   status: 'ready' | 'checking' | 'blocked';
   code: string;
   message: string;
-  onOpenSettings: () => void;
+  onChooseModel: () => void;
 }) {
   const title =
     status === 'checking'
       ? 'Checking runtime configuration'
       : code === 'runtime_state_unavailable'
         ? 'Hermes runtime configuration unavailable'
-        : 'Hermes runtime configuration required';
+        : 'Pick a model for Hermes to use';
+
+  const subtitle =
+    status !== 'checking' && code !== 'runtime_state_unavailable'
+      ? (message || 'Open Settings > Models to authenticate or add an API key.')
+      : (message || 'Configure at least one usable provider and model in Settings before using chat, jobs, tools, or skills.');
 
   return (
     <Center h="100%" minH={0}>
@@ -429,8 +540,7 @@ function RuntimeConfigBlockedState({
           </Text>
         )}
         <Text color="var(--text-secondary)">
-          {message ||
-            'Configure at least one usable provider and model in Settings before using chat, jobs, tools, or skills.'}
+          {subtitle}
         </Text>
         {status === 'checking' ? null : (
           <Button
@@ -439,9 +549,9 @@ function RuntimeConfigBlockedState({
             bg="var(--accent)"
             color="var(--accent-contrast)"
             _hover={{ bg: 'var(--accent-strong)' }}
-            onClick={onOpenSettings}
+            onClick={onChooseModel}
           >
-            Open Settings
+            Choose a model
           </Button>
         )}
       </VStack>

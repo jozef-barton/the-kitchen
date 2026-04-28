@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ClipboardEvent, type FormEvent, type DragEvent } from 'react';
-import { Box, Button, Flex, HStack, Textarea, chakra } from '@chakra-ui/react';
+import { Box, Button, Flex, HStack, Text, Textarea, VStack, chakra } from '@chakra-ui/react';
 
 const ChakraButton = chakra('button');
 import type { FileRef } from '../../lib/api';
@@ -71,10 +71,11 @@ export function ChatComposer({
   return (
     <Box
       as="form"
+      position="relative"
       rounded="12px"
       border="1px solid"
       borderColor={draggingOver ? 'var(--accent)' : 'var(--border-subtle)'}
-      bg={draggingOver ? 'var(--accent-surface)' : 'var(--surface-elevated)'}
+      bg={draggingOver ? 'var(--surface-accent)' : 'var(--surface-elevated)'}
       boxShadow="0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)"
       data-testid="chat-composer"
       css={{
@@ -99,6 +100,33 @@ export function ChatComposer({
       }}
       onDrop={handleDrop}
     >
+      {draggingOver && (
+        <Box
+          position="absolute"
+          inset="0"
+          rounded="12px"
+          border="2px dashed var(--accent)"
+          bg="var(--surface-accent)"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          pointerEvents="none"
+          zIndex="1"
+        >
+          <VStack gap="1.5" align="center">
+            <Box color="var(--accent)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </Box>
+            <Text fontSize="sm" fontWeight="500" color="var(--accent)" letterSpacing="-0.01em">
+              Drop to attach
+            </Text>
+          </VStack>
+        </Box>
+      )}
       {hasPending && (
         <HStack gap="2" px="3" pt="2" pb="0" flexWrap="wrap">
           {pending.map((item) => (

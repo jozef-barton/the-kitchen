@@ -465,6 +465,16 @@ export async function connectProvider(input: ConnectProviderRequest) {
   );
 }
 
+export async function deleteProviderConnection(profileId: string, providerId: string) {
+  const query = new URLSearchParams({ profileId });
+  return parseJsonResponse(
+    await apiFetch(`/api/provider-connections/${encodeURIComponent(providerId)}?${query}`, {
+      method: 'DELETE'
+    }),
+    ModelProviderResponseSchema
+  );
+}
+
 export async function beginProviderAuth(input: BeginProviderAuthRequest) {
   return parseJsonResponse(
     await apiFetch('/api/provider-auth', {
@@ -485,6 +495,53 @@ export async function pollProviderAuth(input: PollProviderAuthRequest) {
     }),
     ModelProviderResponseSchema
   );
+}
+
+export type ProviderModelsResponse = {
+  models: Array<{ value: string; label: string }>;
+  source: 'live' | 'cached' | 'unsupported' | 'error';
+  error?: string;
+  supportedProviders: string[];
+};
+
+export async function getProviderModels(profileId: string, provider: string): Promise<ProviderModelsResponse> {
+  const query = new URLSearchParams({ profileId, provider });
+  const res = await apiFetch(`/api/provider-models?${query.toString()}`);
+  if (!res.ok) {
+    return {
+      models: [],
+      source: 'error',
+      error: `Bridge returned ${res.status} for /api/provider-models. The bridge may need a restart.`,
+      supportedProviders: []
+    };
+  }
+  try {
+    return await res.json() as ProviderModelsResponse;
+  } catch (err) {
+    return {
+      models: [],
+      source: 'error',
+      error: err instanceof Error ? err.message : 'Failed to parse model discovery response.',
+      supportedProviders: []
+    };
+  }
+}
+
+export async function getProviderStepCompletions(profileId: string): Promise<string[]> {
+  const query = new URLSearchParams({ profileId });
+  const res = await apiFetch(`/api/provider-step-completions?${query.toString()}`);
+  const data = await res.json() as { completedStepIds: string[] };
+  return data.completedStepIds ?? [];
+}
+
+export async function setProviderStepCompletion(profileId: string, stepId: string, completed: boolean): Promise<string[]> {
+  const res = await apiFetch('/api/provider-step-completions', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ profileId, stepId, completed })
+  });
+  const data = await res.json() as { completedStepIds: string[] };
+  return data.completedStepIds ?? [];
 }
 
 export async function updateSettings(input: Partial<AppSettings>) {

@@ -41,6 +41,11 @@ void refreshDiskRecipeRegistry();
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { HermesBridge, BridgeError } from '../services/hermes-bridge-service';
+import {
+  discoverProviderModels,
+  isProviderDiscoverySupported,
+  SUPPORTED_DISCOVERY_PROVIDERS
+} from '../services/model-discovery';
 import { BridgeDatabase } from '../data/bridge-database';
 import { HermesCli } from '../hermes-cli/client';
 import { migrateLegacySnapshotIfNeeded } from '../legacy-snapshot';
@@ -640,6 +645,14 @@ export function createBridgeServer(options: {
         return;
       }
 
+      if (request.method === 'DELETE' && /^\/api\/provider-connections\/[^/]+$/.test(pathname)) {
+        const providerId = pathname.split('/').pop()!;
+        const profileId = searchParams.get('profileId');
+        if (!profileId) throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId is required.');
+        sendJson(response, 200, await bridge.deleteProvider({ profileId, providerId }), originDecision.allowOrigin);
+        return;
+      }
+
       if (request.method === 'POST' && pathname === '/api/provider-auth') {
         const payload = BeginProviderAuthRequestSchema.parse(await readJsonBody(request));
         sendJson(response, 200, await bridge.beginProviderAuth(payload), originDecision.allowOrigin);
@@ -649,6 +662,49 @@ export function createBridgeServer(options: {
       if (request.method === 'POST' && pathname === '/api/provider-auth/poll') {
         const payload = PollProviderAuthRequestSchema.parse(await readJsonBody(request));
         sendJson(response, 200, await bridge.pollProviderAuth(payload), originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'GET' && pathname === '/api/provider-step-completions') {
+        const profileId = searchParams.get('profileId');
+        if (!profileId) {
+          throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId is required.');
+        }
+        sendJson(response, 200, { completedStepIds: database.getProviderStepCompletions(profileId) }, originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'GET' && pathname === '/api/provider-models') {
+        const profileId = searchParams.get('profileId');
+        const provider = searchParams.get('provider');
+        if (!profileId) throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId is required.');
+        if (!provider) throw new BridgeError(400, 'PROVIDER_REQUIRED', 'provider is required.');
+
+        if (!isProviderDiscoverySupported(provider)) {
+          sendJson(response, 200, {
+            models: [],
+            source: 'unsupported',
+            supportedProviders: SUPPORTED_DISCOVERY_PROVIDERS
+          }, originDecision.allowOrigin);
+          return;
+        }
+
+        const profile = database.getProfile(profileId);
+        const result = await discoverProviderModels(profileId, provider, profile?.path ?? undefined);
+        sendJson(response, 200, {
+          ...result,
+          supportedProviders: SUPPORTED_DISCOVERY_PROVIDERS
+        }, originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/provider-step-completions') {
+        const body = await readJsonBody(request) as { profileId: string; stepId: string; completed: boolean };
+        if (!body.profileId || !body.stepId || typeof body.completed !== 'boolean') {
+          throw new BridgeError(400, 'INVALID_REQUEST', 'profileId, stepId, and completed are required.');
+        }
+        database.setProviderStepCompletion(body.profileId, body.stepId, body.completed);
+        sendJson(response, 200, { completedStepIds: database.getProviderStepCompletions(body.profileId) }, originDecision.allowOrigin);
         return;
       }
 
