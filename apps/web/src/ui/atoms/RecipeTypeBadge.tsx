@@ -12,8 +12,8 @@ function recipeTypePresentation(recipeType: Session['recipeType']) {
 
   return {
     label: 'TUI',
-    background: 'var(--surface-2)',
-    color: 'var(--text-secondary)'
+    background: 'rgba(124, 58, 237, 0.12)',
+    color: 'rgba(124, 58, 237, 0.9)'
   };
 }
 

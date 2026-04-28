@@ -582,7 +582,8 @@ export const AuditEventSchema = z.object({
     'unrestricted_access_enabled',
     'unrestricted_access_disabled',
     'unrestricted_access_used',
-    'provider_connected'
+    'provider_connected',
+    'provider_deleted'
   ]),
   profileId: z.string().min(1).nullable().default(null),
   sessionId: z.string().min(1).nullable().default(null),
