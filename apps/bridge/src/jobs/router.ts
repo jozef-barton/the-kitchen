@@ -332,28 +332,54 @@ export async function handleCodingRequest(
         sendJson(response, 400, { error: { code: 'INVALID_REQUEST', message: 'repoUrl required' } }, allowOrigin);
         return true;
       }
-      const targetDir = body.targetDir ?? path.join(os.homedir(), 'Code', path.basename(body.repoUrl, '.git'));
+      const repoUrl = body.repoUrl.trim();
+
+      // Reject URLs that don't start with a recognised scheme or git@host: prefix.
+      // This prevents --upload-pack and other flag injection via the URL argument.
+      const SAFE_URL = /^(https?:\/\/|git@[\w.-]+:|git:\/\/|ssh:\/\/)/i;
+      if (!SAFE_URL.test(repoUrl) || repoUrl.startsWith('-')) {
+        sendJson(response, 400, { error: { code: 'INVALID_URL', message: 'Unsupported repository URL format' } }, allowOrigin);
+        return true;
+      }
+
+      const targetDir = body.targetDir?.trim() || path.join(os.homedir(), 'Code', path.basename(repoUrl, '.git'));
       sendSseHeaders(response, allowOrigin);
-      const emit = (type: string, data: Record<string, unknown>) => {
+      const emitClone = (type: string, data: Record<string, unknown>) => {
         if (!response.writableEnded) writeSseEvent(response, { type, ts: Date.now(), ...data });
       };
-      (async () => {
-        try {
-          if (!fs.existsSync(path.dirname(targetDir))) {
-            fs.mkdirSync(path.dirname(targetDir), { recursive: true });
-          }
-          emit('clone.status', { message: `Cloning ${body.repoUrl}…` });
-          await streamShellCommand(`git clone ${body.repoUrl} ${targetDir}`, emit);
-          if (fs.existsSync(targetDir)) {
-            emit('clone.complete', { path: targetDir });
-          } else {
-            emit('clone.error', { message: 'Clone failed — directory not created' });
-          }
-        } catch (err) {
-          emit('clone.error', { message: (err as Error).message });
+      try {
+        if (!fs.existsSync(path.dirname(targetDir))) {
+          fs.mkdirSync(path.dirname(targetDir), { recursive: true });
         }
-        response.end();
-      })().catch(() => response.end());
+        emitClone('clone.status', { message: `Cloning into ${targetDir}…` });
+        // Use spawn directly to capture exit code and stream both stdout+stderr as clone.output.
+        // '--' separates git options from the URL, preventing the URL from being parsed as a flag.
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn('git', ['clone', '--progress', '--', repoUrl, targetDir], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env as Record<string, string>, GIT_TERMINAL_PROMPT: '0' }
+          });
+          const handleChunk = (chunk: Buffer) => {
+            for (const line of chunk.toString('utf8').split(/\r?\n/)) {
+              if (line.trim()) emitClone('clone.output', { line: line.trim() });
+            }
+          };
+          child.stdout?.on('data', handleChunk);
+          child.stderr?.on('data', handleChunk); // git sends progress to stderr
+          child.on('close', (code) => {
+            if (code === 0) {
+              emitClone('clone.complete', { path: targetDir });
+              resolve();
+            } else {
+              reject(new Error(`git clone failed (exit ${code ?? '?'})`));
+            }
+          });
+          child.on('error', reject);
+        });
+      } catch (err) {
+        emitClone('clone.error', { message: (err as Error).message });
+      }
+      response.end();
       return true;
     }
 

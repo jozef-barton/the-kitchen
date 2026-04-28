@@ -337,91 +337,259 @@ function CopyLine({ code }: { code: string }) {
   );
 }
 
-// ── Clone GitHub Repo panel ───────────────────────────────────────────────────
-function ClonePanel({ onDone, onCancel }: { onDone: (path: string, name: string) => void; onCancel: () => void }) {
-  const [repoUrl, setRepoUrl] = useState('');
-  const [targetDir, setTargetDir] = useState('');
-  const [log, setLog] = useState<string[]>([]);
-  const [cloning, setCloning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const logRef = useRef<HTMLDivElement | null>(null);
+// ── Clone progress modal ──────────────────────────────────────────────────────
+
+interface GitPhase { label: string; pct: number }
+
+function parseGitLine(raw: string): GitPhase | null {
+  // git sends \r-separated updates — take the last non-empty segment
+  const last = raw.split('\r').filter(s => s.trim()).pop()?.trim() ?? '';
+  // strip "remote: " prefix
+  const clean = last.replace(/^remote:\s*/i, '');
+  const m = clean.match(/^([\w][\w\s,]+?):\s+(\d+)%/);
+  if (!m) return null;
+  return { label: m[1]!.trim(), pct: Math.min(100, parseInt(m[2]!)) };
+}
+
+function ProgressBar({ pct, accent = false }: { pct: number; accent?: boolean }) {
+  return (
+    <Box w="100%" h="6px" bg="hsla(245,14%,100%,0.08)" rounded="full" overflow="hidden">
+      <Box
+        h="100%" rounded="full"
+        bg={accent ? 'var(--accent)' : 'var(--status-success)'}
+        style={{ width: `${pct}%`, transition: 'width 0.35s ease' }}
+      />
+    </Box>
+  );
+}
+
+function CloneTerminal({ repoUrl, targetDir, onDone, onClose }: {
+  repoUrl: string; targetDir: string;
+  onDone: (path: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const [phases, setPhases] = useState<Record<string, number>>({});
+  const [statusMsg, setStatusMsg] = useState('Connecting…');
+  const [status, setStatus] = useState<'running' | 'done' | 'error'>('running');
+  const [errorMsg, setErrorMsg] = useState('');
+  const stopRef = useRef<(() => void) | null>(null);
+
+  const repoShort = repoUrl.split('/').slice(-2).join('/').replace(/\.git$/, '');
 
   function inferName(url: string) {
     return url.split('/').pop()?.replace(/\.git$/, '') ?? '';
   }
 
-  async function handleClone() {
-    if (!repoUrl.trim()) return;
-    setCloning(true);
-    setError(null);
-    setLog([]);
-    api.cloneRepo(repoUrl.trim(), targetDir.trim() || undefined, (evt) => {
+  useEffect(() => {
+    const stop = api.cloneRepo(repoUrl, targetDir || undefined, (evt) => {
       if (evt.type === 'clone.status') {
-        setLog(prev => [...prev, evt.message]);
-        setTimeout(() => { logRef.current?.scrollTo({ top: 99999 }); }, 0);
+        setStatusMsg(evt.message);
+      }
+      if (evt.type === 'clone.output') {
+        const phase = parseGitLine(evt.line);
+        if (phase) {
+          setPhases(prev => ({ ...prev, [phase.label]: phase.pct }));
+          setStatusMsg(`${phase.label}…`);
+        } else if (evt.line.toLowerCase().includes('cloning into')) {
+          setStatusMsg('Receiving…');
+        }
       }
       if (evt.type === 'clone.complete') {
-        setCloning(false);
-        onDone(evt.path, inferName(repoUrl.trim()));
+        setPhases({ 'Receiving objects': 100, 'Resolving deltas': 100 });
+        setStatusMsg('Done!');
+        setStatus('done');
+        setTimeout(() => onDone(evt.path, inferName(repoUrl)), 900);
       }
       if (evt.type === 'clone.error') {
-        setError(evt.message);
-        setCloning(false);
+        setErrorMsg(evt.message);
+        setStatus('error');
       }
     });
+    stopRef.current = stop;
+    return () => stop();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const countPct  = phases['Counting objects']    ?? 0;
+  const compPct   = phases['Compressing objects'] ?? 0;
+  const mainPct   = phases['Receiving objects']   ?? 0;
+  const deltaPct  = phases['Resolving deltas']    ?? 0;
+  // weighted: counting 5%, compressing 10%, receiving 70%, deltas 15%
+  const overallPct = Math.min(99, Math.round(
+    countPct * 0.05 + compPct * 0.10 + mainPct * 0.70 + deltaPct * 0.15
+  ));
+
+  return (
+    <Box
+      position="fixed" inset={0} zIndex={200}
+      bg="rgba(0,0,0,0.55)"
+      display="flex" alignItems="center" justifyContent="center"
+      style={{ animation: 'fade-in 0.15s ease' }}
+      onClick={() => { if (status !== 'running') { stopRef.current?.(); onClose(); } }}
+    >
+      <Box
+        bg="hsl(220,14%,10%)"
+        border="1px solid hsl(220,14%,22%)"
+        rounded="14px"
+        overflow="hidden"
+        w={{ base: '90vw', md: '420px' }}
+        boxShadow="0 32px 80px rgba(0,0,0,0.5)"
+        style={{ animation: 'slide-up 0.22s ease' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Title bar */}
+        <HStack px="4" py="3" bg="hsl(220,14%,13%)" borderBottom="1px solid hsl(220,14%,18%)" gap="3">
+          <HStack gap="1.5">
+            <Box w="11px" h="11px" rounded="full" bg="hsl(0,65%,52%)" />
+            <Box w="11px" h="11px" rounded="full" bg="hsl(38,65%,52%)" />
+            <Box w="11px" h="11px" rounded="full" bg="hsl(142,50%,42%)" />
+          </HStack>
+          <Text fontSize="12px" color="hsl(220,10%,55%)" fontFamily="ui-monospace,monospace" flex="1" textAlign="center" truncate>
+            {repoShort}
+          </Text>
+          <Box w="36px" />
+        </HStack>
+
+        {/* Progress body */}
+        <VStack px="6" py="6" gap="5" align="stretch">
+          {status === 'done' ? (
+            <VStack gap="2">
+              <Text fontSize="28px">✓</Text>
+              <Text fontSize="14px" fontWeight="600" color="hsl(142,55%,55%)">Cloned successfully</Text>
+              <Text fontSize="12px" color="hsl(220,10%,50%)" fontFamily="ui-monospace,monospace" truncate>{targetDir || repoShort}</Text>
+            </VStack>
+          ) : status === 'error' ? (
+            <VStack gap="2">
+              <Text fontSize="28px">✗</Text>
+              <Text fontSize="13px" fontWeight="600" color="hsl(0,65%,60%)">Clone failed</Text>
+              <Text fontSize="11px" color="hsl(0,50%,50%)" textAlign="center">{errorMsg}</Text>
+            </VStack>
+          ) : (
+            <>
+              <VStack gap="1" align="stretch">
+                <HStack justify="space-between" mb="1">
+                  <Text fontSize="12px" color="hsl(220,10%,65%)">Overall</Text>
+                  <Text fontSize="12px" color="hsl(142,55%,50%)" fontFamily="ui-monospace,monospace">{overallPct}%</Text>
+                </HStack>
+                <ProgressBar pct={overallPct} />
+              </VStack>
+
+              {mainPct > 0 && (
+                <VStack gap="1" align="stretch">
+                  <HStack justify="space-between" mb="1">
+                    <Text fontSize="11px" color="hsl(220,10%,45%)">Receiving objects</Text>
+                    <Text fontSize="11px" color="hsl(220,10%,45%)" fontFamily="ui-monospace,monospace">{mainPct}%</Text>
+                  </HStack>
+                  <ProgressBar pct={mainPct} accent />
+                </VStack>
+              )}
+
+              {deltaPct > 0 && (
+                <VStack gap="1" align="stretch">
+                  <HStack justify="space-between" mb="1">
+                    <Text fontSize="11px" color="hsl(220,10%,45%)">Resolving deltas</Text>
+                    <Text fontSize="11px" color="hsl(220,10%,45%)" fontFamily="ui-monospace,monospace">{deltaPct}%</Text>
+                  </HStack>
+                  <ProgressBar pct={deltaPct} accent />
+                </VStack>
+              )}
+
+              <HStack gap="2" justify="center" color="hsl(220,10%,50%)">
+                <Spinner size="xs" />
+                <Text fontSize="12px">{statusMsg}</Text>
+              </HStack>
+            </>
+          )}
+        </VStack>
+
+        {/* Footer */}
+        {status !== 'done' && (
+          <Box px="6" pb="5" textAlign="right">
+            <Button
+              size="sm" h="7" px="3" variant="ghost"
+              fontSize="12px"
+              color="hsl(220,10%,45%)"
+              _hover={{ color: 'hsl(220,10%,75%)' }}
+              onClick={() => { stopRef.current?.(); onClose(); }}
+            >
+              {status === 'running' ? 'Cancel' : 'Close'}
+            </Button>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Clone GitHub Repo panel ───────────────────────────────────────────────────
+function ClonePanel({ onDone, onCancel }: { onDone: (path: string, name: string) => void; onCancel: () => void }) {
+  const [repoUrl, setRepoUrl] = useState('');
+  const [targetDir, setTargetDir] = useState('');
+  const [showTerminal, setShowTerminal] = useState(false);
+
+  function inferName(url: string) {
+    return url.split('/').pop()?.replace(/\.git$/, '') ?? '';
   }
 
   return (
-    <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
-      <VStack align="stretch" gap="3">
-        <Text fontSize="13px" fontWeight="600" color="var(--text-primary)">Clone GitHub Repository</Text>
-        <Input
-          placeholder="https://github.com/owner/repo.git"
-          value={repoUrl}
-          onChange={e => setRepoUrl(e.currentTarget.value)}
-          size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-          rounded="var(--radius-control)"
-          disabled={cloning}
-        />
-        <HStack gap="2">
+    <>
+      <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
+        <VStack align="stretch" gap="3">
+          <Text fontSize="13px" fontWeight="600" color="var(--text-primary)">Clone GitHub Repository</Text>
           <Input
-            placeholder={`Clone into… (default: ~/Code/${inferName(repoUrl) || 'repo'})`}
-            value={targetDir}
-            onChange={e => setTargetDir(e.currentTarget.value)}
+            placeholder="https://github.com/owner/repo.git"
+            value={repoUrl}
+            onChange={e => setRepoUrl(e.currentTarget.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && repoUrl.trim()) setShowTerminal(true); }}
             size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-            rounded="var(--radius-control)" flex="1"
-            disabled={cloning}
+            rounded="var(--radius-control)"
           />
-          <Button
-            size="sm" h="8" px="3" flexShrink={0} variant="outline"
-            color="var(--text-secondary)" borderColor="var(--border-subtle)"
-            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-            rounded="var(--radius-control)" disabled={cloning}
-            onClick={async () => { const p = await api.pickDirectory(); if (p) setTargetDir(p + '/' + inferName(repoUrl)); }}
-          >
-            Browse…
-          </Button>
-        </HStack>
-        {log.length > 0 && (
-          <Box ref={logRef} maxH="100px" overflow="auto" bg="hsl(220,14%,8%)" rounded="4px" p="2">
-            {log.map((l, i) => <Text key={i} fontSize="11px" color="var(--text-muted)" fontFamily="ui-monospace,monospace">{l}</Text>)}
-            {cloning && <Text fontSize="11px" color="var(--text-muted)" fontFamily="ui-monospace,monospace">…</Text>}
-          </Box>
-        )}
-        {error && <Text fontSize="12px" color="var(--status-danger)">{error}</Text>}
-        <HStack gap="2" justify="flex-end">
-          <Button variant="ghost" size="sm" h="8" px="3" onClick={onCancel} color="var(--text-muted)" disabled={cloning}>Cancel</Button>
-          <Button
-            size="sm" h="8" px="3" bg="var(--accent)" color="var(--accent-contrast)"
-            _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)"
-            loading={cloning} disabled={!repoUrl.trim()}
-            onClick={() => void handleClone()}
-          >
-            Clone
-          </Button>
-        </HStack>
-      </VStack>
-    </Box>
+          <HStack gap="2">
+            <Input
+              placeholder={`~/Code/${inferName(repoUrl) || 'repo'}`}
+              value={targetDir}
+              onChange={e => setTargetDir(e.currentTarget.value)}
+              size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
+              rounded="var(--radius-control)" flex="1"
+            />
+            <Button
+              size="sm" h="8" px="3" flexShrink={0} variant="outline"
+              color="var(--text-secondary)" borderColor="var(--border-subtle)"
+              _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+              rounded="var(--radius-control)"
+              onClick={async () => {
+                const p = await api.pickDirectory();
+                if (p) setTargetDir(p + '/' + inferName(repoUrl));
+              }}
+            >
+              Browse…
+            </Button>
+          </HStack>
+          <HStack gap="2" justify="flex-end">
+            <Button variant="ghost" size="sm" h="8" px="3" onClick={onCancel} color="var(--text-muted)">Cancel</Button>
+            <Button
+              size="sm" h="8" px="3" bg="var(--accent)" color="var(--accent-contrast)"
+              _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)"
+              disabled={!repoUrl.trim()}
+              onClick={() => setShowTerminal(true)}
+            >
+              Clone
+            </Button>
+          </HStack>
+        </VStack>
+      </Box>
+
+      {showTerminal && (
+        <CloneTerminal
+          repoUrl={repoUrl.trim()}
+          targetDir={targetDir.trim()}
+          onClose={() => setShowTerminal(false)}
+          onDone={(clonedPath, name) => {
+            setShowTerminal(false);
+            onDone(clonedPath, name);
+          }}
+        />
+      )}
+    </>
   );
 }
 
