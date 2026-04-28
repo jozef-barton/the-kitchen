@@ -2,74 +2,13 @@ import React, { memo, useEffect, useMemo, useRef, useState, useCallback } from '
 import { Box, Button, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
 import type { JobEvent } from '../../../lib/coding-api';
 import { buildConversationItems } from './buildConversationItems';
-import type { TurnFileEntry } from './buildConversationItems';
 import { AgentInitRow } from './events/AgentInitRow';
 import { ThinkingRow } from './events/ThinkingRow';
 import { MessageRow } from './events/MessageRow';
 import { ToolPairRow } from './events/ToolPairRow';
 import { RawRow } from './events/RawRow';
 import { UserTurnRow } from './events/UserTurnRow';
-
-// ── Per-turn file change summary ──────────────────────────────────────────────
-
-function TurnFileSummary({ files, onOpenFile }: { files: TurnFileEntry[]; onOpenFile?: (path: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const totalAdded = files.reduce((s, f) => s + f.linesAdded, 0);
-  const totalRemoved = files.reduce((s, f) => s + f.linesRemoved, 0);
-
-  return (
-    <Box py="1">
-      <HStack gap="2" align="center" flexWrap="wrap">
-        <Box flex="1" h="1px" bg="var(--divider)" />
-        <HStack gap="1" flexShrink={0} fontSize="11px" color="var(--text-muted)">
-          <Text>{files.length} file{files.length !== 1 ? 's' : ''} changed</Text>
-          {totalAdded > 0 && <Text color="var(--status-success)">+{totalAdded}</Text>}
-          {totalRemoved > 0 && <Text color="var(--status-danger)">−{totalRemoved}</Text>}
-          <Button
-            variant="ghost" size="xs" h="4" px="1.5"
-            fontSize="11px" color="var(--accent)"
-            _hover={{ bg: 'transparent', textDecoration: 'underline' }}
-            onClick={() => setExpanded(v => !v)}
-          >
-            {expanded ? 'hide' : 'review'}
-          </Button>
-        </HStack>
-        <Box flex="1" h="1px" bg="var(--divider)" />
-      </HStack>
-      {expanded && (
-        <HStack gap="2" flexWrap="wrap" pt="1.5" px="2">
-          {files.map(f => {
-            const name = f.path.split('/').pop() ?? f.path;
-            const icon = f.isNewFile ? '📝' : '✏️';
-            return (
-              <Button
-                key={f.toolUseId}
-                size="xs" h="6" px="2"
-                variant="outline"
-                fontSize="11px"
-                color="var(--text-secondary)"
-                borderColor="var(--border-subtle)"
-                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-                rounded="var(--radius-pill)"
-                onClick={() => {
-                  // Scroll to diff card
-                  const el = document.getElementById(`diff-${f.toolUseId}`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                  // Also open file panel
-                  onOpenFile?.(f.path);
-                }}
-              >
-                {icon} {name}
-                {f.linesAdded > 0 && <Text as="span" color="var(--status-success)" ml="1">+{f.linesAdded}</Text>}
-                {f.linesRemoved > 0 && <Text as="span" color="var(--status-danger)" ml="0.5">−{f.linesRemoved}</Text>}
-              </Button>
-            );
-          })}
-        </HStack>
-      )}
-    </Box>
-  );
-}
+import { TurnSummary } from './events/TurnSummary';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -234,14 +173,31 @@ export const JobConversation = memo(function JobConversation({
                   </Box>
                 );
               }
-              if (item.kind === 'turn_file_summary') {
-                return <TurnFileSummary key={i} files={item.files} onOpenFile={onOpenFile} />;
+              if (item.kind === 'turn_action_summary') {
+                return (
+                  <TurnSummary
+                    key={`summary-${item.turnIndex}-${item.jobId}`}
+                    jobId={item.jobId}
+                    turnIndex={item.turnIndex}
+                    durationMs={item.durationMs}
+                    calls={item.calls}
+                    lastMessageId={item.lastMessageId}
+                  />
+                );
               }
               if (item.kind === 'thinking') {
                 return <ThinkingRow key={item.messageId} messageId={item.messageId} text={item.text} ts={item.ts} />;
               }
               if (item.kind === 'message') {
-                return <MessageRow key={item.messageId} messageId={item.messageId} text={item.text} isStreaming={item.messageId === streamingMessageId} />;
+                return (
+                  <MessageRow
+                    key={item.messageId}
+                    messageId={item.messageId}
+                    jobId={item.jobId}
+                    text={item.text}
+                    isStreaming={item.messageId === streamingMessageId}
+                  />
+                );
               }
               if (item.kind === 'tool_pair') {
                 const ev = item.call as unknown as { toolUseId: string };

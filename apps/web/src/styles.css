@@ -362,6 +362,12 @@ tbody tr:hover {
 /* ─────────────────────────────────────────────────────────────────────────────
    KEYFRAMES
    ───────────────────────────────────────────────────────────────────────────── */
+/* Turn summary card fade-in (150ms delay baked in via animation-fill-mode: both) */
+@keyframes summary-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Subtle appear animation for new agent messages */
 @keyframes message-appear {
   from { opacity: 0; transform: translateY(3px); }
@@ -399,8 +405,8 @@ tbody tr:hover {
   50%, 100% { opacity: 0; }
 }
 
-/* Cursor appended inline at the end of the last rendered block element */
-.prose.is-streaming > *:last-child::after {
+/* Blinking cursor while typewriter is in progress — replaces the old is-streaming approach */
+.prose.is-typing > *:last-child::after {
   content: '▍';
   display: inline;
   animation: streaming-cursor-blink 0.7s step-end infinite;
