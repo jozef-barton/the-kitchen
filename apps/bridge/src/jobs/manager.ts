@@ -369,6 +369,39 @@ export class JobManager {
     const runner = this.activeRunners.get(jobId);
     if (!runner) return false;
 
+    // Shell approvals (detected from tool_results) need a session restart with bypass mode
+    // because --permission-mode acceptEdits cannot be changed at runtime.
+    if (approvalId.startsWith('shell-')) {
+      const optionIdx = parseInt(response, 10);
+      const project = this.store.getProject(job.projectId);
+      if (!project) return false;
+
+      if (optionIdx === 2) {
+        // Deny — tell the agent to continue without running it
+        runner.respond(approvalId, response); // clears pendingApprovalId
+        this.store.updateJobStatus(jobId, 'running', { approvalPending: undefined });
+        await this.sendTurn(jobId, "Please skip that command and continue without running it.");
+      } else {
+        // Approve (once or all) — restart with bypassPermissions so the command actually runs
+        runner.cancel();
+        this.activeRunners.delete(jobId);
+        const bypassJob = { ...job, approvalMode: 'auto_all' as CodingJob['approvalMode'] };
+        this.store.updateJobStatus(jobId, 'running', { approvalPending: undefined });
+        this.startJob(bypassJob, project, job.agentSessionId ?? undefined);
+        // Set awaiting_user so sendTurn can queue the continuation
+        this.store.updateJobStatus(jobId, 'awaiting_user');
+        const msg = optionIdx === 1
+          ? "You're approved to run that and similar commands for the rest of this session. Please proceed."
+          : "You're approved to run that command. Please proceed.";
+        await this.sendTurn(jobId, msg);
+      }
+
+      const ev: JobEvent = { type: 'job.approval_resolved', jobId, approvalId, response, ts: Date.now() };
+      this.store.insertEvent(jobId, ev);
+      this.broadcast(jobId, ev);
+      return true;
+    }
+
     const written = runner.respond(approvalId, response);
     if (!written) return false;
 
