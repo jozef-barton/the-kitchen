@@ -42,8 +42,6 @@ export class JobRunner {
   private stuckCheckTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingApprovalId: string | null = null;
   private stdinClosed = false;
-  // Per-session soft flag: "Approve all in this job" — auto-resolves shell approvals
-  private autoApproveShell = false;
 
   constructor(
     private readonly job: CodingJob,
@@ -241,31 +239,6 @@ export class JobRunner {
       }
     }
 
-    // Shell approval detected by the adapter — intercept before broadcasting
-    if (event.type === 'job.needs_approval') {
-      const ev = event as Extract<JobEvent, { type: 'job.needs_approval' }>;
-      const isShell = ev.category === 'shell' || ev.category === 'install' || ev.category === 'delete';
-      if (isShell && this.autoApproveShell) {
-        // Auto-resolve: send affirmative turn to the agent and continue silently
-        this.sendUserMessage(`Yes, please run that command.`);
-        const resolved: JobEvent = { type: 'job.approval_resolved', jobId: this.job.id, approvalId: ev.approvalId, response: 'auto', ts: Date.now() };
-        this.callbacks.onEvent(resolved);
-        return;
-      }
-      if (isShell && this.pendingApprovalId === null) {
-        this.pendingApprovalId = ev.approvalId;
-        this.callbacks.onNeedsApproval(ev.approvalId, {
-          approvalId: ev.approvalId,
-          message: ev.message,
-          options: ev.options,
-          defaultOption: ev.defaultOption,
-          category: ev.category,
-        });
-        this.callbacks.onEvent(event);
-        return;
-      }
-    }
-
     // Emit file_changed for Write/Edit tool calls
     if (event.type === 'job.tool_call') {
       const tc = event as Extract<JobEvent, { type: 'job.tool_call' }>;
@@ -406,28 +379,10 @@ export class JobRunner {
 
   respond(approvalId: string, response: string): boolean {
     if (this.pendingApprovalId !== approvalId) return false;
+    this.writeStdin(response);
     this.pendingApprovalId = null;
-
-    // For shell approvals: parse the option index
-    // 0 = Approve once, 1 = Approve all in this job, 2 = Deny
-    const optionIdx = parseInt(response, 10);
-    if (optionIdx === 1) {
-      // "Approve all in this job" — set flag and send affirmative reply
-      this.autoApproveShell = true;
-      this.sendUserMessage('Yes, please run that command, and you may run similar shell commands in this session without asking again.');
-    } else if (optionIdx === 2 || response === '2') {
-      // Deny — reset auto-approve flag in case it was set
-      this.autoApproveShell = false;
-      this.sendUserMessage("Please don't run that command. Continue without it if possible, or stop cleanly.");
-    } else {
-      // Approve once (default)
-      this.sendUserMessage('Yes, please run that command.');
-    }
     return true;
   }
-
-  /** Expose the auto-approve-shell flag (manager uses this for "approve all" saves) */
-  setAutoApproveShell(value: boolean) { this.autoApproveShell = value; }
 
   private startHeartbeat() {
     this.heartbeatTimer = setInterval(() => {
