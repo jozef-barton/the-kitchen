@@ -65,7 +65,10 @@ export const JobConversation = memo(function JobConversation({
     if (latestFileToolId) setAnimatingToolUseId(latestFileToolId);
   }, [latestFileToolId]);
 
-  // Slice items: if something is animating, hide everything after that card
+  // While a file-diff animation is running, hold back the end-of-turn status items
+  // (summary card, "Completed" result, "awaiting reply" divider) until the animation
+  // finishes. Messages and tool calls still appear immediately.
+  const ANIMATION_BLOCKED = new Set(['turn_action_summary', 'result', 'turn_boundary']);
   const visibleItems = useMemo(() => {
     const all = items.slice(-500);
     if (!animatingToolUseId) return all;
@@ -73,8 +76,9 @@ export const JobConversation = memo(function JobConversation({
       item.kind === 'tool_pair' &&
       (item.call as unknown as { toolUseId: string }).toolUseId === animatingToolUseId
     );
-    return blockAt >= 0 ? all.slice(0, blockAt + 1) : all;
-  }, [items, animatingToolUseId]);
+    if (blockAt < 0) return all;
+    return all.filter((item, idx) => idx <= blockAt || !ANIMATION_BLOCKED.has(item.kind));
+  }, [items, animatingToolUseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ID of the message currently being streamed (last message item when job is running)
   const streamingMessageId = useMemo(() => {
