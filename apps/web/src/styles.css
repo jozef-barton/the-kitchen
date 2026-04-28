@@ -28,7 +28,7 @@ body,
   /* Background layers — warm neutral, hue 40 */
   --app-bg:          hsl(40, 18%, 97%);    /* warm off-white canvas */
   --shell-bg:        hsl(40, 12%, 100%);   /* top bar — pure white */
-  --sidebar-bg:      hsl(245, 60%, 50%);   /* accent-colored sidebar */
+  --sidebar-bg:      hsl(40, 14%, 96%);
   --surface-1:       hsl(40, 14%, 96%);    /* main panels */
   --surface-2:       hsl(40, 12%, 100%);   /* cards, elevated — pure white */
   --surface-3:       hsl(40, 10%, 92%);    /* deeper layers / pressed */
@@ -134,7 +134,7 @@ body,
   /* Background layers — cool blue-gray, hsl(220, *, *) */
   --app-bg:         hsl(220, 14%, 8%);
   --shell-bg:       hsl(220, 13%, 10%);
-  --sidebar-bg:     hsl(245, 45%, 20%);   /* deep indigo for dark-mode sidebar */
+  --sidebar-bg:     hsl(220, 14%, 8%);
   --surface-1:      hsl(220, 12%, 13%);
   --surface-2:      hsl(220, 11%, 16%);
   --surface-3:      hsl(220, 10%, 20%);
@@ -198,27 +198,6 @@ body,
 
   /* Focus — indigo glow */
   --focus-ring: 0 0 0 3px hsla(245, 55%, 65%, 0.30);
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   SIDEBAR THEME — white-on-color token overrides for the accent sidebar
-   Applied as a className on the sidebar root; CSS variables cascade to all
-   children so no per-component changes are needed.
-   ───────────────────────────────────────────────────────────────────────────── */
-.sidebar-theme {
-  --text-primary:     rgba(255, 255, 255, 0.95);
-  --text-secondary:   rgba(255, 255, 255, 0.72);
-  --text-muted:       rgba(255, 255, 255, 0.48);
-  --text-inverse:     hsl(245, 60%, 50%);
-  --divider:          rgba(255, 255, 255, 0.10);
-  --border-subtle:    rgba(255, 255, 255, 0.10);
-  --border-default:   rgba(255, 255, 255, 0.18);
-  --surface-hover:    rgba(255, 255, 255, 0.09);
-  --surface-active:   rgba(255, 255, 255, 0.16);
-  --surface-selected: rgba(255, 255, 255, 0.22);
-  --surface-2:        rgba(255, 255, 255, 0.06);
-  --surface-3:        rgba(255, 255, 255, 0.14);
-  --focus-ring:       0 0 0 3px rgba(255, 255, 255, 0.28);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
