@@ -5,7 +5,7 @@ const OptionalStringSchema = z.preprocess((value) => (value === null ? undefined
 const OptionalTextSchema = z.preprocess((value) => (value === null ? undefined : value), z.string().min(1).optional());
 const OptionalDateTimeSchema = z.preprocess((value) => (value === null ? undefined : value), z.string().datetime().optional());
 export const ThemeModeSchema = z.enum(['dark', 'light']);
-export const AppPageSchema = z.enum(['chat', 'recipes', 'sessions', 'jobs', 'tools', 'skills', 'settings']);
+export const AppPageSchema = z.enum(['chat', 'recipes', 'sessions', 'jobs', 'tools', 'skills', 'settings', 'coding']);
 export const ToolsTabSchema = z.enum(['all', 'history']);
 export const SpacesTabSchema = z.enum(['recipes', 'history']);
 export const SessionAssociationSourceSchema = z.enum([
@@ -466,7 +466,8 @@ export const AuditEventSchema = z.object({
         'unrestricted_access_enabled',
         'unrestricted_access_disabled',
         'unrestricted_access_used',
-        'provider_connected'
+        'provider_connected',
+        'provider_deleted'
     ]),
     profileId: z.string().min(1).nullable().default(null),
     sessionId: z.string().min(1).nullable().default(null),
