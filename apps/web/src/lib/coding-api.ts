@@ -181,6 +181,45 @@ export async function pickDirectory(): Promise<string | null> {
   return d.path ?? null;
 }
 
+export type CloneEvent =
+  | { type: 'clone.status'; message: string }
+  | { type: 'clone.complete'; path: string }
+  | { type: 'clone.error'; message: string };
+
+export function cloneRepo(
+  repoUrl: string,
+  targetDir: string | undefined,
+  onEvent: (e: CloneEvent) => void,
+): () => void {
+  let closed = false;
+  const ctrl = new AbortController();
+  codingFetch('/api/system/clone', {
+    method: 'POST',
+    body: JSON.stringify({ repoUrl, targetDir }),
+    signal: ctrl.signal,
+  }).then(async (res) => {
+    if (!res.body) return;
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done || closed) break;
+      buf += dec.decode(value, { stream: true });
+      let idx = buf.indexOf('\n\n');
+      while (idx >= 0) {
+        const chunk = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (chunk.startsWith('data:')) {
+          try { onEvent(JSON.parse(chunk.slice(5).trim()) as CloneEvent); } catch { /* ignore */ }
+        }
+        idx = buf.indexOf('\n\n');
+      }
+    }
+  }).catch(() => {});
+  return () => { closed = true; ctrl.abort(); };
+}
+
 export async function getJobFiles(jobId: string): Promise<{ files: JobFileSummaryEntry[] }> {
   const r = await codingFetch(`/api/jobs/${jobId}/files`);
   if (!r.ok) throw new Error('Failed to fetch file summary');

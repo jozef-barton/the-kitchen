@@ -324,6 +324,39 @@ export async function handleCodingRequest(
       }
       return true;
     }
+
+    // POST /api/system/clone — clone a GitHub repo into a chosen directory
+    if (method === 'POST' && parts[2] === 'clone') {
+      const body = await readJsonBody(request) as { repoUrl?: string; targetDir?: string };
+      if (!body.repoUrl) {
+        sendJson(response, 400, { error: { code: 'INVALID_REQUEST', message: 'repoUrl required' } }, allowOrigin);
+        return true;
+      }
+      const targetDir = body.targetDir ?? path.join(os.homedir(), 'Code', path.basename(body.repoUrl, '.git'));
+      sendSseHeaders(response, allowOrigin);
+      const emit = (type: string, data: Record<string, unknown>) => {
+        if (!response.writableEnded) writeSseEvent(response, { type, ts: Date.now(), ...data });
+      };
+      (async () => {
+        try {
+          if (!fs.existsSync(path.dirname(targetDir))) {
+            fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+          }
+          emit('clone.status', { message: `Cloning ${body.repoUrl}…` });
+          await streamShellCommand(`git clone ${body.repoUrl} ${targetDir}`, emit);
+          if (fs.existsSync(targetDir)) {
+            emit('clone.complete', { path: targetDir });
+          } else {
+            emit('clone.error', { message: 'Clone failed — directory not created' });
+          }
+        } catch (err) {
+          emit('clone.error', { message: (err as Error).message });
+        }
+        response.end();
+      })().catch(() => response.end());
+      return true;
+    }
+
     return false;
   }
 

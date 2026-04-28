@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Button, Flex, HStack, Input, NativeSelect, Spinner, Text, Textarea, VStack
 } from '@chakra-ui/react';
@@ -337,6 +337,94 @@ function CopyLine({ code }: { code: string }) {
   );
 }
 
+// ── Clone GitHub Repo panel ───────────────────────────────────────────────────
+function ClonePanel({ onDone, onCancel }: { onDone: (path: string, name: string) => void; onCancel: () => void }) {
+  const [repoUrl, setRepoUrl] = useState('');
+  const [targetDir, setTargetDir] = useState('');
+  const [log, setLog] = useState<string[]>([]);
+  const [cloning, setCloning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const logRef = useRef<HTMLDivElement | null>(null);
+
+  function inferName(url: string) {
+    return url.split('/').pop()?.replace(/\.git$/, '') ?? '';
+  }
+
+  async function handleClone() {
+    if (!repoUrl.trim()) return;
+    setCloning(true);
+    setError(null);
+    setLog([]);
+    api.cloneRepo(repoUrl.trim(), targetDir.trim() || undefined, (evt) => {
+      if (evt.type === 'clone.status') {
+        setLog(prev => [...prev, evt.message]);
+        setTimeout(() => { logRef.current?.scrollTo({ top: 99999 }); }, 0);
+      }
+      if (evt.type === 'clone.complete') {
+        setCloning(false);
+        onDone(evt.path, inferName(repoUrl.trim()));
+      }
+      if (evt.type === 'clone.error') {
+        setError(evt.message);
+        setCloning(false);
+      }
+    });
+  }
+
+  return (
+    <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
+      <VStack align="stretch" gap="3">
+        <Text fontSize="13px" fontWeight="600" color="var(--text-primary)">Clone GitHub Repository</Text>
+        <Input
+          placeholder="https://github.com/owner/repo.git"
+          value={repoUrl}
+          onChange={e => setRepoUrl(e.currentTarget.value)}
+          size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
+          rounded="var(--radius-control)"
+          disabled={cloning}
+        />
+        <HStack gap="2">
+          <Input
+            placeholder={`Clone into… (default: ~/Code/${inferName(repoUrl) || 'repo'})`}
+            value={targetDir}
+            onChange={e => setTargetDir(e.currentTarget.value)}
+            size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
+            rounded="var(--radius-control)" flex="1"
+            disabled={cloning}
+          />
+          <Button
+            size="sm" h="8" px="3" flexShrink={0} variant="outline"
+            color="var(--text-secondary)" borderColor="var(--border-subtle)"
+            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+            rounded="var(--radius-control)" disabled={cloning}
+            onClick={async () => { const p = await api.pickDirectory(); if (p) setTargetDir(p + '/' + inferName(repoUrl)); }}
+          >
+            Browse…
+          </Button>
+        </HStack>
+        {log.length > 0 && (
+          <Box ref={logRef} maxH="100px" overflow="auto" bg="hsl(220,14%,8%)" rounded="4px" p="2">
+            {log.map((l, i) => <Text key={i} fontSize="11px" color="var(--text-muted)" fontFamily="ui-monospace,monospace">{l}</Text>)}
+            {cloning && <Text fontSize="11px" color="var(--text-muted)" fontFamily="ui-monospace,monospace">…</Text>}
+          </Box>
+        )}
+        {error && <Text fontSize="12px" color="var(--status-danger)">{error}</Text>}
+        <HStack gap="2" justify="flex-end">
+          <Button variant="ghost" size="sm" h="8" px="3" onClick={onCancel} color="var(--text-muted)" disabled={cloning}>Cancel</Button>
+          <Button
+            size="sm" h="8" px="3" bg="var(--accent)" color="var(--accent-contrast)"
+            _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)"
+            loading={cloning} disabled={!repoUrl.trim()}
+            onClick={() => void handleClone()}
+          >
+            Clone
+          </Button>
+        </HStack>
+      </VStack>
+    </Box>
+  );
+}
+
 // ── Projects list view ───────────────────────────────────────────────────────
 function ProjectsView({
   onSelectProject,
@@ -349,11 +437,12 @@ function ProjectsView({
   projects: CodingProject[];
   loading: boolean;
 }) {
-  const [adding, setAdding] = useState(false);
+  const [panel, setPanel] = useState<'none' | 'add' | 'clone'>('none');
   const [name, setName] = useState('');
   const [repoPath, setRepoPath] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function handleAdd() {
     if (!name.trim() || !repoPath.trim()) return;
@@ -361,7 +450,7 @@ function ProjectsView({
     setAddError(null);
     try {
       await api.createProject(name.trim(), repoPath.trim());
-      setName(''); setRepoPath(''); setAdding(false);
+      setName(''); setRepoPath(''); setPanel('none');
       onRefresh();
     } catch (err) {
       setAddError((err as Error).message);
@@ -370,22 +459,54 @@ function ProjectsView({
     }
   }
 
+  async function handleDelete(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setDeletingId(id);
+    try {
+      await api.deleteProject(id);
+      onRefresh();
+    } catch { /* ignore */ }
+    finally { setDeletingId(null); }
+  }
+
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0" px="4" py="4">
       <HStack justify="space-between" mb="4" flexShrink={0}>
         <Text fontSize="15px" fontWeight="600" color="var(--text-primary)">Projects</Text>
-        <Button
-          size="sm" h="8" px="3"
-          bg="var(--accent)" color="var(--accent-contrast)"
-          _hover={{ bg: 'var(--accent-strong)' }}
-          rounded="var(--radius-control)"
-          onClick={() => setAdding(v => !v)}
-        >
-          {adding ? 'Cancel' : '+ Add project'}
-        </Button>
+        <HStack gap="2">
+          <Button
+            size="sm" h="8" px="3" variant="outline"
+            color="var(--text-secondary)" borderColor="var(--border-subtle)"
+            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+            rounded="var(--radius-control)"
+            onClick={() => setPanel(p => p === 'clone' ? 'none' : 'clone')}
+          >
+            {panel === 'clone' ? 'Cancel' : '↓ Clone repo'}
+          </Button>
+          <Button
+            size="sm" h="8" px="3"
+            bg="var(--accent)" color="var(--accent-contrast)"
+            _hover={{ bg: 'var(--accent-strong)' }}
+            rounded="var(--radius-control)"
+            onClick={() => setPanel(p => p === 'add' ? 'none' : 'add')}
+          >
+            {panel === 'add' ? 'Cancel' : '+ Add project'}
+          </Button>
+        </HStack>
       </HStack>
 
-      {adding && (
+      {panel === 'clone' && (
+        <ClonePanel
+          onCancel={() => setPanel('none')}
+          onDone={(clonedPath, suggestedName) => {
+            setPanel('add');
+            setRepoPath(clonedPath);
+            setName(suggestedName);
+          }}
+        />
+      )}
+
+      {panel === 'add' && (
         <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
           <VStack align="stretch" gap="3">
             <Input
@@ -439,10 +560,11 @@ function ProjectsView({
         <Flex flex="1" align="center" justify="center">
           <VStack gap="2" textAlign="center">
             <Text fontSize="15px" fontWeight="500" color="var(--text-secondary)">No projects yet</Text>
-            <Text fontSize="13px" color="var(--text-muted)">Connect a repo to get started</Text>
-            <Button mt="2" size="sm" bg="var(--accent)" color="var(--accent-contrast)" _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)" onClick={() => setAdding(true)}>
-              Add project
-            </Button>
+            <Text fontSize="13px" color="var(--text-muted)">Add a local repo or clone one from GitHub</Text>
+            <HStack mt="2" gap="2">
+              <Button size="sm" variant="outline" color="var(--text-secondary)" borderColor="var(--border-subtle)" _hover={{ bg: 'var(--surface-hover)' }} rounded="var(--radius-control)" onClick={() => setPanel('clone')}>↓ Clone repo</Button>
+              <Button size="sm" bg="var(--accent)" color="var(--accent-contrast)" _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)" onClick={() => setPanel('add')}>Add project</Button>
+            </HStack>
           </VStack>
         </Flex>
       ) : (
@@ -457,11 +579,24 @@ function ProjectsView({
               onClick={() => onSelectProject(p.id)}
             >
               <HStack justify="space-between">
-                <VStack align="start" gap="0.5" minW={0}>
+                <VStack align="start" gap="0.5" minW={0} flex="1">
                   <Text fontSize="14px" fontWeight="500" color="var(--text-primary)" truncate>{p.name}</Text>
                   <Text fontSize="11px" color="var(--text-muted)" fontFamily="ui-monospace, monospace" truncate>{p.repoPath}</Text>
                 </VStack>
-                <RelativeTime ts={p.updatedAt} />
+                <HStack gap="2" flexShrink={0}>
+                  <RelativeTime ts={p.updatedAt} />
+                  <Button
+                    size="xs" h="6" px="2" variant="ghost"
+                    color="var(--status-danger)" opacity={0.6}
+                    _hover={{ opacity: 1, bg: 'var(--surface-danger)' }}
+                    rounded="var(--radius-control)"
+                    loading={deletingId === p.id}
+                    onClick={e => void handleDelete(p.id, e)}
+                    title="Delete project"
+                  >
+                    ✕
+                  </Button>
+                </HStack>
               </HStack>
             </Box>
           ))}

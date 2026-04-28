@@ -276,7 +276,8 @@ export function createBridgeServer(options: {
       if (
         pathname.startsWith('/api/projects') ||
         isCodingJobsPath ||
-        pathname.startsWith('/api/integrations')
+        pathname.startsWith('/api/integrations') ||
+        pathname.startsWith('/api/system')
       ) {
         const handled = await handleCodingRequest(request, response, jobManager, originDecision.allowOrigin);
         if (handled) return;
