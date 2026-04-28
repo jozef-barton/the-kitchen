@@ -138,7 +138,7 @@ export function SessionsPage({
                 <Table.Header>
                   <Table.Row>
                     <Table.ColumnHeader>Title</Table.ColumnHeader>
-                    <Table.ColumnHeader>Type</Table.ColumnHeader>
+                    <Table.ColumnHeader textAlign="center">Type</Table.ColumnHeader>
                     <Table.ColumnHeader>Summary</Table.ColumnHeader>
                     <Table.ColumnHeader textAlign="end">Updated</Table.ColumnHeader>
                     <Table.ColumnHeader textAlign="end" w="40px" />
@@ -157,7 +157,7 @@ export function SessionsPage({
                           {session.title}
                         </Text>
                       </Table.Cell>
-                      <Table.Cell>
+                      <Table.Cell textAlign="center">
                         <RecipeTypeBadge
                           recipeType={session.recipeType}
                           testId={session.recipeType === 'home' ? 'session-recipe-indicator' : 'session-type-indicator'}

@@ -60,14 +60,24 @@ export function RecipeTemplateGallery({
   const _allButtonStyles = resolveTemplateGalleryFilterButtonStyles(activeCategory === 'all');
 
   return (
-    <VStack align="stretch" gap="4" data-testid={omitTestIds ? undefined : 'spaces-template-gallery'}>
-      {/* Filter chips — single horizontal scrollable row, no wrapping */}
-      <Box
-        overflowX="auto"
-        css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
-        flexShrink={0}
-      >
-        <HStack gap="1.5" flexWrap="nowrap" pb="1">
+    <VStack align="stretch" gap="3" data-testid={omitTestIds ? undefined : 'spaces-template-gallery'}>
+      <TemplateSurface>
+        <VStack align="stretch" gap="4">
+          <VStack align="start" gap="1">
+            <Text fontSize="lg" fontWeight="600" color="var(--text-primary)">
+              Recipe Book
+            </Text>
+            <Text color="var(--text-secondary)">
+              Pre-built workspace templates for common use cases. Click a card to preview it, or start a chat to generate one.
+            </Text>
+          </VStack>
+
+          {/* Filter chips — single horizontal scrollable row, no wrapping */}
+          <Box
+            overflowX="auto"
+            css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+          >
+            <HStack gap="1.5" flexWrap="nowrap" pb="1">
           <Button
             size="xs"
             rounded="var(--radius-pill)"
@@ -107,7 +117,9 @@ export function RecipeTemplateGallery({
             );
           })}
         </HStack>
-      </Box>
+          </Box>
+        </VStack>
+      </TemplateSurface>
 
       <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} gap="5" alignItems="stretch">
         {templates.map((template) => {
