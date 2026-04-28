@@ -46,7 +46,7 @@ function prefixedModel(prefix: string, id: string): string {
  */
 const PROVIDER_DISCOVERY: Record<string, ProviderDiscoveryConfig> = {
   openai: {
-    envVar: 'VOICE_TOOLS_OPENAI_KEY',
+    envVar: 'OPENAI_API_KEY',
     buildUrl: () => 'https://api.openai.com/v1/models',
     auth: 'bearer',
     parse: (data) => {

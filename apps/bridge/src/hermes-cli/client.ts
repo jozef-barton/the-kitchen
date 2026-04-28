@@ -208,13 +208,13 @@ const HERMES_PROVIDER_REGISTRY: Record<string, HermesProviderMeta> = {
   },
   openai: {
     displayName: 'OpenAI',
-    envVar: 'VOICE_TOOLS_OPENAI_KEY',
+    envVar: 'OPENAI_API_KEY',
     keyUrl: 'https://platform.openai.com/api-keys',
     authKind: 'api_key',
     supportsApiKey: true,
     supportsOAuth: false,
     exampleModel: 'openai/gpt-4o',
-    description: 'Direct OpenAI API access. Used for STT/TTS and direct model calls.'
+    description: 'Direct OpenAI API access for GPT and o-series models.'
   },
   anthropic: {
     displayName: 'Anthropic',
