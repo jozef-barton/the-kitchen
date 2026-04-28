@@ -342,26 +342,19 @@ function CopyLine({ code }: { code: string }) {
 interface GitPhase { label: string; pct: number }
 
 function parseGitLine(raw: string): GitPhase | null {
-  // git sends \r-separated updates — take the last non-empty segment
   const last = raw.split('\r').filter(s => s.trim()).pop()?.trim() ?? '';
-  // strip "remote: " prefix
   const clean = last.replace(/^remote:\s*/i, '');
   const m = clean.match(/^([\w][\w\s,]+?):\s+(\d+)%/);
   if (!m) return null;
   return { label: m[1]!.trim(), pct: Math.min(100, parseInt(m[2]!)) };
 }
 
-function ProgressBar({ pct, accent = false }: { pct: number; accent?: boolean }) {
-  return (
-    <Box w="100%" h="6px" bg="hsla(245,14%,100%,0.08)" rounded="full" overflow="hidden">
-      <Box
-        h="100%" rounded="full"
-        bg={accent ? 'var(--accent)' : 'var(--status-success)'}
-        style={{ width: `${pct}%`, transition: 'width 0.35s ease' }}
-      />
-    </Box>
-  );
-}
+// Named phases in display order
+const PHASE_ORDER = ['Counting objects', 'Compressing objects', 'Receiving objects', 'Resolving deltas'];
+const PHASE_WEIGHT: Record<string, number> = {
+  'Counting objects': 0.05, 'Compressing objects': 0.10,
+  'Receiving objects': 0.70, 'Resolving deltas': 0.15,
+};
 
 function CloneTerminal({ repoUrl, targetDir, onDone, onClose }: {
   repoUrl: string; targetDir: string;
@@ -369,9 +362,9 @@ function CloneTerminal({ repoUrl, targetDir, onDone, onClose }: {
   onClose: () => void;
 }) {
   const [phases, setPhases] = useState<Record<string, number>>({});
-  const [statusMsg, setStatusMsg] = useState('Connecting…');
-  const [status, setStatus] = useState<'running' | 'done' | 'error'>('running');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [lastLine, setLastLine] = useState('');
+  const [status, setStatus] = useState<'connecting' | 'running' | 'done' | 'error'>('connecting');
+  const [errorDetail, setErrorDetail] = useState('');
   const stopRef = useRef<(() => void) | null>(null);
 
   const repoShort = repoUrl.split('/').slice(-2).join('/').replace(/\.git$/, '');
@@ -383,25 +376,29 @@ function CloneTerminal({ repoUrl, targetDir, onDone, onClose }: {
   useEffect(() => {
     const stop = api.cloneRepo(repoUrl, targetDir || undefined, (evt) => {
       if (evt.type === 'clone.status') {
-        setStatusMsg(evt.message);
+        setStatus('running');
+        setLastLine(evt.message);
       }
       if (evt.type === 'clone.output') {
+        setStatus('running');
         const phase = parseGitLine(evt.line);
         if (phase) {
           setPhases(prev => ({ ...prev, [phase.label]: phase.pct }));
-          setStatusMsg(`${phase.label}…`);
-        } else if (evt.line.toLowerCase().includes('cloning into')) {
-          setStatusMsg('Receiving…');
+        } else {
+          // Show non-progress lines (like "Cloning into...", "remote: Total...")
+          const stripped = evt.line.replace(/^remote:\s*/i, '').trim();
+          if (stripped && !stripped.match(/^\d/) && stripped.length < 80) {
+            setLastLine(stripped);
+          }
         }
       }
       if (evt.type === 'clone.complete') {
-        setPhases({ 'Receiving objects': 100, 'Resolving deltas': 100 });
-        setStatusMsg('Done!');
+        setPhases(Object.fromEntries(PHASE_ORDER.map(k => [k, 100])));
         setStatus('done');
         setTimeout(() => onDone(evt.path, inferName(repoUrl)), 900);
       }
       if (evt.type === 'clone.error') {
-        setErrorMsg(evt.message);
+        setErrorDetail(evt.message);
         setStatus('error');
       }
     });
@@ -409,109 +406,138 @@ function CloneTerminal({ repoUrl, targetDir, onDone, onClose }: {
     return () => stop();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const countPct  = phases['Counting objects']    ?? 0;
-  const compPct   = phases['Compressing objects'] ?? 0;
-  const mainPct   = phases['Receiving objects']   ?? 0;
-  const deltaPct  = phases['Resolving deltas']    ?? 0;
-  // weighted: counting 5%, compressing 10%, receiving 70%, deltas 15%
-  const overallPct = Math.min(99, Math.round(
-    countPct * 0.05 + compPct * 0.10 + mainPct * 0.70 + deltaPct * 0.15
+  const overallPct = status === 'done' ? 100 : Math.min(99, Math.round(
+    PHASE_ORDER.reduce((sum, k) => sum + (phases[k] ?? 0) * (PHASE_WEIGHT[k] ?? 0), 0)
   ));
+  const hasPhases = PHASE_ORDER.some(k => (phases[k] ?? 0) > 0);
 
   return (
     <Box
       position="fixed" inset={0} zIndex={200}
-      bg="rgba(0,0,0,0.55)"
+      bg="rgba(0,0,0,0.6)"
       display="flex" alignItems="center" justifyContent="center"
       style={{ animation: 'fade-in 0.15s ease' }}
-      onClick={() => { if (status !== 'running') { stopRef.current?.(); onClose(); } }}
+      onClick={() => { if (status !== 'running' && status !== 'connecting') { stopRef.current?.(); onClose(); } }}
     >
       <Box
-        bg="hsl(220,14%,10%)"
-        border="1px solid hsl(220,14%,22%)"
-        rounded="14px"
-        overflow="hidden"
-        w={{ base: '90vw', md: '420px' }}
-        boxShadow="0 32px 80px rgba(0,0,0,0.5)"
+        bg="hsl(224,16%,9%)"
+        border="1px solid hsl(224,12%,20%)"
+        rounded="14px" overflow="hidden"
+        w={{ base: '92vw', md: '440px' }}
+        boxShadow="0 32px 80px rgba(0,0,0,0.6)"
         style={{ animation: 'slide-up 0.22s ease' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Title bar */}
-        <HStack px="4" py="3" bg="hsl(220,14%,13%)" borderBottom="1px solid hsl(220,14%,18%)" gap="3">
+        {/* macOS title bar */}
+        <HStack px="4" py="3" bg="hsl(224,16%,11%)" borderBottom="1px solid hsl(224,12%,17%)" gap="3">
           <HStack gap="1.5">
             <Box w="11px" h="11px" rounded="full" bg="hsl(0,65%,52%)" />
             <Box w="11px" h="11px" rounded="full" bg="hsl(38,65%,52%)" />
             <Box w="11px" h="11px" rounded="full" bg="hsl(142,50%,42%)" />
           </HStack>
-          <Text fontSize="12px" color="hsl(220,10%,55%)" fontFamily="ui-monospace,monospace" flex="1" textAlign="center" truncate>
-            {repoShort}
+          <Text fontSize="12px" color="hsl(220,8%,50%)" fontFamily="ui-monospace,monospace" flex="1" textAlign="center" truncate>
+            git clone — {repoShort}
           </Text>
           <Box w="36px" />
         </HStack>
 
-        {/* Progress body */}
-        <VStack px="6" py="6" gap="5" align="stretch">
+        <VStack px="6" py="6" gap="4" align="stretch">
           {status === 'done' ? (
-            <VStack gap="2">
-              <Text fontSize="28px">✓</Text>
-              <Text fontSize="14px" fontWeight="600" color="hsl(142,55%,55%)">Cloned successfully</Text>
-              <Text fontSize="12px" color="hsl(220,10%,50%)" fontFamily="ui-monospace,monospace" truncate>{targetDir || repoShort}</Text>
+            /* ── Success ── */
+            <VStack gap="2" py="2">
+              <Text fontSize="24px">✓</Text>
+              <Text fontSize="14px" fontWeight="600" color="var(--status-success)">Cloned successfully</Text>
+              <Text fontSize="11px" color="hsl(220,8%,45%)" fontFamily="ui-monospace,monospace" truncate maxW="320px">
+                {targetDir || repoShort}
+              </Text>
             </VStack>
           ) : status === 'error' ? (
-            <VStack gap="2">
-              <Text fontSize="28px">✗</Text>
-              <Text fontSize="13px" fontWeight="600" color="hsl(0,65%,60%)">Clone failed</Text>
-              <Text fontSize="11px" color="hsl(0,50%,50%)" textAlign="center">{errorMsg}</Text>
+            /* ── Error ── */
+            <VStack gap="3" align="stretch">
+              <HStack gap="2">
+                <Text color="hsl(0,65%,60%)">✗</Text>
+                <Text fontSize="13px" fontWeight="600" color="hsl(0,65%,60%)">Clone failed</Text>
+              </HStack>
+              <Box bg="hsl(224,16%,6%)" rounded="8px" p="3" fontFamily="ui-monospace,monospace" fontSize="11px" color="hsl(0,55%,55%)" lineHeight="1.6">
+                {errorDetail}
+              </Box>
             </VStack>
           ) : (
+            /* ── Running / Connecting ── */
             <>
-              <VStack gap="1" align="stretch">
-                <HStack justify="space-between" mb="1">
-                  <Text fontSize="12px" color="hsl(220,10%,65%)">Overall</Text>
-                  <Text fontSize="12px" color="hsl(142,55%,50%)" fontFamily="ui-monospace,monospace">{overallPct}%</Text>
+              {/* Main progress bar — pulses while connecting, fills while running */}
+              <Box>
+                <HStack justify="space-between" mb="2">
+                  <Text fontSize="11px" color="hsl(220,8%,55%)" fontWeight="500">
+                    {status === 'connecting' ? 'Connecting…' : 'Progress'}
+                  </Text>
+                  {status === 'running' && (
+                    <Text fontSize="11px" color="var(--status-success)" fontFamily="ui-monospace,monospace">{overallPct}%</Text>
+                  )}
                 </HStack>
-                <ProgressBar pct={overallPct} />
-              </VStack>
+                <Box w="100%" h="5px" bg="hsl(224,12%,17%)" rounded="full" overflow="hidden">
+                  {status === 'connecting' ? (
+                    /* Indeterminate shimmer */
+                    <Box
+                      h="100%"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent, var(--accent), transparent)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.6s ease infinite',
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      h="100%" rounded="full"
+                      bg="var(--status-success)"
+                      style={{ width: `${overallPct}%`, transition: 'width 0.4s ease' }}
+                    />
+                  )}
+                </Box>
+              </Box>
 
-              {mainPct > 0 && (
-                <VStack gap="1" align="stretch">
-                  <HStack justify="space-between" mb="1">
-                    <Text fontSize="11px" color="hsl(220,10%,45%)">Receiving objects</Text>
-                    <Text fontSize="11px" color="hsl(220,10%,45%)" fontFamily="ui-monospace,monospace">{mainPct}%</Text>
-                  </HStack>
-                  <ProgressBar pct={mainPct} accent />
+              {/* Per-phase rows — appear as each phase starts */}
+              {hasPhases && (
+                <VStack gap="2.5" align="stretch">
+                  {PHASE_ORDER.filter(k => (phases[k] ?? 0) > 0).map(k => (
+                    <Box key={k}>
+                      <HStack justify="space-between" mb="1">
+                        <Text fontSize="10px" color="hsl(220,8%,45%)">{k}</Text>
+                        <Text fontSize="10px" color="hsl(220,8%,45%)" fontFamily="ui-monospace,monospace">
+                          {phases[k] === 100 ? '✓' : `${phases[k]}%`}
+                        </Text>
+                      </HStack>
+                      <Box w="100%" h="3px" bg="hsl(224,12%,17%)" rounded="full" overflow="hidden">
+                        <Box
+                          h="100%" rounded="full"
+                          bg={phases[k] === 100 ? 'var(--status-success)' : 'var(--accent)'}
+                          style={{ width: `${phases[k]}%`, transition: 'width 0.35s ease' }}
+                        />
+                      </Box>
+                    </Box>
+                  ))}
                 </VStack>
               )}
 
-              {deltaPct > 0 && (
-                <VStack gap="1" align="stretch">
-                  <HStack justify="space-between" mb="1">
-                    <Text fontSize="11px" color="hsl(220,10%,45%)">Resolving deltas</Text>
-                    <Text fontSize="11px" color="hsl(220,10%,45%)" fontFamily="ui-monospace,monospace">{deltaPct}%</Text>
-                  </HStack>
-                  <ProgressBar pct={deltaPct} accent />
-                </VStack>
+              {/* Current status line */}
+              {lastLine && (
+                <HStack gap="2" color="hsl(220,8%,40%)">
+                  <Spinner size="xs" flexShrink={0} />
+                  <Text fontSize="11px" fontFamily="ui-monospace,monospace" truncate>{lastLine}</Text>
+                </HStack>
               )}
-
-              <HStack gap="2" justify="center" color="hsl(220,10%,50%)">
-                <Spinner size="xs" />
-                <Text fontSize="12px">{statusMsg}</Text>
-              </HStack>
             </>
           )}
         </VStack>
 
-        {/* Footer */}
         {status !== 'done' && (
           <Box px="6" pb="5" textAlign="right">
             <Button
-              size="sm" h="7" px="3" variant="ghost"
-              fontSize="12px"
-              color="hsl(220,10%,45%)"
-              _hover={{ color: 'hsl(220,10%,75%)' }}
+              size="sm" h="7" px="3" variant="ghost" fontSize="12px"
+              color="hsl(220,8%,40%)" _hover={{ color: 'hsl(220,8%,70%)' }}
               onClick={() => { stopRef.current?.(); onClose(); }}
             >
-              {status === 'running' ? 'Cancel' : 'Close'}
+              {status === 'running' || status === 'connecting' ? 'Cancel' : 'Close'}
             </Button>
           </Box>
         )}

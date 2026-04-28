@@ -348,6 +348,17 @@ export async function handleCodingRequest(
         if (!response.writableEnded) writeSseEvent(response, { type, ts: Date.now(), ...data });
       };
       try {
+        if (fs.existsSync(targetDir)) {
+          // If it's an existing git repo, refuse rather than silently delete it
+          const isGitRepo = fs.existsSync(path.join(targetDir, '.git'));
+          if (isGitRepo) {
+            emitClone('clone.error', { message: `'${path.basename(targetDir)}' is already a git repository at ${targetDir}. Choose a different destination folder.` });
+            response.end();
+            return true;
+          }
+          // Otherwise it's a leftover partial clone — remove and retry
+          fs.rmSync(targetDir, { recursive: true, force: true });
+        }
         if (!fs.existsSync(path.dirname(targetDir))) {
           fs.mkdirSync(path.dirname(targetDir), { recursive: true });
         }
