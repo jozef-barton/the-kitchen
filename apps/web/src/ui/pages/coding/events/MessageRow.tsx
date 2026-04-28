@@ -4,33 +4,33 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 // ── Streaming-aware message typewriter ────────────────────────────────────────
-// Separate from the file-diff typewriter (useTypewriter.ts) — much slower,
-// no jitter, pauses gracefully when it catches up to available streamed content.
 
-const TEXT_CPS = 30; // characters per second — slow enough to read along
+const TEXT_CPS = 30; // characters/second — slow enough to read along
 
 function useMessageTypewriter(
   text: string,
   isStreaming: boolean,
-  enabled: boolean,
-  onComplete: () => void,
+  /** Determined ONCE at mount — must never change between renders */
+  shouldAnimate: boolean,
+  onSeen: () => void,
 ) {
   const renderedRef = useRef(0);
   const rafRef = useRef(0);
-  const doneRef = useRef(!enabled);
+  // doneRef starts true when we're not animating so the effect is always a no-op
+  const doneRef = useRef(!shouldAnimate);
   const budgetRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
 
-  const [displayText, setDisplayText] = useState(enabled ? '' : text);
-  const [isComplete, setIsComplete] = useState(!enabled);
+  const [displayText, setDisplayText] = useState(shouldAnimate ? '' : text);
+  const [isComplete, setIsComplete] = useState(!shouldAnimate);
 
-  // Stable refs so rAF closure never goes stale
+  // Stable refs — rAF closure reads these every frame without stale values
   const textRef = useRef(text);
   textRef.current = text;
   const isStreamingRef = useRef(isStreaming);
   isStreamingRef.current = isStreaming;
-  const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  const onSeenRef = useRef(onSeen);
+  onSeenRef.current = onSeen;
 
   const tick = useCallback((now: number) => {
     rafRef.current = 0;
@@ -55,35 +55,31 @@ function useMessageTypewriter(
       if (!isStreamingRef.current) {
         doneRef.current = true;
         setIsComplete(true);
-        onCompleteRef.current();
+        onSeenRef.current();
       } else {
-        // Caught up to available content — pause, reset timing for resume
+        // Caught up to available content — pause and reset timing for resume
         lastTimeRef.current = null;
       }
     } else {
       rafRef.current = requestAnimationFrame(tick);
     }
-  }, []); // empty deps — reads everything via refs
+  }, []); // empty — reads all mutable state via refs
 
-  // Start or resume rAF when text grows, or when streaming ends
+  // Start/resume the rAF when text grows or when streaming ends.
+  // `shouldAnimate` is intentionally excluded from deps — it's stable at mount.
   useEffect(() => {
-    if (!enabled || doneRef.current) return;
+    if (!shouldAnimate || doneRef.current) return;
 
     if (renderedRef.current < text.length) {
-      // New content to type — ensure rAF is scheduled
-      if (rafRef.current === 0) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
+      if (rafRef.current === 0) rafRef.current = requestAnimationFrame(tick);
     } else if (!isStreaming) {
-      // Fully rendered and no more content coming — complete immediately
       doneRef.current = true;
       setDisplayText(text);
       setIsComplete(true);
-      onCompleteRef.current();
+      onSeenRef.current();
     }
-  }, [text, isStreaming, enabled, tick]);
+  }, [text, isStreaming, tick, shouldAnimate]);
 
-  // Cancel rAF on unmount
   useEffect(() => () => { cancelAnimationFrame(rafRef.current); }, []);
 
   return { displayText, isComplete };
@@ -100,13 +96,22 @@ interface Props {
 
 export function MessageRow({ messageId, jobId, text, isStreaming }: Props) {
   const sessionKey = `coding:animated:${jobId}:${messageId}`;
-  const alreadyAnimated = typeof sessionStorage !== 'undefined'
-    && sessionStorage.getItem(sessionKey) === '1';
 
-  // Mark as seen immediately on first mount — don't wait for the animation to complete.
-  // If the user navigates away mid-animation and comes back, it renders instantly.
+  // Determine once at mount whether this message should animate.
+  // Using a ref ensures this never flips between renders (avoiding the bug where
+  // sessionStorage is set post-mount and `enabled` would flip to false mid-animation).
+  const shouldAnimateRef = useRef<boolean | null>(null);
+  if (shouldAnimateRef.current === null) {
+    shouldAnimateRef.current = typeof sessionStorage === 'undefined'
+      ? false
+      : sessionStorage.getItem(sessionKey) !== '1';
+  }
+  const shouldAnimate = shouldAnimateRef.current;
+
+  // Mark as seen immediately — don't wait for animation to fully complete.
+  // This means navigating away mid-animation and returning shows content instantly.
   useEffect(() => {
-    if (!alreadyAnimated) {
+    if (shouldAnimate) {
       try { sessionStorage.setItem(sessionKey, '1'); } catch { /* ignore */ }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,7 +119,7 @@ export function MessageRow({ messageId, jobId, text, isStreaming }: Props) {
   const { displayText, isComplete } = useMessageTypewriter(
     text,
     isStreaming ?? false,
-    !alreadyAnimated,
+    shouldAnimate,
     () => { /* sessionStorage already written above */ },
   );
 

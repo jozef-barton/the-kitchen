@@ -1,5 +1,5 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
-import type { CodingProject, CodingJob, JobTurn, JobEvent, AgentIntegrationRow, AutoRespondRule, PendingApproval, AgentId, JobFileStats, FileSummaryStats } from './types';
+import type { CodingProject, CodingJob, JobTurn, JobEvent, AgentIntegrationRow, AutoRespondRule, PendingApproval, AgentId, JobFileStats, FileSummaryStats, ApprovalMode } from './types';
 
 const EVENT_PAYLOAD_MAX_BYTES = 400_000; // large enough for full file content
 
@@ -16,7 +16,8 @@ export class CodingStore {
         repo_path TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        memory_path TEXT
+        memory_path TEXT,
+        default_approval_mode TEXT NOT NULL DEFAULT 'auto_safe'
       );
 
       CREATE TABLE IF NOT EXISTS coding_jobs (
@@ -85,6 +86,7 @@ export class CodingStore {
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN agent_session_id TEXT'); } catch { /* ok */ }
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0'); } catch { /* ok */ }
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN last_turn_at INTEGER'); } catch { /* ok */ }
+    try { db.exec("ALTER TABLE coding_projects ADD COLUMN default_approval_mode TEXT NOT NULL DEFAULT 'auto_safe'"); } catch { /* ok */ }
     // Index for type-filtered event queries (batchGetJobFileStats, etc.)
     try { db.exec('CREATE INDEX IF NOT EXISTS idx_coding_job_events_type ON coding_job_events(job_id, type)'); } catch { /* ok */ }
   }
@@ -93,10 +95,16 @@ export class CodingStore {
 
   createProject(project: CodingProject): CodingProject {
     this.db.prepare(`
-      INSERT INTO coding_projects (id, name, repo_path, created_at, updated_at, memory_path)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(project.id, project.name, project.repoPath, project.createdAt, project.updatedAt, project.memoryPath ?? null);
+      INSERT INTO coding_projects (id, name, repo_path, created_at, updated_at, memory_path, default_approval_mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(project.id, project.name, project.repoPath, project.createdAt, project.updatedAt,
+      project.memoryPath ?? null, project.defaultApprovalMode ?? 'auto_safe');
     return project;
+  }
+
+  updateProjectApprovalMode(id: string, mode: ApprovalMode) {
+    this.db.prepare('UPDATE coding_projects SET default_approval_mode = ?, updated_at = ? WHERE id = ?')
+      .run(mode, Date.now(), id);
   }
 
   getProject(id: string): CodingProject | null {
@@ -120,7 +128,8 @@ export class CodingStore {
       repoPath: row.repo_path as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
-      memoryPath: row.memory_path as string | undefined
+      memoryPath: row.memory_path as string | undefined,
+      defaultApprovalMode: (row.default_approval_mode as ApprovalMode | undefined) ?? 'auto_safe',
     };
   }
 

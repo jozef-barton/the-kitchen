@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
 import type { ChildProcess } from 'node:child_process';
 import type { AgentAdapter, JobEvent } from '../types';
 import { StreamJsonParser } from './stream-parser';
@@ -18,6 +19,34 @@ interface ClaudeRunState {
   cumulativeTokensOut: number;
   cumulativeCostUsd: number;
   loggedUnknownModels: Set<string>;
+  // Track recent tool calls so we can look up the command when a blocked tool_result arrives
+  pendingToolCalls: Map<string, { toolName: string; input: Record<string, unknown> }>;
+}
+
+// ── Shell approval detection ──────────────────────────────────────────────────
+
+const SHELL_APPROVAL_PATTERNS = [
+  /This .{0,60}command.{0,60}requires? approval/i,
+  /The following parts? requires? approval/i,
+  /contains multiple operations/i,
+  /requires? your? approval/i,
+  /must be approved before/i,
+];
+
+function requiresShellApproval(content: string): boolean {
+  return SHELL_APPROVAL_PATTERNS.some(p => p.test(content));
+}
+
+function classifyShellCategory(input: Record<string, unknown>): 'install' | 'delete' | 'shell' {
+  const cmd = ((input.command as string) ?? '').toLowerCase();
+  if (/\b(pip|npm|pnpm|yarn|brew|apt|apt-get)\s+install\b/.test(cmd)) return 'install';
+  if (/\b(rm\s+-rf?|del\s+\/[sf]|truncate|drop\s+table)\b/.test(cmd)) return 'delete';
+  return 'shell';
+}
+
+function extractBlockedParts(content: string): string {
+  const match = content.match(/(?:requires? approval|approval):?\s*(.+)/i);
+  return match?.[1]?.trim() ?? content.slice(0, 120);
 }
 
 // ── Tool input truncation ─────────────────────────────────────────────────────
@@ -76,14 +105,18 @@ function handleClaudeEvent(
         if (!text) continue;
         emit({ type: 'job.message', jobId, messageId, text, ts });
       } else if (block.type === 'tool_use') {
+        const toolUseId = (block.id as string) ?? '';
+        const toolName = (block.name as string) ?? 'unknown';
         const input = (block.input as Record<string, unknown>) ?? {};
-        const truncated = truncateToolInput(block.name as string, input);
+        const truncated = truncateToolInput(toolName, input);
+        // Track for shell-approval lookup when the tool_result arrives
+        state.pendingToolCalls.set(toolUseId, { toolName, input });
         emit({
           type: 'job.tool_call',
           jobId,
           messageId,
-          toolUseId: (block.id as string) ?? '',
-          toolName: (block.name as string) ?? 'unknown',
+          toolUseId,
+          toolName,
           input: truncated,
           ts,
         });
@@ -131,16 +164,37 @@ function handleClaudeEvent(
     const content = msg.content as Record<string, unknown>[];
     for (const block of content) {
       if (block.type === 'tool_result') {
+        const toolUseId = (block.tool_use_id as string) ?? '';
         const raw = block.content;
         const resultContent = typeof raw === 'string' ? raw : JSON.stringify(raw);
-        emit({
-          type: 'job.tool_result',
-          jobId,
-          toolUseId: (block.tool_use_id as string) ?? '',
-          content: resultContent,
-          isError: block.is_error === true,
-          ts,
-        });
+
+        // Detect "requires approval" responses from Claude Code's permission system.
+        // When detected, emit job.needs_approval so the runner can surface it to the UI.
+        if (requiresShellApproval(resultContent)) {
+          const originalCall = state.pendingToolCalls.get(toolUseId);
+          const command = originalCall
+            ? ((originalCall.input.command as string) ?? '')
+            : extractBlockedParts(resultContent);
+          const category = originalCall ? classifyShellCategory(originalCall.input) : 'shell';
+          emit({
+            type: 'job.needs_approval',
+            jobId,
+            approvalId: `shell-${randomUUID()}`,
+            toolUseId,
+            message: `Claude wants to run:\n${command || extractBlockedParts(resultContent)}`,
+            options: ['Approve once', 'Approve all in this job', 'Deny'],
+            defaultOption: 0,
+            category,
+            ts,
+          } as JobEvent);
+          // Still emit the tool_result so the raw event is stored (for history/debugging)
+          emit({ type: 'job.tool_result', jobId, toolUseId, content: resultContent, isError: true, ts });
+          continue;
+        }
+
+        emit({ type: 'job.tool_result', jobId, toolUseId, content: resultContent, isError: block.is_error === true, ts });
+        // Clean up tracked call once result arrives
+        state.pendingToolCalls.delete(toolUseId);
       }
     }
     return;
@@ -175,6 +229,7 @@ export function attachClaudeCodeParser(
     cumulativeTokensOut: 0,
     cumulativeCostUsd: 0,
     loggedUnknownModels: new Set(),
+    pendingToolCalls: new Map(),
   };
 
   const parser = new StreamJsonParser(
@@ -219,9 +274,12 @@ export const claudeCodeAdapter: AgentAdapter = {
       '--output-format', 'stream-json',
       '--verbose',
     ];
-    if (approvalMode === 'auto_safe' || approvalMode === 'auto_all') {
+    if (approvalMode === 'auto_safe') {
       args.push('--permission-mode', 'acceptEdits');
+    } else if (approvalMode === 'auto_all') {
+      args.push('--permission-mode', 'bypassPermissions');
     }
+    // manual: no --permission-mode flag; Claude Code asks for everything
     if (resumeSessionId) {
       // --resume <sessionId> continues the specific prior session, giving the agent
       // full conversation history (knows what files were created, what was said, etc.)

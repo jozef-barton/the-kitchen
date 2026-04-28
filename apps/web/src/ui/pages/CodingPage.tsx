@@ -3,7 +3,7 @@ import {
   Box, Button, Flex, HStack, Input, NativeSelect, Spinner, Text, Textarea, VStack
 } from '@chakra-ui/react';
 import * as api from '../../lib/coding-api';
-import type { CodingProject, CodingJob, AgentIntegration, JobEvent, JobFileSummaryEntry } from '../../lib/coding-api';
+import type { CodingProject, CodingJob, AgentIntegration, JobEvent, JobFileSummaryEntry, ApprovalMode } from '../../lib/coding-api';
 import { JobConversation } from './coding/JobConversation';
 import { JobComposer } from './coding/JobComposer';
 import { CostBadge } from './coding/CostBadge';
@@ -605,7 +605,7 @@ function ProjectDetailView({
 
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0" px="4" py="4">
-      <HStack mb="4" flexShrink={0} justify="space-between">
+      <HStack mb="4" flexShrink={0} justify="space-between" flexWrap="wrap" gap="2">
         <HStack gap="1" color="var(--text-muted)">
           <Button variant="ghost" size="xs" h="6" px="1" onClick={onBack} color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }}>
             ← Projects
@@ -613,16 +613,41 @@ function ProjectDetailView({
           <Text fontSize="12px">/</Text>
           <Text fontSize="13px" fontWeight="500" color="var(--text-primary)">{project?.name ?? '…'}</Text>
         </HStack>
-        <Button
-          size="sm" h="8" px="3"
-          bg="var(--accent)" color="var(--accent-contrast)"
-          _hover={{ bg: 'var(--accent-strong)' }}
-          rounded="var(--radius-control)"
-          onClick={() => setNewJobOpen(true)}
-          disabled={!project}
-        >
-          + New job
-        </Button>
+        <HStack gap="2">
+          {/* Project-level approval mode default */}
+          {project && (
+            <HStack gap="1.5" align="center">
+              <Text fontSize="11px" color="var(--text-muted)">Default:</Text>
+              <NativeSelect.Root size="sm" h="7" w="36">
+                <NativeSelect.Field
+                  fontSize="11px"
+                  value={project.defaultApprovalMode}
+                  bg="var(--surface-3)"
+                  onChange={async (e) => {
+                    const mode = e.currentTarget.value as ApprovalMode;
+                    await api.updateProjectApprovalMode(project.id, mode);
+                    load();
+                  }}
+                >
+                  <option value="auto_safe">Auto-safe</option>
+                  <option value="auto_all">Auto-all</option>
+                  <option value="manual">Manual</option>
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </HStack>
+          )}
+          <Button
+            size="sm" h="8" px="3"
+            bg="var(--accent)" color="var(--accent-contrast)"
+            _hover={{ bg: 'var(--accent-strong)' }}
+            rounded="var(--radius-control)"
+            onClick={() => setNewJobOpen(true)}
+            disabled={!project}
+          >
+            + New job
+          </Button>
+        </HStack>
       </HStack>
 
       {newJobOpen && project && (
@@ -679,10 +704,14 @@ function NewJobForm({
 }) {
   const [prompt, setPrompt] = useState('');
   const [agent, setAgent] = useState<string>('claude-code');
-  const [approvalMode, setApprovalMode] = useState<string>('auto_safe');
+  // Pre-fill from project default; user can override per-job
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode>(project.defaultApprovalMode ?? 'auto_safe');
+  const [bypassPermissions, setBypassPermissions] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmAutoAll, setConfirmAutoAll] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Bypass checkbox forces auto_all and locks the dropdown
+  const effectiveMode: ApprovalMode = bypassPermissions ? 'auto_all' : approvalMode;
 
   const usableAgents = (['claude-code', 'codex'] as const).filter(id => {
     const intg = integrations.find(i => i.id === id);
@@ -692,10 +721,6 @@ function NewJobForm({
 
   async function handleCreate() {
     if (!prompt.trim()) return;
-    if (approvalMode === 'auto_all' && !confirmAutoAll) {
-      setError('auto_all mode will modify your repo directly. Check the confirmation box to proceed.');
-      return;
-    }
     setSubmitting(true);
     setError(null);
     try {
@@ -703,8 +728,8 @@ function NewJobForm({
         projectId: project.id,
         prompt: prompt.trim(),
         agent,
-        approvalMode,
-        confirmAutoAll: approvalMode === 'auto_all' ? confirmAutoAll : undefined
+        approvalMode: effectiveMode,
+        confirmAutoAll: effectiveMode === 'auto_all' ? true : undefined
       });
       onCreated(job);
     } catch (err) {
@@ -748,8 +773,12 @@ function NewJobForm({
           </Box>
           <Box flex="1">
             <Text fontSize="11px" color="var(--text-muted)" mb="1">Approval mode</Text>
-            <NativeSelect.Root size="sm" bg="var(--surface-3)" disabled={noAgents}>
-              <NativeSelect.Field value={approvalMode} onChange={e => setApprovalMode(e.currentTarget.value)}>
+            <NativeSelect.Root size="sm" bg="var(--surface-3)" disabled={noAgents || bypassPermissions}>
+              <NativeSelect.Field
+                value={effectiveMode}
+                onChange={e => setApprovalMode(e.currentTarget.value as ApprovalMode)}
+                opacity={bypassPermissions ? 0.5 : 1}
+              >
                 <option value="auto_safe">Auto-safe (edits only)</option>
                 <option value="auto_all">Auto-all (all actions)</option>
                 <option value="manual">Manual approval</option>
@@ -758,24 +787,41 @@ function NewJobForm({
             </NativeSelect.Root>
           </Box>
         </HStack>
-        {approvalMode === 'auto_all' && (
+        {/* Bypass permissions checkbox */}
+        <Box p="3" rounded="var(--radius-control)" bg="var(--surface-2)" border="1px solid var(--border-subtle)">
+          <HStack gap="2" align="flex-start">
+            <input
+              type="checkbox"
+              id="bypass-permissions"
+              checked={bypassPermissions}
+              disabled={noAgents}
+              onChange={e => setBypassPermissions(e.target.checked)}
+              style={{ marginTop: '2px', flexShrink: 0 }}
+            />
+            <VStack align="start" gap="0.5">
+              <label htmlFor="bypass-permissions" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                Bypass all approval prompts (--bypassPermissions)
+              </label>
+              <Text fontSize="11px" color="var(--text-muted)">
+                Runs any command without asking. Use only in isolated test environments.
+              </Text>
+            </VStack>
+          </HStack>
+          {bypassPermissions && (
+            <Box mt="2" pl="5">
+              <Text fontSize="11px" color="var(--status-warning)">
+                ⚠ This job runs in {project.repoPath} directly with no isolation (worktrees ship in Phase 3).
+              </Text>
+            </Box>
+          )}
+        </Box>
+        {effectiveMode === 'auto_all' && !bypassPermissions && (
           <Box p="3" rounded="var(--radius-control)" bg="var(--surface-warning)" border="1px solid var(--status-warning)">
             <Text fontSize="12px" color="var(--status-warning)" fontWeight="600" mb="1">⚠ Direct repo modification</Text>
-            <Text fontSize="12px" color="var(--text-secondary)" mb="2">
+            <Text fontSize="12px" color="var(--text-secondary)">
               Without worktree isolation (Phase 3), this job will edit {project.repoPath} directly.
               Commit any work in progress before proceeding.
             </Text>
-            <HStack gap="2" align="center">
-              <input
-                type="checkbox"
-                id="confirm-autoall"
-                checked={confirmAutoAll}
-                onChange={e => setConfirmAutoAll(e.target.checked)}
-              />
-              <label htmlFor="confirm-autoall" style={{ fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                I understand and want to proceed
-              </label>
-            </HStack>
           </Box>
         )}
         {error && <Text fontSize="12px" color="var(--status-danger)">{error}</Text>}
@@ -1028,6 +1074,9 @@ function JobView({
               startedAt={job?.startedAt}
             />
             {job && <StatusPill status={job.status} />}
+            {job?.approvalMode === 'auto_all' && (
+              <Text fontSize="11px" color="var(--status-warning)" fontWeight="500" flexShrink={0}>⚠ bypass mode</Text>
+            )}
           </HStack>
 
           {/* Compact toggle */}

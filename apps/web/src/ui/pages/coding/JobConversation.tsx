@@ -40,7 +40,12 @@ export const JobConversation = memo(function JobConversation({
   const [awaitingWhileScrolledUp, setAwaitingWhileScrolledUp] = useState(false);
   const prevItemsLen = useRef(0);
 
-  const items = buildConversationItems(events, jobPrompts);
+  // Sort defensively — SSE events should arrive in order, but guard against ties
+  const sortedEvents = useMemo(
+    () => [...events].sort((a, b) => a.ts - b.ts),
+    [events],
+  );
+  const items = buildConversationItems(sortedEvents, jobPrompts);
 
   // Track which card is currently animating so we can block items below it
   const [animatingToolUseId, setAnimatingToolUseId] = useState<string | null>(null);
@@ -146,13 +151,14 @@ export const JobConversation = memo(function JobConversation({
           }}
         >
           <VStack align="stretch" gap={gap}>
-            {visibleItems.map((item, i) => {
+            {visibleItems.map((item, _i) => {
               if (item.kind === 'init') {
-                return <AgentInitRow key={i} event={item.event as unknown as Extract<JobEvent, { type: 'job.agent_initialized' }>} />;
+                // Only ever one init per conversation — ts is unique enough
+                return <AgentInitRow key={`init:${item.event.ts}`} event={item.event as unknown as Extract<JobEvent, { type: 'job.agent_initialized' }>} />;
               }
               if (item.kind === 'continuation') {
                 return (
-                  <Box key={i} py="2">
+                  <Box key={`cont:${item.ts}`} py="2">
                     <HStack gap="2" align="center">
                       <Box flex="1" h="1px" bg="var(--divider)" />
                       <Text fontSize="11px" color="var(--text-muted)" flexShrink={0}>
@@ -168,7 +174,7 @@ export const JobConversation = memo(function JobConversation({
               }
               if (item.kind === 'turn_boundary') {
                 return (
-                  <Box key={i} py="2">
+                  <Box key={`boundary:${item.ts}`} py="2">
                     <HStack gap="2" align="center">
                       <Box flex="1" h="1px" bg="var(--divider)" />
                       <Text fontSize="11px" color="var(--text-muted)" flexShrink={0}>── awaiting your reply ──</Text>
@@ -219,12 +225,12 @@ export const JobConversation = memo(function JobConversation({
                 );
               }
               if (item.kind === 'raw') {
-                return <RawRow key={i} text={item.text} isError={item.isError} />;
+                return <RawRow key={`raw:${item.isError ? 'e' : 'o'}:${item.ts}`} text={item.text} isError={item.isError} />;
               }
               if (item.kind === 'result') {
                 const ev = item.event as unknown as { numTurns: number; durationMs: number };
                 return (
-                  <Box key={i} px="2" py="1">
+                  <Box key={`result:${item.event.ts}`} px="2" py="1">
                     <Text fontSize="11px" color="var(--text-muted)">
                       Completed · {ev.numTurns} turns · {Math.round(ev.durationMs / 1000)}s
                     </Text>

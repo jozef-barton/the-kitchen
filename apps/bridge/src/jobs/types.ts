@@ -14,6 +14,7 @@ export interface CodingProject {
   createdAt: number;
   updatedAt: number;
   memoryPath?: string;
+  defaultApprovalMode: ApprovalMode;
 }
 
 export interface PendingApproval {

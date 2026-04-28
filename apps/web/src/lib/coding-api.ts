@@ -13,7 +13,11 @@ function codingFetch(path: string, opts?: Parameters<typeof fetch>[1]) {
   });
 }
 
-export interface CodingProject { id: string; name: string; repoPath: string; createdAt: number; updatedAt: number; }
+export type ApprovalMode = 'manual' | 'auto_safe' | 'auto_all';
+export interface CodingProject {
+  id: string; name: string; repoPath: string; createdAt: number; updatedAt: number;
+  defaultApprovalMode: ApprovalMode;
+}
 export interface CodingJob {
   id: string; projectId: string; prompt: string; agent: string; status: string;
   approvalMode: string; createdAt: number; startedAt?: number; completedAt?: number;
@@ -57,14 +61,17 @@ export async function listProjects(): Promise<CodingProject[]> {
   const d = await r.json() as { projects: CodingProject[] };
   return d.projects;
 }
-export async function createProject(name: string, repoPath: string): Promise<CodingProject> {
-  const r = await codingFetch('/api/projects', { method: 'POST', body: JSON.stringify({ name, repoPath }) });
+export async function createProject(name: string, repoPath: string, defaultApprovalMode?: ApprovalMode): Promise<CodingProject> {
+  const r = await codingFetch('/api/projects', { method: 'POST', body: JSON.stringify({ name, repoPath, defaultApprovalMode }) });
   if (!r.ok) { const e = await r.json() as { error: { message: string } }; throw new Error(e.error.message); }
   const d = await r.json() as { project: CodingProject };
   return d.project;
 }
 export async function deleteProject(id: string) {
   await codingFetch(`/api/projects/${id}`, { method: 'DELETE' });
+}
+export async function updateProjectApprovalMode(id: string, mode: ApprovalMode): Promise<void> {
+  await codingFetch(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify({ defaultApprovalMode: mode }) });
 }
 export async function getProject(id: string): Promise<{ project: CodingProject; jobs: CodingJob[] }> {
   const r = await codingFetch(`/api/projects/${id}`);

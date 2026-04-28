@@ -55,13 +55,14 @@ export async function handleCodingRequest(
       return true;
     }
     if (method === 'POST' && parts.length === 2) {
-      const body = await readJsonBody(request) as { name?: string; repoPath?: string };
+      const body = await readJsonBody(request) as { name?: string; repoPath?: string; defaultApprovalMode?: string };
       if (!body.name || !body.repoPath) {
         sendJson(response, 400, { error: { code: 'INVALID_REQUEST', message: 'name and repoPath required' } }, allowOrigin);
         return true;
       }
       try {
-        const project = manager.createProject(body.name, body.repoPath);
+        const mode = (['manual', 'auto_safe', 'auto_all'] as const).find(m => m === body.defaultApprovalMode) ?? 'auto_safe';
+        const project = manager.createProject(body.name, body.repoPath, mode);
         sendJson(response, 201, { project }, allowOrigin);
       } catch (err) {
         sendJson(response, 400, { error: { code: 'INVALID_REPO', message: (err as Error).message } }, allowOrigin);
@@ -77,6 +78,15 @@ export async function handleCodingRequest(
         const statsMap = manager.batchGetJobFileStats(jobs.map(j => j.id));
         const jobsWithStats = jobs.map(j => ({ ...j, ...(statsMap.get(j.id) ?? { filesChangedCount: 0, totalLinesAdded: 0, totalLinesRemoved: 0, mostRecentTurnText: null }) }));
         sendJson(response, 200, { project, jobs: jobsWithStats }, allowOrigin);
+        return true;
+      }
+      if (method === 'PATCH') {
+        const project = manager.getProject(projectId!);
+        if (!project) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Project not found' } }, allowOrigin); return true; }
+        const body = await readJsonBody(request) as { defaultApprovalMode?: string };
+        const mode = (['manual', 'auto_safe', 'auto_all'] as const).find(m => m === body.defaultApprovalMode);
+        if (mode) manager.updateProjectApprovalMode(projectId!, mode);
+        sendJson(response, 200, { project: { ...project, defaultApprovalMode: mode ?? project.defaultApprovalMode } }, allowOrigin);
         return true;
       }
       if (method === 'DELETE') {
