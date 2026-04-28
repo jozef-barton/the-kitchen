@@ -18,8 +18,6 @@ interface ClaudeRunState {
   cumulativeTokensOut: number;
   cumulativeCostUsd: number;
   loggedUnknownModels: Set<string>;
-  // Track recent tool calls so we can look up the command when a blocked tool_result arrives
-  pendingToolCalls: Map<string, { toolName: string; input: Record<string, unknown> }>;
 }
 
 
@@ -83,8 +81,6 @@ function handleClaudeEvent(
         const toolName = (block.name as string) ?? 'unknown';
         const input = (block.input as Record<string, unknown>) ?? {};
         const truncated = truncateToolInput(toolName, input);
-        // Track for shell-approval lookup when the tool_result arrives
-        state.pendingToolCalls.set(toolUseId, { toolName, input });
         emit({
           type: 'job.tool_call',
           jobId,
@@ -143,7 +139,6 @@ function handleClaudeEvent(
         const resultContent = typeof raw === 'string' ? raw : JSON.stringify(raw);
 
         emit({ type: 'job.tool_result', jobId, toolUseId, content: resultContent, isError: block.is_error === true, ts });
-        state.pendingToolCalls.delete(toolUseId);
       }
     }
     return;
@@ -178,7 +173,6 @@ export function attachClaudeCodeParser(
     cumulativeTokensOut: 0,
     cumulativeCostUsd: 0,
     loggedUnknownModels: new Set(),
-    pendingToolCalls: new Map(),
   };
 
   const parser = new StreamJsonParser(

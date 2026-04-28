@@ -46,6 +46,8 @@ export class JobRunner {
   private stdinClosed = false;
   // Shell approval detected from a blocked tool_result — surfaced after the turn ends
   private pendingShellApproval: { command: string; category: string } | null = null;
+  // Last bash command seen, so we can show the real command in the approval message
+  private lastBashCommand = '';
 
   constructor(
     private readonly job: CodingJob,
@@ -243,13 +245,21 @@ export class JobRunner {
       }
     }
 
-    // Detect shell approval blocks from tool_results
-    if (event.type === 'job.tool_result') {
+    // Track the last bash command so we can show it in the approval message
+    if (event.type === 'job.tool_call') {
+      const tc = event as Extract<JobEvent, { type: 'job.tool_call' }>;
+      if (/^bash$/i.test(tc.toolName)) {
+        this.lastBashCommand = (tc.input.command as string) ?? '';
+      }
+    }
+
+    // Detect shell approval blocks from tool_results.
+    // Permission-blocked commands may arrive with is_error=false, so check content regardless.
+    if (event.type === 'job.tool_result' && this.pendingApprovalId === null && !this.pendingShellApproval) {
       const te = event as Extract<JobEvent, { type: 'job.tool_result' }>;
-      if (te.isError && this.pendingApprovalId === null && SHELL_APPROVAL_RE.test(te.content)) {
-        const cmdMatch = te.content.match(/(?:run|execute|command)[:\s]+(.+?)(?:\n|$)/i)
-          ?? te.content.match(/:\s*(.+?)(?:\n|$)/i);
-        const command = cmdMatch?.[1]?.trim() ?? te.content.slice(0, 120);
+      if (SHELL_APPROVAL_RE.test(te.content)) {
+        // Use the actual command from the preceding tool_call, not the error text
+        const command = this.lastBashCommand || te.content.replace(/^[✗×]\s*/, '').slice(0, 120);
         const category = /\b(pip|npm|pnpm|yarn|brew|apt)\s+install\b/i.test(command) ? 'install'
           : /\b(rm\s+-rf?|del\s+\/|truncate|drop\s+table)\b/i.test(command) ? 'delete'
           : 'shell';
@@ -274,8 +284,8 @@ export class JobRunner {
         defaultOption: 0,
         category: category as ApprovalCategory,
       };
+      // onNeedsApproval already inserts the event and broadcasts — no need to also emit
       this.callbacks.onNeedsApproval(approvalId, approval);
-      this.emit({ type: 'job.needs_approval', jobId: this.job.id, approvalId, message: approval.message, options: approval.options, defaultOption: 0, category: approval.category, ts: Date.now() });
       return; // already called onEvent above
     }
 
