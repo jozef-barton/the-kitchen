@@ -9,7 +9,7 @@ import { ErrorBanner } from '../molecules/ErrorBanner';
 import { SessionRow } from '../molecules/SessionRow';
 import { SessionRenameDialog } from '../molecules/SessionRenameDialog';
 
-type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'tools' | 'skills' | 'settings' | 'new-session' | 'search' | 'gear' | 'plus' | 'trash' | 'user' | 'chevron-right';
+type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'coding' | 'tools' | 'skills' | 'settings' | 'new-session' | 'search' | 'gear' | 'plus' | 'trash' | 'user' | 'chevron-right';
 
 function CollapseIcon() {
   const Svg = chakra('svg');
@@ -33,6 +33,7 @@ function ExpandIcon() {
 const allNav: Array<{ page: AppPage; label: string; icon: SidebarIconName; shortcut?: string; requiresRuntime: boolean }> = [
   { page: 'sessions', label: 'All sessions', icon: 'sessions', shortcut: '⌘⇧S', requiresRuntime: true },
   { page: 'recipes', label: 'Recipes', icon: 'recipes', shortcut: '⌘R', requiresRuntime: false },
+  { page: 'coding', label: 'Coding', icon: 'coding', requiresRuntime: false },
   { page: 'jobs', label: 'Jobs', icon: 'jobs', requiresRuntime: true },
   { page: 'tools', label: 'Tools', icon: 'tools', requiresRuntime: true },
   { page: 'skills', label: 'Skills', icon: 'skills', requiresRuntime: true },
@@ -810,6 +811,12 @@ function SidebarIcon({ name, size = 'sm' }: { name: SidebarIconName; size?: 'sm'
         );
       case 'chevron-right':
         return <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />;
+      case 'coding':
+        return (
+          <>
+            <path d="M4 6l-2 2 2 2M12 6l2 2-2 2M7.5 13l1-10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        );
       default:
         return <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />;
     }

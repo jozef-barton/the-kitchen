@@ -49,6 +49,8 @@ import {
 import { BridgeDatabase } from '../data/bridge-database';
 import { HermesCli } from '../hermes-cli/client';
 import { migrateLegacySnapshotIfNeeded } from '../legacy-snapshot';
+import { JobManager } from '../jobs/manager';
+import { handleCodingRequest } from '../jobs/router';
 import { resolveLegacySnapshotCandidates } from '../paths';
 import { evaluateLocalOriginPolicy, createCorsHeaders } from './origin-policy';
 import { validateRecipeId, resolveWithinRoot, validateVersion, PathValidationError } from './path-validation';
@@ -206,6 +208,17 @@ export function createBridgeServer(options: {
       })()
   });
 
+  const jobManager = new JobManager(database.getRawDatabase());
+  jobManager.cleanupOrphanedJobs();
+  // Log startup warning if codex adapter is not version-verified
+  import('../jobs/agents/codex').then(({ codexAdapter }) => {
+    codexAdapter.detect().then(result => {
+      if (result.installed && result.version === 'unknown') {
+        console.warn('[coding] codex adapter not verified for installed version, using minimal flag set');
+      }
+    }).catch(() => {});
+  }).catch(() => {});
+
   const server = http.createServer(async (request, response) => {
     let preferSseErrors = false;
 
@@ -255,6 +268,20 @@ export function createBridgeServer(options: {
     const { pathname, searchParams } = url;
 
     try {
+      // Coding jobs routes — /api/projects, /api/integrations, and /api/jobs (coding-specific).
+      // The existing Hermes bridge uses GET /api/jobs?profileId=X — those requests are
+      // identified by the presence of profileId and bypass this block entirely.
+      const isCodingJobsPath =
+        pathname.startsWith('/api/jobs') && !searchParams.has('profileId');
+      if (
+        pathname.startsWith('/api/projects') ||
+        isCodingJobsPath ||
+        pathname.startsWith('/api/integrations')
+      ) {
+        const handled = await handleCodingRequest(request, response, jobManager, originDecision.allowOrigin);
+        if (handled) return;
+      }
+
       if (request.method === 'GET' && pathname === '/api/health') {
         sendJson(response, 200, bridge.getHealth(), originDecision.allowOrigin);
         return;

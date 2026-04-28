@@ -98,6 +98,7 @@ import {
 import { bridgeReviewedShellToolId, reviewedShellCommandAllowlist } from '../reviewed-tools';
 import { normalizeMessageForPersistence, normalizePersistedSessionMessages } from '../transcript-runtime';
 import { classifySessionVisibility } from './session-filter-rules';
+import { CodingStore } from '../jobs/store';
 
 function parseJson<T>(value: string | null | undefined, fallback: T) {
   if (!value) {
@@ -431,6 +432,10 @@ export class BridgeDatabase {
 
   close() {
     this.database.close();
+  }
+
+  getRawDatabase(): DatabaseSync {
+    return this.database;
   }
 
   private hasColumn(tableName: string, columnName: string) {
@@ -905,6 +910,9 @@ export class BridgeDatabase {
         PRIMARY KEY (profile_id, step_id)
       );
     `);
+
+    // Coding jobs tables
+    CodingStore.migrate(this.database);
   }
 
   private backfillSessionTitlesFromRecipes() {

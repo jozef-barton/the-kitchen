@@ -16,7 +16,8 @@ const NAV_LABELS: Record<AppPage, string> = {
   jobs: 'Jobs',
   tools: 'Tools',
   skills: 'Skills',
-  settings: 'Settings'
+  settings: 'Settings',
+  coding: 'Coding'
 };
 
 function SearchIcon() {

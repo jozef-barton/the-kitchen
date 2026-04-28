@@ -12,6 +12,7 @@ import { RecipesPage } from './ui/pages/RecipesPage';
 import { SettingsPage } from './ui/pages/SettingsPage';
 import { ToolsPage } from './ui/pages/ToolsPage';
 import { HermesSetupPage } from './ui/pages/HermesSetupPage';
+import { CodingPage } from './ui/pages/CodingPage';
 import { ProviderModelSelector } from './ui/molecules/ModelSelector';
 import { TabBar } from './ui/molecules/TabBar';
 import { ShellLayout, Sidebar } from './ui/templates/ShellLayout';
@@ -46,6 +47,7 @@ function pathToPage(pathname: string): AppPage {
   if (pathname.startsWith('/skills')) return 'skills';
   if (pathname === '/sessions') return 'sessions';
   if (pathname === '/jobs') return 'jobs';
+  if (pathname.startsWith('/coding')) return 'coding';
   return 'chat';
 }
 
@@ -56,6 +58,7 @@ function pageToPath(page: AppPage): string {
     case 'tools': return '/tools';
     case 'skills': return '/skills';
     case 'jobs': return '/jobs';
+    case 'coding': return '/coding';
     case 'settings': return '/settings';
     default: return '/';
   }
@@ -388,6 +391,10 @@ export function App() {
           )
         ) : null}
 
+        {controller.page === 'coding' ? (
+          <CodingPage />
+        ) : null}
+
         {controller.page === 'tools' ? (
           showRuntimeConfigBlocker ? (
             <RuntimeConfigBlockedState
@@ -564,6 +571,7 @@ function pageTitle(page: string) {
     case 'sessions': return 'Sessions';
     case 'recipes': return 'Recipes';
     case 'jobs': return 'Jobs';
+    case 'coding': return 'Coding';
     case 'tools': return 'Tools';
     case 'skills': return 'Skills';
     case 'settings': return 'Settings';
