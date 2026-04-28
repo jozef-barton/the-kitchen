@@ -183,6 +183,7 @@ export async function pickDirectory(): Promise<string | null> {
 
 export type CloneEvent =
   | { type: 'clone.status'; message: string }
+  | { type: 'clone.output'; line: string }
   | { type: 'clone.complete'; path: string }
   | { type: 'clone.error'; message: string };
 
