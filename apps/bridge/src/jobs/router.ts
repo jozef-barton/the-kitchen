@@ -115,6 +115,7 @@ export async function handleCodingRequest(
       const body = await readJsonBody(request) as {
         projectId?: string; prompt?: string; agent?: string;
         approvalMode?: string; confirmAutoAll?: boolean; resumeSessionId?: string;
+        model?: string; reasoningEffort?: string;
       };
       if (!body.projectId || !body.prompt || !body.agent) {
         sendJson(response, 400, { error: { code: 'INVALID_REQUEST', message: 'projectId, prompt, agent required' } }, allowOrigin);
@@ -127,7 +128,9 @@ export async function handleCodingRequest(
           agent: body.agent as 'claude-code' | 'codex',
           approvalMode: (body.approvalMode as CodingJob['approvalMode']) ?? 'auto_safe',
           confirmAutoAll: body.confirmAutoAll,
-          resumeSessionId: body.resumeSessionId
+          resumeSessionId: body.resumeSessionId,
+          model: body.model,
+          reasoningEffort: body.reasoningEffort
         });
         sendJson(response, 201, { job }, allowOrigin);
       } catch (err) {
@@ -193,18 +196,33 @@ export async function handleCodingRequest(
         const job = manager.getJob(jobId);
         if (!job) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Job not found' } }, allowOrigin); return true; }
         const events = manager.getRecentEvents(jobId);
-        sendJson(response, 200, { job, events }, allowOrigin);
+        const maxEventId = manager.getMaxEventId(jobId);
+        sendJson(response, 200, { job, events, maxEventId }, allowOrigin);
+        return true;
+      }
+
+      // PATCH /api/jobs/:id — update model/reasoningEffort mid-session
+      if (method === 'PATCH' && !sub) {
+        const body = await readJsonBody(request) as { model?: string; reasoningEffort?: string };
+        const updated = manager.updateJobModelConfig(jobId, { model: body.model, reasoningEffort: body.reasoningEffort });
+        if (!updated) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Job not found' } }, allowOrigin); return true; }
+        sendJson(response, 200, { job: updated }, allowOrigin);
         return true;
       }
 
       // GET /api/jobs/:id/events  — SSE stream
+      // Optional ?since=<eventId> cursor — only replay events with id > since.
+      // When not provided, falls back to last 200 events (for old clients).
       if (method === 'GET' && sub === 'events') {
         const job = manager.getJob(jobId);
         if (!job) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Job not found' } }, allowOrigin); return true; }
         sendSseHeaders(response, allowOrigin);
-        // Send last 200 events on connect
-        const recentEvents = manager.getRecentEvents(jobId);
-        for (const event of recentEvents) {
+        const qs = new URL(url, 'http://localhost').searchParams;
+        const sinceId = qs.has('since') ? parseInt(qs.get('since')!, 10) : null;
+        const replayEvents = sinceId !== null
+          ? manager.getEventsSince(jobId, sinceId)
+          : manager.getRecentEvents(jobId);
+        for (const event of replayEvents) {
           writeSseEvent(response, event);
         }
         manager.addSubscriber(jobId, response);
@@ -481,8 +499,28 @@ export async function handleCodingRequest(
       return true;
     }
 
-    // POST /api/integrations/:id/disconnect — SSE stream: run logout command
-    if (parts.length === 4 && parts[3] === 'disconnect' && method === 'POST') {
+    // POST /api/integrations/:id/disable — soft-disable in app (no CLI logout)
+    if (parts.length === 4 && parts[3] === 'disable' && method === 'POST') {
+      const agentId = parts[2] as 'claude-code' | 'codex';
+      const updated = manager.integrationManager.disableIntegration(agentId);
+      sendJson(response, 200, { integration: updated }, allowOrigin);
+      return true;
+    }
+
+    // POST /api/integrations/:id/enable — re-enable in app
+    if (parts.length === 4 && parts[3] === 'enable' && method === 'POST') {
+      const agentId = parts[2] as 'claude-code' | 'codex';
+      try {
+        const updated = await manager.integrationManager.enableIntegration(agentId);
+        sendJson(response, 200, { integration: updated }, allowOrigin);
+      } catch (err) {
+        sendJson(response, 500, { error: { code: 'ENABLE_FAILED', message: (err as Error).message } }, allowOrigin);
+      }
+      return true;
+    }
+
+    // POST /api/integrations/:id/delete — SSE stream: run actual CLI logout
+    if (parts.length === 4 && parts[3] === 'delete' && method === 'POST') {
       const agentId = parts[2] as 'claude-code' | 'codex';
       const adapter = manager.integrationManager.getAdapter(agentId);
       if (!adapter) {
@@ -491,7 +529,7 @@ export async function handleCodingRequest(
       }
       const disconnectCmd = adapter.disconnectCommand();
       if (!disconnectCmd) {
-        sendJson(response, 400, { error: { code: 'NOT_SUPPORTED', message: `${adapter.name} does not support in-app disconnect` } }, allowOrigin);
+        sendJson(response, 400, { error: { code: 'NOT_SUPPORTED', message: `${adapter.name} does not support in-app delete` } }, allowOrigin);
         return true;
       }
       sendSseHeaders(response, allowOrigin);
@@ -502,6 +540,38 @@ export async function handleCodingRequest(
         try {
           emit('connect.status', { message: `Signing out of ${adapter.name}…` });
           await streamShellCommand(disconnectCmd, emit);
+          manager.integrationManager.resetIntegrationAuth(agentId);
+          const updated = await manager.integrationManager.checkIntegration(agentId, { detectOnly: true });
+          emit('connect.complete', { integration: updated });
+        } catch (err) {
+          emit('connect.error', { message: (err as Error).message });
+        }
+        response.end();
+      })().catch(() => response.end());
+      return true;
+    }
+
+    // POST /api/integrations/:id/update — SSE stream: re-run npm install to upgrade
+    if (parts.length === 4 && parts[3] === 'update' && method === 'POST') {
+      const agentId = parts[2] as 'claude-code' | 'codex';
+      const adapter = manager.integrationManager.getAdapter(agentId);
+      if (!adapter) {
+        sendJson(response, 404, { error: { code: 'NOT_FOUND', message: `Unknown agent: ${agentId}` } }, allowOrigin);
+        return true;
+      }
+      const installCmd = adapter.installCommands()[0];
+      if (!installCmd) {
+        sendJson(response, 400, { error: { code: 'NOT_SUPPORTED', message: `${adapter.name} has no install command` } }, allowOrigin);
+        return true;
+      }
+      sendSseHeaders(response, allowOrigin);
+      const emit = (type: string, data: Record<string, unknown>) => {
+        if (!response.writableEnded) writeSseEvent(response, { type, agentId, ts: Date.now(), ...data });
+      };
+      (async () => {
+        try {
+          emit('connect.status', { message: `Updating ${adapter.name}…` });
+          await streamShellCommand(installCmd.command, emit);
           const updated = await manager.integrationManager.checkIntegration(agentId);
           emit('connect.complete', { integration: updated });
         } catch (err) {
@@ -509,6 +579,14 @@ export async function handleCodingRequest(
         }
         response.end();
       })().catch(() => response.end());
+      return true;
+    }
+
+    // POST /api/integrations/:id/disconnect — DEPRECATED: alias for disable
+    if (parts.length === 4 && parts[3] === 'disconnect' && method === 'POST') {
+      const agentId = parts[2] as 'claude-code' | 'codex';
+      const updated = manager.integrationManager.disableIntegration(agentId);
+      sendJson(response, 200, { integration: updated }, allowOrigin);
       return true;
     }
 

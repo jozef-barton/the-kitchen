@@ -101,6 +101,8 @@ export class JobManager {
     approvalMode: CodingJob['approvalMode'];
     confirmAutoAll?: boolean;
     resumeSessionId?: string;
+    model?: string;
+    reasoningEffort?: string;
   }): Promise<CodingJob> {
     const project = this.store.getProject(opts.projectId);
     if (!project) throw new Error(`Project not found: ${opts.projectId}`);
@@ -149,6 +151,8 @@ export class JobManager {
       agent: opts.agent,
       status: 'queued',
       approvalMode: opts.approvalMode,
+      model: opts.model,
+      reasoningEffort: opts.reasoningEffort,
       createdAt: Date.now(),
       autoRespondRules: [],
       resumeSessionId: opts.resumeSessionId,
@@ -444,9 +448,16 @@ export class JobManager {
     return false;
   }
 
+  updateJobModelConfig(jobId: string, config: { model?: string; reasoningEffort?: string }) {
+    this.store.updateJobModelConfig(jobId, config);
+    return this.store.getJob(jobId);
+  }
+
   getJob(id: string) { return this.store.getJob(id); }
   listJobs(opts?: { projectId?: string; status?: string }) { return this.store.listJobs(opts); }
   getRecentEvents(jobId: string) { return this.store.getRecentEvents(jobId); }
+  getEventsSince(jobId: string, sinceId: number) { return this.store.getEventsSince(jobId, sinceId); }
+  getMaxEventId(jobId: string) { return this.store.getMaxEventId(jobId); }
   batchGetJobFileStats(jobIds: string[]) { return this.store.batchGetJobFileStats(jobIds); }
   getJobFileMap(jobId: string) { return this.store.getJobFileMap(jobId); }
   getToolCallEvent(jobId: string, toolUseId: string) { return this.store.getToolCallEvent(jobId, toolUseId); }

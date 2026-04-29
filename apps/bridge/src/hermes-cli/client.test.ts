@@ -1682,4 +1682,74 @@ Quarterly planning review                           9m ago                      
     expect(calls).toContain('config set OPENROUTER_API_KEY sk-or-test-1234');
     expect(result.runtimeReadiness.ready).toBe(true);
   });
+
+  it('connectProvider for openai writes to OPENAI_API_KEY (not VOICE_TOOLS_OPENAI_KEY)', async () => {
+    const calls: string[] = [];
+    const runner: HermesCliRunner = {
+      async run(args) {
+        const command = args.join(' ');
+        calls.push(command);
+        if (command.startsWith('config set ')) return { stdout: '', stderr: '', exitCode: 0 };
+        if (command === 'dump') {
+          return {
+            stdout: [
+              'model: openai/gpt-4o',
+              'provider: openai',
+              'api_keys:',
+              '  openai               set',
+              'features:',
+              '  toolsets:           hermes-cli',
+            ].join('\n'),
+            stderr: '',
+            exitCode: 0
+          };
+        }
+        throw new Error(`Unexpected command: ${args.join(' ')}`);
+      },
+      async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+    };
+
+    const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+    await cli.connectProvider(
+      { id: 'default', name: 'default', description: '', path: '/tmp/default', isActive: true },
+      { profileId: 'default', provider: 'openai', apiKey: 'sk-test-openai-1234' }
+    );
+
+    expect(calls).toContain('config set OPENAI_API_KEY sk-test-openai-1234');
+    expect(calls.every(c => !c.includes('VOICE_TOOLS_OPENAI_KEY'))).toBe(true);
+  });
+
+  it('connectProvider result shows openai as connected when OPENAI_API_KEY is set in dump', async () => {
+    const runner: HermesCliRunner = {
+      async run(args) {
+        if (args.join(' ').startsWith('config set ')) return { stdout: '', stderr: '', exitCode: 0 };
+        if (args.join(' ') === 'dump') {
+          return {
+            stdout: [
+              'model: openai/gpt-4o',
+              'provider: openai',
+              'api_keys:',
+              '  openai               set',
+              'features:',
+              '  toolsets:           hermes-cli',
+            ].join('\n'),
+            stderr: '',
+            exitCode: 0
+          };
+        }
+        throw new Error(`Unexpected command: ${args.join(' ')}`);
+      },
+      async stream() { return { stdout: '', stderr: '', exitCode: 0 }; }
+    };
+
+    const cli = new HermesCli({ runner, workingDirectory: process.cwd() });
+    const result = await cli.connectProvider(
+      { id: 'default', name: 'default', description: '', path: '/tmp/default', isActive: true },
+      { profileId: 'default', provider: 'openai', apiKey: 'sk-test-openai-1234' }
+    );
+
+    const openaiProvider = result.providers.find(p => p.id === 'openai');
+    expect(openaiProvider?.status).toBe('connected');
+    expect(openaiProvider?.setupSteps?.find(s => s.kind === 'api_key')?.status).toBe('completed');
+  });
 });

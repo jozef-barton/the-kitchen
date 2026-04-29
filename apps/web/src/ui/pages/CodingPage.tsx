@@ -1,14 +1,48 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Box, Button, Flex, HStack, Input, NativeSelect, Spinner, Text, Textarea, VStack
+  Box, Button, Flex, HStack, Input, NativeSelect, Spinner, Tabs, Text, Textarea, VStack
 } from '@chakra-ui/react';
 import * as api from '../../lib/coding-api';
-import type { CodingProject, CodingJob, AgentIntegration, JobEvent, JobFileSummaryEntry, ApprovalMode } from '../../lib/coding-api';
+import type { CodingProject, CodingJob, JobEvent, JobFileSummaryEntry, ApprovalMode } from '../../lib/coding-api';
+import * as mainApi from '../../lib/api';
+import type { ModelProviderResponse } from '@hermes-recipes/protocol';
 import { JobConversation } from './coding/JobConversation';
 import { JobComposer } from './coding/JobComposer';
 import { CostBadge } from './coding/CostBadge';
+import { MessageRow } from './coding/events/MessageRow';
 import { FilePanel } from './coding/FilePanel';
+import { IntegrationsTab } from './coding/IntegrationsTab';
+import { useCodingIntegrations } from '../../hooks/use-coding-integrations';
 import type { FilePanelMode } from './coding/FilePanel';
+
+// ── Agent model/effort option tables ────────────────────────────────────────
+const AGENT_MODELS: Record<string, { value: string; label: string }[]> = {
+  'claude-code': [
+    { value: 'sonnet', label: 'Claude Sonnet 4.6' },
+    { value: 'opus', label: 'Claude Opus 4.7' },
+    { value: 'haiku', label: 'Claude Haiku 4.5' },
+  ],
+  codex: [
+    { value: 'codex-mini-latest', label: 'Codex Mini' },
+    { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+  ],
+};
+
+const AGENT_EFFORTS: Record<string, { value: string; label: string }[]> = {
+  'claude-code': [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'xhigh', label: 'X-High' },
+    { value: 'max', label: 'Max' },
+  ],
+  codex: [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+  ],
+};
 
 // ── Views ───────────────────────────────────────────────────────────────────
 type View =
@@ -52,290 +86,6 @@ function RelativeTime({ ts }: { ts: number }) {
   return <Text fontSize="11px" color="var(--text-muted)">{label}</Text>;
 }
 
-// ── Integrations strip ──────────────────────────────────────────────────────
-function IntegrationsStrip({ onManage }: { onManage: () => void }) {
-  const [integrations, setIntegrations] = useState<AgentIntegration[]>([]);
-
-  useEffect(() => {
-    const ONE_HOUR = 60 * 60 * 1000;
-    api.listIntegrations().then(list => {
-      setIntegrations(list);
-      // Auto-detect any agent that is unchecked or has stale data (> 1h old)
-      for (const agent of list) {
-        const stale = agent.authStatus === 'unchecked' || agent.lastCheckedAt === 0 || (Date.now() - agent.lastCheckedAt > ONE_HOUR);
-        if (stale) {
-          api.detectIntegration(agent.id)
-            .then(updated => setIntegrations(prev => prev.map(i => i.id === updated.id ? updated : i)))
-            .catch(() => {});
-        }
-      }
-      // Also detect agents not in the list yet (brand-new install, no DB rows)
-      const knownIds = new Set(list.map(i => i.id));
-      for (const id of ['claude-code', 'codex'] as const) {
-        if (!knownIds.has(id)) {
-          api.detectIntegration(id)
-            .then(updated => setIntegrations(prev => {
-              if (prev.some(i => i.id === updated.id)) return prev.map(i => i.id === updated.id ? updated : i);
-              return [...prev, updated];
-            }))
-            .catch(() => {});
-        }
-      }
-    }).catch(() => {});
-  }, []);
-
-  function dotColor(r: AgentIntegration) {
-    if (!r.installed) return 'var(--status-neutral)';
-    if (r.authStatus === 'ok') return 'var(--status-success)';
-    if (r.authStatus === 'not_authenticated') return 'var(--status-warning)';
-    return 'var(--status-neutral)';
-  }
-
-  function label(r: AgentIntegration) {
-    const name = r.id === 'claude-code' ? 'Claude Code' : 'Codex';
-    if (!r.installed) return `${name} · Not installed`;
-    if (r.authStatus === 'ok') return r.account ? `${name} · ${r.account}` : `${name} · Authenticated`;
-    if (r.authStatus === 'not_authenticated') return `${name} · Not authenticated`;
-    return `${name} · ${r.authStatus}`;
-  }
-
-  return (
-    <HStack
-      px="4" py="2"
-      borderBottom="1px solid var(--divider)"
-      gap="4"
-      flexShrink={0}
-      flexWrap="wrap"
-    >
-      {integrations.map(r => (
-        <HStack key={r.id} gap="1.5" align="center">
-          <Box w="6px" h="6px" rounded="full" bg={dotColor(r)} flexShrink={0} />
-          <Text fontSize="11px" color="var(--text-secondary)">{label(r)}</Text>
-        </HStack>
-      ))}
-      {integrations.length === 0 && (
-        <Text fontSize="11px" color="var(--text-muted)">Checking agents…</Text>
-      )}
-      <Button
-        variant="ghost" size="xs" h="5" px="2" ml="auto"
-        fontSize="11px" color="var(--text-muted)"
-        _hover={{ color: 'var(--text-primary)', bg: 'var(--surface-hover)' }}
-        onClick={onManage}
-      >
-        Manage agents →
-      </Button>
-    </HStack>
-  );
-}
-
-// ── Integrations panel (sheet overlay) ─────────────────────────────────────
-function IntegrationsPanel({ onClose }: { onClose: () => void }) {
-  const [integrations, setIntegrations] = useState<AgentIntegration[]>([]);
-  const [checking, setChecking] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState<string | null>(null);
-  const [connectLog, setConnectLog] = useState<Record<string, string[]>>({}); // shared for connect + disconnect
-  const termRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  useEffect(() => { api.listIntegrations().then(setIntegrations).catch(() => {}); }, []);
-
-  async function refresh(id: string) {
-    setChecking(id);
-    try {
-      const updated = await api.checkIntegration(id);
-      setIntegrations(prev => prev.map(i => i.id === id ? updated : i));
-    } catch { /* ignore */ }
-    finally { setChecking(null); }
-  }
-
-  function runAction(id: string, action: 'connect' | 'disconnect') {
-    setConnecting(id);
-    setConnectLog(prev => ({ ...prev, [id]: [] }));
-    const addLine = (line: string) => {
-      setConnectLog(prev => {
-        const next = { ...prev, [id]: [...(prev[id] ?? []), line] };
-        setTimeout(() => {
-          const el = termRefs.current[id];
-          if (el) el.scrollTop = el.scrollHeight;
-        }, 0);
-        return next;
-      });
-    };
-    const handler = (event: api.ConnectEvent) => {
-      if (event.type === 'connect.status') addLine(`→ ${event.message}`);
-      if (event.type === 'connect.output') addLine(event.line);
-      if (event.type === 'connect.error') {
-        addLine(`✗ ${event.message}`);
-        setConnecting(null);
-      }
-      if (event.type === 'connect.complete') {
-        addLine(`✓ ${action === 'disconnect' ? 'Signed out' : 'Done'}`);
-        setIntegrations(prev => prev.map(i => i.id === id ? event.integration : i));
-        setConnecting(null);
-      }
-    };
-    if (action === 'disconnect') {
-      api.disconnectAgent(id, handler);
-    } else {
-      api.connectAgent(id, handler);
-    }
-  }
-
-  const names: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
-  const docsUrls: Record<string, string> = {
-    'claude-code': 'https://docs.anthropic.com/claude-code',
-    codex: 'https://github.com/openai/codex'
-  };
-  const authCmds: Record<string, string> = {
-    'claude-code': 'claude auth login --console',
-    codex: 'codex auth login'
-  };
-
-  const shown = (['claude-code', 'codex'] as const).map(id =>
-    integrations.find(i => i.id === id) ?? { id, installed: 0 as const, authStatus: 'unchecked', lastCheckedAt: 0 }
-  );
-
-  return (
-    <Box
-      position="fixed" inset={0} zIndex={100}
-      bg="rgba(0,0,0,0.4)"
-      display="flex" alignItems="flex-start" justifyContent="flex-end"
-      onClick={onClose}
-    >
-      <Box
-        bg="var(--surface-1)"
-        borderLeft="1px solid var(--border-subtle)"
-        w="440px" maxW="90vw" h="100vh"
-        overflow="auto"
-        p="5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <HStack justify="space-between" mb="5">
-          <Text fontSize="15px" fontWeight="600" color="var(--text-primary)">Agent integrations</Text>
-          <Button variant="ghost" size="xs" onClick={onClose} color="var(--text-muted)">✕</Button>
-        </HStack>
-        <VStack gap="5" align="stretch">
-          {shown.map(r => {
-            const isConnecting = connecting === r.id;
-            const log = connectLog[r.id] ?? [];
-            const isAuthenticated = r.installed && r.authStatus === 'ok';
-            return (
-              <Box key={r.id} p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)">
-                <HStack justify="space-between" mb="3">
-                  <Text fontSize="14px" fontWeight="600" color="var(--text-primary)">{names[r.id]}</Text>
-                  <HStack gap="1.5">
-                    <Button
-                      size="xs" variant="ghost" h="6" px="2"
-                      color="var(--text-muted)" _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-                      loading={checking === r.id}
-                      disabled={isConnecting}
-                      onClick={() => void refresh(r.id)}
-                    >
-                      Refresh
-                    </Button>
-                    {isAuthenticated ? (
-                      /* Red Disconnect button — only shown when fully connected */
-                      <Button
-                        size="xs" h="6" px="3"
-                        bg="var(--status-danger-bg)" color="var(--status-danger)"
-                        border="1px solid var(--status-danger)"
-                        _hover={{ bg: 'var(--surface-danger)' }}
-                        rounded="var(--radius-control)"
-                        loading={isConnecting}
-                        disabled={checking === r.id}
-                        onClick={() => runAction(r.id, 'disconnect')}
-                      >
-                        Disconnect
-                      </Button>
-                    ) : (
-                      /* Connect button — shown when not installed or not authenticated */
-                      <Button
-                        size="xs" h="6" px="3"
-                        bg="var(--accent)" color="var(--accent-contrast)"
-                        _hover={{ bg: 'var(--accent-strong)' }}
-                        rounded="var(--radius-control)"
-                        loading={isConnecting}
-                        disabled={checking === r.id}
-                        onClick={() => runAction(r.id, 'connect')}
-                      >
-                        {r.installed ? 'Re-authenticate' : 'Connect'}
-                      </Button>
-                    )}
-                  </HStack>
-                </HStack>
-
-                {r.installed ? (
-                  <>
-                    <Text fontSize="12px" color="var(--status-success)">✓ Installed{r.version ? ` (v${r.version})` : ''}</Text>
-                    {isAuthenticated
-                      ? <Text fontSize="12px" color="var(--status-success)" mt="1">✓ Authenticated{r.account ? ` as ${r.account}` : ''}</Text>
-                      : <Text fontSize="12px" color="var(--status-warning)" mt="1">⚠ {r.authStatus === 'not_authenticated' ? 'Not authenticated — click Re-authenticate' : `Auth: ${r.authStatus}`}</Text>
-                    }
-                  </>
-                ) : (
-                  <Text fontSize="12px" color="var(--status-danger)">✗ Not installed — click Connect to install and authenticate</Text>
-                )}
-
-                {/* Streaming terminal for connect output */}
-                {log.length > 0 && (
-                  <Box
-                    ref={(el: HTMLDivElement | null) => { termRefs.current[r.id] = el; }}
-                    mt="3" p="2" maxH="160px" overflow="auto"
-                    bg="hsl(220, 14%, 8%)" rounded="4px"
-                    fontFamily="ui-monospace, monospace" fontSize="11px" lineHeight="1.6"
-                  >
-                    {log.map((line, i) => (
-                      <Text key={i} color={line.startsWith('✗') ? 'var(--status-danger)' : line.startsWith('✓') ? 'var(--status-success)' : line.startsWith('→') ? 'var(--text-muted)' : 'var(--text-primary)'} whiteSpace="pre-wrap" wordBreak="break-all">
-                        {line}
-                      </Text>
-                    ))}
-                    {isConnecting && <Text color="var(--text-muted)">…</Text>}
-                  </Box>
-                )}
-
-                {r.lastCheckedAt > 0 && (
-                  <Text fontSize="11px" color="var(--text-muted)" mt="2">
-                    Last check: <RelativeTime ts={r.lastCheckedAt} />
-                  </Text>
-                )}
-
-                {/* Auth command for manual fallback */}
-                {r.installed && r.authStatus !== 'ok' && (
-                  <Box mt="3">
-                    <Text fontSize="11px" color="var(--text-muted)" mb="1">Or run manually:</Text>
-                    <CopyLine code={authCmds[r.id] ?? ''} />
-                  </Box>
-                )}
-
-                <Box mt="3">
-                  <a href={docsUrls[r.id]} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--accent)', display: 'block' }}>
-                    Documentation ↗
-                  </a>
-                </Box>
-              </Box>
-            );
-          })}
-        </VStack>
-      </Box>
-    </Box>
-  );
-}
-
-function CopyLine({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <HStack gap="2" p="2" bg="var(--surface-3)" rounded="4px">
-      <Text fontSize="11px" color="var(--text-primary)" fontFamily="ui-monospace, monospace" flex="1" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{code}</Text>
-      <Button
-        size="xs" variant="ghost" h="5" px="1.5"
-        fontSize="10px" color="var(--text-muted)"
-        flexShrink={0}
-        onClick={() => { void navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
-      >
-        {copied ? '✓' : 'Copy'}
-      </Button>
-    </HStack>
-  );
-}
 
 // ── Clone progress modal ──────────────────────────────────────────────────────
 
@@ -865,23 +615,197 @@ function JobRow({ job, onSelect, focused }: { job: CodingJob; onSelect: () => vo
         {/* Right side: status + last activity */}
         <VStack align="end" gap="1" flexShrink={0}>
           <HStack gap="1.5" align="center">
-            {/* Status dot */}
-            <Box
-              w="6px" h="6px" rounded="full" flexShrink={0}
-              bg={
-                isAwaiting ? 'var(--status-warning)' :
-                isRunning ? 'var(--status-success)' :
-                job.status === 'failed' || job.status === 'cancelled' ? 'var(--status-danger)' :
-                'transparent'
-              }
-              boxShadow={isRunning ? '0 0 0 2px rgba(34,197,94,0.3)' : undefined}
-            />
+            {isRunning ? (
+              <Spinner size="xs" color="var(--status-success)" flexShrink={0} />
+            ) : (
+              <Box
+                w="6px" h="6px" rounded="full" flexShrink={0}
+                bg={
+                  isAwaiting ? 'var(--status-warning)' :
+                  job.status === 'failed' || job.status === 'cancelled' ? 'var(--status-danger)' :
+                  'transparent'
+                }
+              />
+            )}
             <StatusPill status={job.status} />
           </HStack>
           <RelativeTime ts={lastActivity} />
         </VStack>
       </HStack>
     </Box>
+  );
+}
+
+// ── All-jobs view (Jobs tab) ─────────────────────────────────────────────────
+function AllJobsView({
+  onSelectJob
+}: {
+  onSelectJob: (projectId: string, jobId: string) => void;
+}) {
+  const [projects, setProjects] = useState<CodingProject[]>([]);
+  const [jobsByProject, setJobsByProject] = useState<Record<string, CodingJob[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [allProjects, allJobs] = await Promise.all([
+        api.listProjects(),
+        api.listJobs(),
+      ]);
+      setProjects(allProjects);
+      const byProject: Record<string, CodingJob[]> = {};
+      for (const project of allProjects) {
+        byProject[project.id] = [];
+      }
+      for (const job of allJobs) {
+        if (byProject[job.projectId]) {
+          byProject[job.projectId]!.push(job);
+        }
+      }
+      setJobsByProject(byProject);
+      // Auto-expand projects that have jobs on first load
+      setExpanded(prev => {
+        const next = { ...prev };
+        for (const project of allProjects) {
+          if (!(project.id in next)) {
+            next[project.id] = (byProject[project.id]?.length ?? 0) > 0;
+          }
+        }
+        return next;
+      });
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // Poll running jobs
+  useEffect(() => {
+    const hasRunning = Object.values(jobsByProject).flat()
+      .some(j => j.status === 'running' || j.status === 'awaiting_approval');
+    if (!hasRunning) return;
+    const id = setInterval(() => { void load(); }, 5000);
+    return () => clearInterval(id);
+  }, [jobsByProject, load]);
+
+  if (loading) {
+    return (
+      <Flex flex="1" align="center" justify="center">
+        <Spinner size="sm" color="var(--text-muted)" />
+      </Flex>
+    );
+  }
+
+  const projectsWithJobs = projects.filter(p => (jobsByProject[p.id]?.length ?? 0) > 0);
+  const projectsWithoutJobs = projects.filter(p => (jobsByProject[p.id]?.length ?? 0) === 0);
+  const hasAnything = projects.length > 0;
+
+  if (!hasAnything) {
+    return (
+      <Flex flex="1" align="center" justify="center">
+        <VStack gap="2" textAlign="center">
+          <Text fontSize="15px" fontWeight="500" color="var(--text-secondary)">No projects yet</Text>
+          <Text fontSize="13px" color="var(--text-muted)">Add a project in the Repos tab to get started</Text>
+        </VStack>
+      </Flex>
+    );
+  }
+
+  const totalRunning = Object.values(jobsByProject).flat()
+    .filter(j => j.status === 'running' || j.status === 'awaiting_approval' || j.status === 'awaiting_user').length;
+
+  return (
+    <VStack align="stretch" h="100%" minH={0} gap="0">
+      {/* Header */}
+      <HStack px="4" py="3" flexShrink={0} justify="space-between" borderBottom="1px solid var(--border-subtle)">
+        <HStack gap="2">
+          <Text fontSize="14px" fontWeight="600" color="var(--text-primary)">All jobs</Text>
+          {totalRunning > 0 && (
+            <HStack gap="1.5" px="2" py="0.5" rounded="full"
+              bg="rgba(34,197,94,0.12)" border="1px solid rgba(34,197,94,0.3)">
+              <Spinner size="xs" color="var(--status-success)" />
+              <Text fontSize="11px" fontWeight="600" color="var(--status-success)">
+                {totalRunning} running
+              </Text>
+            </HStack>
+          )}
+        </HStack>
+        <Button
+          size="xs" variant="ghost" h="6" px="2" fontSize="11px"
+          color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }}
+          onClick={() => void load()}
+        >
+          Refresh
+        </Button>
+      </HStack>
+
+      {/* Project groups */}
+      <VStack align="stretch" flex="1" overflow="auto" gap="0" py="2" px="3">
+        {[...projectsWithJobs, ...projectsWithoutJobs].map(project => {
+          const jobs = jobsByProject[project.id] ?? [];
+          const isOpen = expanded[project.id] ?? false;
+          const runningCount = jobs.filter(j =>
+            j.status === 'running' || j.status === 'awaiting_approval' || j.status === 'awaiting_user'
+          ).length;
+
+          return (
+            <Box key={project.id} mb="1">
+              {/* Section header */}
+              <HStack
+                px="2" py="2" rounded="var(--radius-control)" cursor="pointer"
+                _hover={{ bg: 'var(--surface-hover)' }}
+                onClick={() => setExpanded(prev => ({ ...prev, [project.id]: !isOpen }))}
+                gap="2"
+              >
+                <Text
+                  fontSize="12px" lineHeight="1"
+                  color="var(--text-muted)"
+                  style={{ transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}
+                >
+                  ▶
+                </Text>
+                <Text fontSize="13px" fontWeight="600" color="var(--text-primary)" flex="1" truncate>
+                  {project.name}
+                </Text>
+                <HStack gap="2" flexShrink={0}>
+                  {runningCount > 0 && (
+                    <HStack gap="1">
+                      <Spinner size="xs" color="var(--status-success)" />
+                      <Text fontSize="11px" color="var(--status-success)" fontWeight="600">
+                        {runningCount}
+                      </Text>
+                    </HStack>
+                  )}
+                  <Text fontSize="11px" color="var(--text-muted)">
+                    {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}
+                  </Text>
+                </HStack>
+              </HStack>
+
+              {/* Jobs list */}
+              {isOpen && (
+                <VStack align="stretch" gap="1.5" pl="5" pb="2">
+                  {jobs.length === 0 ? (
+                    <Text fontSize="12px" color="var(--text-muted)" py="1">No jobs yet</Text>
+                  ) : (
+                    jobs.map(j => (
+                      <JobRow
+                        key={j.id}
+                        job={j}
+                        focused={false}
+                        onSelect={() => onSelectJob(project.id, j.id)}
+                      />
+                    ))
+                  )}
+                </VStack>
+              )}
+            </Box>
+          );
+        })}
+      </VStack>
+    </VStack>
   );
 }
 
@@ -894,26 +818,23 @@ function ProjectDetailView({
   onBack: () => void;
   onSelectJob: (jobId: string) => void;
 }) {
+  const { integrations } = useCodingIntegrations();
   const [project, setProject] = useState<CodingProject | null>(null);
   const [jobs, setJobs] = useState<CodingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [newJobOpen, setNewJobOpen] = useState(false);
-  const [integrations, setIntegrations] = useState<api.AgentIntegration[]>([]);
   const [focusedIdx, setFocusedIdx] = useState<number>(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback((attempt = 0) => {
     setLoading(true);
-    Promise.all([
-      api.getProject(projectId),
-      api.listIntegrations()
-    ]).then(([data, intgs]) => {
-      setProject(data.project);
-      setJobs(data.jobs);
-      setIntegrations(intgs);
-    }).catch(() => {
-      if (attempt < 4) setTimeout(() => load(attempt + 1), 600 * (attempt + 1));
-    }).finally(() => setLoading(false));
+    api.getProject(projectId)
+      .then((data) => {
+        setProject(data.project);
+        setJobs(data.jobs);
+      }).catch(() => {
+        if (attempt < 4) setTimeout(() => load(attempt + 1), 600 * (attempt + 1));
+      }).finally(() => setLoading(false));
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
@@ -931,6 +852,18 @@ function ProjectDetailView({
     el.addEventListener('keydown', handler);
     return () => el.removeEventListener('keydown', handler);
   }, [jobs, focusedIdx, newJobOpen, onSelectJob]);
+
+  // New job view replaces the list — rendered after all hooks
+  if (newJobOpen && project) {
+    return (
+      <NewJobView
+        project={project}
+        integrations={integrations}
+        onCancel={() => setNewJobOpen(false)}
+        onCreated={(job) => { setNewJobOpen(false); onSelectJob(job.id); }}
+      />
+    );
+  }
 
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0" px="4" py="4">
@@ -958,9 +891,9 @@ function ProjectDetailView({
                     load();
                   }}
                 >
-                  <option value="auto_safe">Auto-safe</option>
-                  <option value="auto_all">Auto-all</option>
-                  <option value="manual">Manual</option>
+                  <option value="auto_safe">Edits only</option>
+                  <option value="auto_all">Actions only</option>
+                  <option value="manual">Manual approval</option>
                 </NativeSelect.Field>
                 <NativeSelect.Indicator />
               </NativeSelect.Root>
@@ -978,15 +911,6 @@ function ProjectDetailView({
           </Button>
         </HStack>
       </HStack>
-
-      {newJobOpen && project && (
-        <NewJobForm
-          project={project}
-          integrations={integrations}
-          onCancel={() => setNewJobOpen(false)}
-          onCreated={(job) => { setNewJobOpen(false); load(); onSelectJob(job.id); }}
-        />
-      )}
 
       {loading ? (
         <Flex flex="1" align="center" justify="center"><Spinner size="sm" /></Flex>
@@ -1019,37 +943,205 @@ function ProjectDetailView({
   );
 }
 
-// ── New job form ─────────────────────────────────────────────────────────────
-function NewJobForm({
+// ── Header selector chip — shared, polished styling ──────────────────────────
+function HeaderSelect({
+  value, options, disabled, onChange, width,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  onChange: (v: string) => void;
+  width: number;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onChange={e => onChange(e.currentTarget.value)}
+      style={{
+        height: '30px',
+        width: `${width}px`,
+        paddingTop: '6px',
+        paddingBottom: '6px',
+        paddingLeft: '10px',
+        paddingRight: '28px',
+        fontSize: '12px',
+        fontWeight: 500,
+        lineHeight: '1',
+        backgroundColor: 'var(--surface-2)',
+        border: `1px solid ${hover && !disabled ? 'var(--border-default, rgba(255,255,255,0.18))' : 'var(--border-subtle, rgba(255,255,255,0.10))'}`,
+        borderRadius: '8px',
+        color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+        cursor: disabled ? 'default' : 'pointer',
+        appearance: 'none',
+        WebkitAppearance: 'none',
+        MozAppearance: 'none',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a1a1aa' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 9px center',
+        opacity: disabled ? 0.7 : 1,
+        outline: 'none',
+        flexShrink: 0,
+        transition: 'border-color 0.15s ease',
+        boxShadow: 'inset 0 0 0 0 transparent',
+      }}
+    >
+      {options.map(o => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
+
+function CodingHeaderSelectors({
+  agent, connectedAgents, agentLocked, onAgentChange,
+  effectiveMode, unrestrictedAccess, onApprovalModeChange,
+  model, onModelChange,
+  reasoningEffort, onReasoningEffortChange,
+}: {
+  agent: string;
+  connectedAgents: readonly string[];
+  agentLocked: boolean;
+  onAgentChange: (v: string) => void;
+  effectiveMode: ApprovalMode;
+  unrestrictedAccess: boolean;
+  onApprovalModeChange: (m: ApprovalMode) => void;
+  model: string;
+  onModelChange: (v: string) => void;
+  reasoningEffort: string;
+  onReasoningEffortChange: (v: string) => void;
+}) {
+  return (
+    <>
+      <HeaderSelect
+        width={130}
+        value={agent}
+        disabled={agentLocked || connectedAgents.length < 2}
+        onChange={onAgentChange}
+        options={connectedAgents.map(id => ({
+          value: id,
+          label: id === 'claude-code' ? 'Claude Code' : 'Codex',
+        }))}
+      />
+      <HeaderSelect
+        width={150}
+        value={effectiveMode}
+        disabled={unrestrictedAccess}
+        onChange={(v) => onApprovalModeChange(v as ApprovalMode)}
+        options={[
+          { value: 'auto_safe', label: 'Edits only' },
+          { value: 'auto_all', label: 'Actions only' },
+          { value: 'manual', label: 'Manual approval' },
+        ]}
+      />
+      <HeaderSelect
+        width={170}
+        value={model}
+        onChange={onModelChange}
+        options={AGENT_MODELS[agent] ?? AGENT_MODELS['claude-code']!}
+      />
+      <HeaderSelect
+        width={110}
+        value={reasoningEffort}
+        onChange={onReasoningEffortChange}
+        options={AGENT_EFFORTS[agent] ?? AGENT_EFFORTS['claude-code']!}
+      />
+    </>
+  );
+}
+
+// ── New job view (chat-pane style) ────────────────────────────────────────────
+function NewJobView({
   project,
   integrations,
   onCancel,
-  onCreated
+  onCreated,
 }: {
   project: CodingProject;
   integrations: api.AgentIntegration[];
   onCancel: () => void;
   onCreated: (job: CodingJob) => void;
 }) {
-  const [prompt, setPrompt] = useState('');
-  const [agent, setAgent] = useState<string>('claude-code');
-  // Pre-fill from project default; user can override per-job
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Only show agents that are fully connected
+  const connectedAgents = (['claude-code'] as const).filter(id => {
+    const intg = integrations.find(i => i.id === id);
+    return intg?.installed === 1 && intg.authStatus === 'ok';
+  });
+  const noAgents = connectedAgents.length === 0;
+
+  const defaultAgent = connectedAgents[0] ?? 'claude-code';
+  const [agent, setAgent] = useState<string>(defaultAgent);
+  const [agentLocked, setAgentLocked] = useState(false);
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>(project.defaultApprovalMode ?? 'auto_safe');
-  const [bypassPermissions, setBypassPermissions] = useState(false);
+  const [unrestrictedAccess, setUnrestrictedAccess] = useState(false);
+  const [model, setModel] = useState<string>(() => AGENT_MODELS[defaultAgent]?.[0]?.value ?? '');
+  const [reasoningEffort, setReasoningEffort] = useState<string>('medium');
+  const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Bypass checkbox forces auto_all and locks the dropdown
-  const effectiveMode: ApprovalMode = bypassPermissions ? 'auto_all' : approvalMode;
+  // Model config validation
+  const [modelCfg, setModelCfg] = useState<ModelProviderResponse | null>(null);
+  const [modelCfgLoading, setModelCfgLoading] = useState(true);
 
-  const usableAgents = (['claude-code', 'codex'] as const).filter(id => {
-    const intg = integrations.find(i => i.id === id);
-    return !intg || intg.installed;
-  });
-  const noAgents = usableAgents.length === 0;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const bootstrap = await mainApi.getBootstrap();
+        const profileId = bootstrap.activeProfileId ?? 'default';
+        const cfg = await mainApi.getModelProviders(profileId);
+        if (!cancelled) setModelCfg(cfg);
+      } catch { /* ignore — we'll show a generic message */ }
+      finally { if (!cancelled) setModelCfgLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Derive validation gaps
+  const readiness = modelCfg?.runtimeReadiness;
+  const config = modelCfg?.config;
+
+  const hasProvider = !!(config?.provider && config.provider !== 'unknown');
+  const hasModel = !!(config?.defaultModel && config.defaultModel !== 'unknown');
+
+  // Find the active model to check if reasoning effort is required
+  const activeProvider = modelCfg?.providers.find(p => p.id === config?.provider);
+  const activeModel = activeProvider?.models.find(
+    m => m.id === config?.defaultModel || config?.defaultModel?.endsWith('/' + m.id)
+  );
+  const needsReasoningEffort = activeModel?.supportsReasoningEffort === true;
+  const hasReasoningEffort = !!(config?.reasoningEffort && config.reasoningEffort.trim().length > 0);
+
+  const modelReady = !modelCfgLoading && readiness?.ready === true &&
+    (!needsReasoningEffort || hasReasoningEffort);
+
+  // Human-readable gap description
+  const modelGap: string | null = modelCfgLoading ? null :
+    !hasProvider ? 'No provider selected — choose one in the top-right selector.' :
+    !hasModel ? 'No model selected — choose one in the top-right selector.' :
+    needsReasoningEffort && !hasReasoningEffort ? 'Reasoning level not set — select one in Settings → Model.' :
+    readiness && !readiness.ready ? (readiness.message ?? 'Provider not ready — check Settings.') :
+    null;
+
+  const effectiveMode: ApprovalMode = unrestrictedAccess ? 'auto_all' : approvalMode;
+
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+
+  function handleAgentChange(value: string) {
+    if (agentLocked) return;
+    setAgent(value);
+    setModel(AGENT_MODELS[value]?.[0]?.value ?? '');
+  }
 
   async function handleCreate() {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || noAgents) return;
+    setAgentLocked(true);
     setSubmitting(true);
     setError(null);
     try {
@@ -1058,118 +1150,171 @@ function NewJobForm({
         prompt: prompt.trim(),
         agent,
         approvalMode: effectiveMode,
-        confirmAutoAll: effectiveMode === 'auto_all' ? true : undefined
+        confirmAutoAll: effectiveMode === 'auto_all' ? true : undefined,
+        model: model || undefined,
+        reasoningEffort: reasoningEffort || undefined,
       });
       onCreated(job);
     } catch (err) {
       setError((err as Error).message);
+      setAgentLocked(false);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
-      <VStack align="stretch" gap="3">
-        <Text fontSize="13px" fontWeight="600" color="var(--text-primary)">New job in {project.name}</Text>
-        {noAgents && (
-          <Text fontSize="12px" color="var(--status-danger)">No agents are installed. Set up Claude Code or Codex in Manage agents.</Text>
-        )}
-        <Textarea
-          placeholder="Describe what you want Hermes to code…"
-          value={prompt}
-          onChange={e => setPrompt(e.currentTarget.value)}
-          rows={4}
-          bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-          rounded="var(--radius-control)" fontSize="13px"
-          resize="vertical"
-          disabled={noAgents}
-        />
-        <HStack gap="3">
-          <Box flex="1">
-            <Text fontSize="11px" color="var(--text-muted)" mb="1">Agent</Text>
-            <NativeSelect.Root size="sm" bg="var(--surface-3)" disabled={noAgents}>
-              <NativeSelect.Field value={agent} onChange={e => setAgent(e.currentTarget.value)}>
-                <option value="claude-code" disabled={!usableAgents.includes('claude-code')}>
-                  Claude Code{!usableAgents.includes('claude-code') ? ' (not installed)' : ''}
-                </option>
-                <option value="codex" disabled={!usableAgents.includes('codex')}>
-                  Codex{!usableAgents.includes('codex') ? ' (not installed)' : ''}
-                </option>
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
-          </Box>
-          <Box flex="1">
-            <Text fontSize="11px" color="var(--text-muted)" mb="1">Approval mode</Text>
-            <NativeSelect.Root size="sm" bg="var(--surface-3)" disabled={noAgents || bypassPermissions}>
-              <NativeSelect.Field
-                value={effectiveMode}
-                onChange={e => setApprovalMode(e.currentTarget.value as ApprovalMode)}
-                opacity={bypassPermissions ? 0.5 : 1}
-              >
-                <option value="auto_safe">Auto-safe (edits only)</option>
-                <option value="auto_all">Auto-all (all actions)</option>
-                <option value="manual">Manual approval</option>
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
-          </Box>
-        </HStack>
-        {/* Bypass permissions checkbox */}
-        <Box p="3" rounded="var(--radius-control)" bg="var(--surface-2)" border="1px solid var(--border-subtle)">
-          <HStack gap="2" align="flex-start">
-            <input
-              type="checkbox"
-              id="bypass-permissions"
-              checked={bypassPermissions}
-              disabled={noAgents}
-              onChange={e => setBypassPermissions(e.target.checked)}
-              style={{ marginTop: '2px', flexShrink: 0 }}
-            />
-            <VStack align="start" gap="0.5">
-              <label htmlFor="bypass-permissions" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                Bypass all approval prompts (--bypassPermissions)
-              </label>
-              <Text fontSize="11px" color="var(--text-muted)">
-                Runs any command without asking. Use only in isolated test environments.
-              </Text>
-            </VStack>
-          </HStack>
-          {bypassPermissions && (
-            <Box mt="2" pl="5">
-              <Text fontSize="11px" color="var(--status-warning)">
-                ⚠ This job runs in {project.repoPath} directly with no isolation (worktrees ship in Phase 3).
-              </Text>
-            </Box>
-          )}
-        </Box>
-        {effectiveMode === 'auto_all' && !bypassPermissions && (
-          <Box p="3" rounded="var(--radius-control)" bg="var(--surface-warning)" border="1px solid var(--status-warning)">
-            <Text fontSize="12px" color="var(--status-warning)" fontWeight="600" mb="1">⚠ Direct repo modification</Text>
-            <Text fontSize="12px" color="var(--text-secondary)">
-              Without worktree isolation (Phase 3), this job will edit {project.repoPath} directly.
-              Commit any work in progress before proceeding.
-            </Text>
-          </Box>
-        )}
-        {error && <Text fontSize="12px" color="var(--status-danger)">{error}</Text>}
-        <HStack gap="2" justify="flex-end">
-          <Button variant="ghost" size="sm" h="8" px="3" onClick={onCancel} color="var(--text-muted)">Cancel</Button>
+    <Flex direction="column" h="100%" minH={0}>
+      {/* Header */}
+      <HStack
+        px="4"
+        borderBottom="1px solid var(--divider)"
+        flexShrink={0}
+        justify="space-between"
+        gap="3"
+        h="44px"
+      >
+        <HStack gap="1" minW={0} flex="1">
           <Button
-            size="sm" h="8" px="3"
-            bg="var(--accent)" color="var(--accent-contrast)"
-            _hover={{ bg: 'var(--accent-strong)' }}
-            rounded="var(--radius-control)"
-            loading={submitting}
-            disabled={noAgents || !prompt.trim()}
-            onClick={() => void handleCreate()}
+            variant="ghost" size="xs" h="6" px="1"
+            color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }}
+            onClick={onCancel}
           >
-            Start job
+            ← {project.name}
           </Button>
+          <Text fontSize="12px" color="var(--text-muted)">/</Text>
+          <Text fontSize="13px" fontWeight="500" color="var(--text-primary)">New job</Text>
         </HStack>
-      </VStack>
-    </Box>
+
+        {/* Agent + approval selectors */}
+        <HStack gap="1.5" flexShrink={0} align="center">
+          {noAgents ? (
+            <Text fontSize="12px" color="var(--status-danger)">
+              No connected agents — go to Integrations
+            </Text>
+          ) : (
+            <CodingHeaderSelectors
+              agent={agent}
+              connectedAgents={connectedAgents}
+              agentLocked={agentLocked}
+              onAgentChange={handleAgentChange}
+              effectiveMode={effectiveMode}
+              unrestrictedAccess={unrestrictedAccess}
+              onApprovalModeChange={(m) => setApprovalMode(m)}
+              model={model}
+              onModelChange={setModel}
+              reasoningEffort={reasoningEffort}
+              onReasoningEffortChange={setReasoningEffort}
+            />
+          )}
+        </HStack>
+      </HStack>
+
+      {/* Body — empty state placeholder */}
+      <Box flex="1" minH={0} overflow="auto" px="6" py="8">
+        <VStack align="center" gap="2" opacity={0.4} mt="8">
+          <Text fontSize="28px">✦</Text>
+          <Text fontSize="14px" fontWeight="500" color="var(--text-secondary)">
+            What should Claude Code work on?
+          </Text>
+          <Text fontSize="12px" color="var(--text-muted)" textAlign="center" maxW="320px">
+            Describe the task below. The agent will run in{' '}
+            <code style={{ fontFamily: 'ui-monospace,monospace', fontSize: '11px' }}>
+              {project.repoPath.replace(/^.*\//, '')}
+            </code>
+            .
+          </Text>
+        </VStack>
+      </Box>
+
+      {/* Unrestricted access warning + composer */}
+      <Box borderTop="1px solid var(--divider)" flexShrink={0} bg="var(--surface-1)">
+        {/* Warning checkbox */}
+        <HStack
+          px="4" py="2"
+          gap="2"
+          borderBottom={unrestrictedAccess ? '1px solid rgba(220,130,0,0.25)' : undefined}
+          bg={unrestrictedAccess ? 'rgba(220,130,0,0.06)' : undefined}
+        >
+          <input
+            type="checkbox"
+            id="unrestricted-access"
+            checked={unrestrictedAccess}
+            disabled={noAgents}
+            onChange={e => setUnrestrictedAccess(e.target.checked)}
+            style={{ flexShrink: 0, accentColor: 'var(--status-warning)' }}
+          />
+          <label
+            htmlFor="unrestricted-access"
+            style={{
+              fontSize: '12px',
+              color: unrestrictedAccess ? 'var(--status-warning)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            ⚠ Unrestricted access — run any command without approval prompts
+          </label>
+        </HStack>
+
+        {/* Model config gap warning */}
+        {!modelCfgLoading && modelGap && (
+          <HStack
+            px="4" py="2" gap="2"
+            bg="rgba(220,130,0,0.07)"
+            borderBottom="1px solid rgba(220,130,0,0.2)"
+          >
+            <Text fontSize="12px" color="var(--status-warning)" flex="1">⚠ {modelGap}</Text>
+            <Button
+              size="xs" variant="ghost" h="5" px="2" fontSize="11px"
+              color="var(--accent)" _hover={{ textDecoration: 'underline', bg: 'transparent' }}
+              onClick={() => window.location.hash = '/settings/models'}
+            >
+              Open Settings →
+            </Button>
+          </HStack>
+        )}
+
+        {/* Textarea + send */}
+        <VStack align="stretch" gap="2" px="4" py="3">
+          <Textarea
+            ref={textareaRef}
+            placeholder={
+              noAgents ? 'Connect an agent in Integrations first…' :
+              !modelReady && !modelCfgLoading ? 'Configure provider and model first…' :
+              'Describe what you want Claude Code to do… (Enter to send)'
+            }
+            value={prompt}
+            onChange={e => setPrompt(e.currentTarget.value)}
+            rows={3}
+            bg="var(--surface-2)"
+            border="1px solid var(--border-subtle)"
+            rounded="var(--radius-control)"
+            fontSize="13px"
+            resize="none"
+            disabled={noAgents || submitting || (!modelReady && !modelCfgLoading)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleCreate(); }
+            }}
+          />
+          {error && <Text fontSize="12px" color="var(--status-danger)">{error}</Text>}
+          <HStack justify="space-between">
+            <Text fontSize="11px" color="var(--text-muted)">Enter to start · Shift+Enter for newline</Text>
+            <Button
+              size="sm" h="7" px="4"
+              bg="var(--accent)" color="var(--accent-contrast)"
+              _hover={{ bg: 'var(--accent-strong)' }}
+              rounded="var(--radius-control)"
+              loading={submitting || modelCfgLoading}
+              disabled={noAgents || !prompt.trim() || !modelReady}
+              onClick={() => void handleCreate()}
+            >
+              Start job
+            </Button>
+          </HStack>
+        </VStack>
+      </Box>
+    </Flex>
   );
 }
 
@@ -1193,20 +1338,33 @@ function JobView({
     approvalId: string; message: string; options: string[]; defaultOption?: number; category: string; resolving: boolean;
   } | null>(null);
   const [activeJobId, setActiveJobId] = useState(jobId);
+  const maxEventIdRef = useRef<number>(0);
+  // sinceId: null = load not done yet; number = ready for SSE subscription
+  const [sinceId, setSinceId] = useState<number | null>(null);
   const [jobPrompts] = useState<Map<string, string>>(new Map());
   const [compact, setCompact] = useState(() => localStorage.getItem('coding-compact') === 'true');
   const [filePanel, setFilePanel] = useState<FilePanelMode | null>(null);
   const [filePanelLoading, setFilePanelLoading] = useState(false);
   const [sessionFiles, setSessionFiles] = useState<JobFileSummaryEntry[]>([]);
+  // Local overrides for model/reasoning — kept in sync with job state
+  const [localModel, setLocalModel] = useState<string>('');
+  const [localReasoning, setLocalReasoning] = useState<string>('medium');
 
-  // Load initial history
+  // Load history first, then gate SSE subscription on sinceId so replayed
+  // events can't regress the status that was authoritatively set by the load.
   useEffect(() => {
     let cancelled = false;
+    maxEventIdRef.current = 0;
+    setSinceId(null);
     const load = (attempt = 0) => {
       api.getJobWithEvents(jobId)
-        .then(({ job: j, events: evts }) => {
+        .then(({ job: j, events: evts, maxEventId }) => {
           if (cancelled) return;
+          maxEventIdRef.current = maxEventId ?? 0;
+          setSinceId(maxEventId ?? 0);
           setJob(j);
+          if (j.model) setLocalModel(j.model);
+          if (j.reasoningEffort) setLocalReasoning(j.reasoningEffort);
           setEvents(evts);
           const costEvt = [...evts].reverse().find(e => e.type === 'job.cost_update');
           if (costEvt) setLatestCost(costEvt);
@@ -1219,22 +1377,31 @@ function JobView({
     return () => { cancelled = true; };
   }, [jobId]);
 
+  // Always apply fetched status so manual syncs (SSE error, poll) are authoritative.
   const syncJobStatus = useCallback(() => {
     api.getJob(activeJobId).then(j => {
       setJob(prev => {
         if (!prev) return j;
-        const terminal = ['completed', 'failed', 'cancelled', 'interrupted'];
-        if (prev.status !== j.status && terminal.includes(j.status)) return { ...prev, status: j.status, agentSessionId: j.agentSessionId ?? prev.agentSessionId };
-        if (!prev.agentSessionId && j.agentSessionId) return { ...prev, agentSessionId: j.agentSessionId };
-        if (!prev.sessionId && j.sessionId) return { ...prev, sessionId: j.sessionId };
-        return prev;
+        return {
+          ...prev,
+          status: j.status,
+          agentSessionId: j.agentSessionId ?? prev.agentSessionId,
+          sessionId: j.sessionId ?? prev.sessionId,
+        };
       });
     }).catch(() => {});
   }, [activeJobId]);
 
+  // Only subscribe after the initial load (sinceId !== null) so the SSE stream
+  // starts exactly where the snapshot left off — no replayed status regressions.
   useEffect(() => {
+    if (sinceId === null) return;
     const unsubscribe = api.subscribeToJobEvents(activeJobId, (event) => {
-      setEvents(prev => [...prev, event]);
+      setEvents(prev => {
+        const evId = (event as JobEvent & { _id?: number })._id;
+        if (evId && prev.some(e => (e as JobEvent & { _id?: number })._id === evId)) return prev;
+        return [...prev, event];
+      });
       if (event.type === 'job.completed') setJob(prev => prev ? { ...prev, status: 'completed' } : prev);
       if (event.type === 'job.failed') setJob(prev => prev ? { ...prev, status: 'failed' } : prev);
       if (event.type === 'job.started') setJob(prev => prev ? { ...prev, status: 'running' } : prev);
@@ -1252,9 +1419,9 @@ function JobView({
       if (event.type === 'job.approval_resolved') { setPendingApproval(null); setJob(prev => prev ? { ...prev, status: 'running' } : prev); }
       if (event.type === 'job.cost_update') setLatestCost(event);
       if (event.type === 'job.message') setLastAssistantMessage((event as JobEvent & { text: string }).text);
-    }, syncJobStatus);
+    }, syncJobStatus, sinceId > 0 ? sinceId : undefined);
     return unsubscribe;
-  }, [activeJobId, syncJobStatus]);
+  }, [activeJobId, syncJobStatus, sinceId]);
 
   const jobIsActive = job?.status === 'running' || job?.status === 'awaiting_user';
   useEffect(() => {
@@ -1302,6 +1469,14 @@ function JobView({
     if (/^bash$/i.test(tc.toolName)) return `Running: ${((tc.input.command as string) ?? '').slice(0, 30)}…`;
     return undefined;
   }, [events, job?.status]);
+
+  async function handleJobConfigChange(field: 'model' | 'reasoningEffort', value: string) {
+    if (field === 'model') setLocalModel(value);
+    else setLocalReasoning(value);
+    try {
+      await api.updateJobConfig(activeJobId, { [field]: value });
+    } catch { /* keep local state, show no error — non-critical */ }
+  }
 
   async function handleCancel() {
     setCancelling(true);
@@ -1372,13 +1547,66 @@ function JobView({
       <HStack px="4" py="2.5" borderBottom="1px solid var(--divider)" flexShrink={0} justify="space-between" gap="3">
         <HStack gap="1" color="var(--text-muted)" minW={0} flex="1">
           <Button variant="ghost" size="xs" h="6" px="1" onClick={onBack} color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }}>
-            ← Project
+            ← All jobs
           </Button>
           <Text fontSize="12px" flexShrink={0}>/</Text>
-          <Text fontSize="13px" fontWeight="500" color="var(--text-primary)" truncate maxW="320px">
+          <Text fontSize="13px" fontWeight="500" color="var(--text-primary)" truncate maxW="240px">
             {job?.prompt ?? '…'}
           </Text>
         </HStack>
+
+        {/* Per-job provider (locked) + model + reasoning controls */}
+        {job && (
+          <HStack gap="1.5" flexShrink={0} align="center">
+            {/* Provider — read-only badge */}
+            <Box
+              px="2" py="0.5"
+              bg="var(--surface-3)"
+              border="1px solid var(--border-subtle)"
+              rounded="sm"
+              whiteSpace="nowrap"
+              title="Provider cannot be changed after job creation"
+            >
+              <Text fontSize="11px" color="var(--text-secondary)" fontWeight="500">
+                {job.agent === 'claude-code' ? 'Claude Code' : 'Codex'}
+              </Text>
+            </Box>
+
+            {/* Model — editable */}
+            <NativeSelect.Root size="sm" h="6" minW="36">
+              <NativeSelect.Field
+                fontSize="11px"
+                bg="var(--surface-3)"
+                value={localModel}
+                title="Model for this job"
+                onChange={e => void handleJobConfigChange('model', e.currentTarget.value)}
+              >
+                <option value="">Default model</option>
+                {(AGENT_MODELS[job.agent] ?? AGENT_MODELS['claude-code']!).map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+
+            {/* Reasoning effort — editable */}
+            <NativeSelect.Root size="sm" h="6" minW="24">
+              <NativeSelect.Field
+                fontSize="11px"
+                bg="var(--surface-3)"
+                value={localReasoning}
+                title="Reasoning level for this job"
+                onChange={e => void handleJobConfigChange('reasoningEffort', e.currentTarget.value)}
+              >
+                {(AGENT_EFFORTS[job.agent] ?? AGENT_EFFORTS['claude-code']!).map(e => (
+                  <option key={e.value} value={e.value}>{e.label}</option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </HStack>
+        )}
+
         <HStack gap="2" flexShrink={0} align="center">
           {/* Session metadata subtitle */}
           <HStack gap="1" fontSize="11px" color="var(--text-muted)">
@@ -1404,7 +1632,7 @@ function JobView({
             />
             {job && <StatusPill status={job.status} />}
             {job?.approvalMode === 'auto_all' && (
-              <Text fontSize="11px" color="var(--status-warning)" fontWeight="500" flexShrink={0}>⚠ bypass mode</Text>
+              <Text fontSize="11px" color="var(--status-warning)" fontWeight="500" flexShrink={0}>⚠ unrestricted</Text>
             )}
           </HStack>
 
@@ -1455,26 +1683,68 @@ function JobView({
         </HStack>
       </HStack>
 
-      <JobConversation
-        events={events}
-        isActive={isActive}
-        jobStatus={job?.status}
-        compact={compact}
-        pendingApproval={pendingApproval}
-        onApprove={handleApprove}
-        jobPrompts={jobPrompts}
-        onOpenFile={(fp) => void openFile(fp)}
-        composerSlot={
-          <JobComposer
-            jobStatus={job?.status ?? 'queued'}
-            lastAssistantMessage={lastAssistantMessage}
-            currentActivity={currentActivity}
-            onSendTurn={handleSendTurn}
-            onEndSession={handleEndSession}
-            onResumeSession={handleResumeSession}
+      {/* Two-column body: left = final response, right = activity feed */}
+      <Flex flex="1" minH={0} overflow="hidden">
+        {/* Left column — final markdown response */}
+        <Box
+          w="38%"
+          minH={0}
+          borderRight="1px solid var(--divider)"
+          display="flex"
+          flexDirection="column"
+          flexShrink={0}
+        >
+          <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
+            <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Response</Text>
+          </Box>
+          <Box flex="1" minH={0} overflow="auto" px="4" py="3">
+            {lastAssistantMessage ? (
+              <Box>
+                <MessageRow
+                  messageId="last-response"
+                  jobId={job?.id ?? ''}
+                  text={lastAssistantMessage}
+                  isStreaming={job?.status === 'running'}
+                />
+              </Box>
+            ) : (
+              <Text fontSize="13px" color="var(--text-muted)" mt="4" textAlign="center">
+                {isActive ? 'Waiting for response…' : 'No response yet.'}
+              </Text>
+            )}
+          </Box>
+        </Box>
+
+        {/* Right column — live activity (tool calls, thinking, etc.) */}
+        <Box flex="1" minH={0} overflow="hidden" display="flex" flexDirection="column">
+          <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
+            <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Activity</Text>
+          </Box>
+          <JobConversation
+            events={events}
+            isActive={isActive}
+            jobStatus={job?.status}
+            compact={compact}
+            hideAssistantMessages
+            pendingApproval={pendingApproval}
+            onApprove={handleApprove}
+            jobPrompts={jobPrompts}
+            onOpenFile={(fp) => void openFile(fp)}
           />
-        }
-      />
+        </Box>
+      </Flex>
+
+      {/* Composer: full width below both columns */}
+      <Box flexShrink={0} borderTop="1px solid var(--divider)">
+        <JobComposer
+          jobStatus={job?.status ?? 'queued'}
+          lastAssistantMessage={lastAssistantMessage}
+          currentActivity={currentActivity}
+          onSendTurn={handleSendTurn}
+          onEndSession={handleEndSession}
+          onResumeSession={handleResumeSession}
+        />
+      </Box>
 
       <FilePanel
         mode={filePanel}
@@ -1486,12 +1756,48 @@ function JobView({
   );
 }
 
+type CodingTab = 'jobs' | 'repos' | 'integrations';
+
+function pathToCodingTab(pathname: string): CodingTab {
+  if (pathname.startsWith('/coding/repos')) return 'repos';
+  if (pathname.startsWith('/coding/integrations')) return 'integrations';
+  return 'jobs';
+}
+
+function codingTabToPath(tab: CodingTab): string {
+  if (tab === 'repos') return '/coding/repos';
+  if (tab === 'integrations') return '/coding/integrations';
+  return '/coding/jobs';
+}
+
+function jobIdFromPath(pathname: string): string | null {
+  const m = pathname.match(/^\/coding\/jobs\/([^/]+)$/);
+  return m?.[1] ?? null;
+}
+
 // ── Main CodingPage ───────────────────────────────────────────────────────────
 export function CodingPage() {
-  const [view, setView] = useState<View>({ kind: 'projects' });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeTab = pathToCodingTab(location.pathname);
+
+  // Derive initial view from URL
+  const jobIdInUrl = jobIdFromPath(location.pathname);
+  const [jobsView, setJobsView] = useState<View>(
+    jobIdInUrl ? { kind: 'job', projectId: '', jobId: jobIdInUrl } : { kind: 'projects' }
+  );
   const [projects, setProjects] = useState<CodingProject[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [panelOpen, setPanelOpen] = useState(false);
+
+  // When the URL contains a specific job ID (e.g. from a shared link or browser history),
+  // restore the job view. Do NOT reset to 'projects' on /coding/jobs — that would undo a
+  // project-detail view reached via the Repos tab.
+  useEffect(() => {
+    const id = jobIdFromPath(location.pathname);
+    if (id) {
+      setJobsView(prev => (prev.kind === 'job' && prev.jobId === id) ? prev : { kind: 'job', projectId: '', jobId: id });
+    }
+  }, [location.pathname]);
 
   const loadProjects = useCallback((attempt = 0) => {
     setLoadingProjects(true);
@@ -1504,35 +1810,82 @@ export function CodingPage() {
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
   return (
-    <Flex direction="column" h="100%" minH={0}>
-      <IntegrationsStrip onManage={() => setPanelOpen(true)} />
+    <Tabs.Root
+      value={activeTab}
+      onValueChange={({ value }) => navigate(codingTabToPath(value as CodingTab))}
+      display="flex" flexDirection="column" h="100%" minH={0}
+      lazyMount
+    >
+      <Tabs.List
+        px="4" pt="2"
+        borderBottom="1px solid var(--divider)"
+        flexShrink={0}
+        gap="0"
+      >
+        {(['jobs', 'repos', 'integrations'] as const).map(tab => (
+          <Tabs.Trigger
+            key={tab}
+            value={tab}
+            fontSize="13px"
+            fontWeight="500"
+            px="3"
+            py="2"
+            color="var(--text-muted)"
+            _selected={{ color: 'var(--text-primary)', borderBottom: '2px solid var(--accent)' }}
+            _hover={{ color: 'var(--text-primary)', bg: 'var(--surface-hover)' }}
+            rounded="var(--radius-control) var(--radius-control) 0 0"
+            textTransform="capitalize"
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
 
-      <Box flex="1" minH={0}>
-        {view.kind === 'projects' && (
+      <Tabs.ContentGroup flex="1" minH={0}>
+        <Tabs.Content value="jobs" h="100%" minH={0} pt="0" _open={{ display: 'flex' }} flexDirection="column">
+          {jobsView.kind === 'projects' && (
+            <AllJobsView
+              onSelectJob={(projectId, jobId) => {
+                setJobsView({ kind: 'job', projectId, jobId });
+                navigate('/coding/jobs/' + jobId);
+              }}
+            />
+          )}
+          {jobsView.kind === 'project' && (
+            <ProjectDetailView
+              projectId={jobsView.projectId}
+              onBack={() => { setJobsView({ kind: 'projects' }); navigate('/coding/jobs'); loadProjects(); }}
+              onSelectJob={(jobId) => {
+                setJobsView({ kind: 'job', projectId: jobsView.projectId, jobId });
+                navigate('/coding/jobs/' + jobId);
+              }}
+            />
+          )}
+          {jobsView.kind === 'job' && (
+            <JobView
+              jobId={jobsView.jobId}
+              projectId={jobsView.projectId}
+              onBack={() => { setJobsView({ kind: 'projects' }); navigate('/coding/jobs'); }}
+            />
+          )}
+        </Tabs.Content>
+
+        <Tabs.Content value="repos" h="100%" minH={0} pt="0" _open={{ display: 'flex' }} flexDirection="column">
           <ProjectsView
             projects={projects}
             loading={loadingProjects}
-            onSelectProject={(id) => setView({ kind: 'project', projectId: id })}
+            onSelectProject={(id) => {
+              setJobsView({ kind: 'project', projectId: id });
+              navigate('/coding/jobs');
+            }}
             onRefresh={loadProjects}
           />
-        )}
-        {view.kind === 'project' && (
-          <ProjectDetailView
-            projectId={view.projectId}
-            onBack={() => { setView({ kind: 'projects' }); loadProjects(); }}
-            onSelectJob={(jobId) => setView({ kind: 'job', projectId: view.projectId, jobId })}
-          />
-        )}
-        {view.kind === 'job' && (
-          <JobView
-            jobId={view.jobId}
-            projectId={view.projectId}
-            onBack={() => setView({ kind: 'project', projectId: view.projectId })}
-          />
-        )}
-      </Box>
+        </Tabs.Content>
 
-      {panelOpen && <IntegrationsPanel onClose={() => setPanelOpen(false)} />}
-    </Flex>
+        <Tabs.Content value="integrations" h="100%" minH={0} pt="0" _open={{ display: 'block' }}>
+          <IntegrationsTab />
+        </Tabs.Content>
+      </Tabs.ContentGroup>
+    </Tabs.Root>
   );
 }

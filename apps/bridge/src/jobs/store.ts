@@ -70,6 +70,7 @@ export class CodingStore {
       CREATE TABLE IF NOT EXISTS coding_integrations (
         id TEXT PRIMARY KEY,
         installed INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
         version TEXT,
         binary_path TEXT,
         auth_status TEXT NOT NULL DEFAULT 'unchecked',
@@ -87,6 +88,9 @@ export class CodingStore {
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0'); } catch { /* ok */ }
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN last_turn_at INTEGER'); } catch { /* ok */ }
     try { db.exec("ALTER TABLE coding_projects ADD COLUMN default_approval_mode TEXT NOT NULL DEFAULT 'auto_safe'"); } catch { /* ok */ }
+    try { db.exec('ALTER TABLE coding_jobs ADD COLUMN model TEXT'); } catch { /* ok */ }
+    try { db.exec('ALTER TABLE coding_jobs ADD COLUMN reasoning_effort TEXT'); } catch { /* ok */ }
+    try { db.exec('ALTER TABLE coding_integrations ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1'); } catch { /* ok */ }
     // Index for type-filtered event queries (batchGetJobFileStats, etc.)
     try { db.exec('CREATE INDEX IF NOT EXISTS idx_coding_job_events_type ON coding_job_events(job_id, type)'); } catch { /* ok */ }
   }
@@ -138,12 +142,14 @@ export class CodingStore {
   createJob(job: CodingJob): CodingJob {
     this.db.prepare(`
       INSERT INTO coding_jobs
-        (id, project_id, prompt, agent, status, approval_mode, worktree_path, pid,
-         created_at, started_at, completed_at, exit_code, error, approval_pending, auto_respond_rules,
-         resume_session_id, session_id, agent_session_id, turn_count, last_turn_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, project_id, prompt, agent, status, approval_mode, model, reasoning_effort,
+         worktree_path, pid, created_at, started_at, completed_at, exit_code, error,
+         approval_pending, auto_respond_rules, resume_session_id, session_id,
+         agent_session_id, turn_count, last_turn_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       job.id, job.projectId, job.prompt, job.agent, job.status, job.approvalMode,
+      job.model ?? null, job.reasoningEffort ?? null,
       job.worktreePath ?? null, job.pid ?? null, job.createdAt,
       job.startedAt ?? null, job.completedAt ?? null, job.exitCode ?? null,
       job.error ?? null,
@@ -211,6 +217,8 @@ export class CodingStore {
       agent: row.agent as AgentId,
       status: row.status as CodingJob['status'],
       approvalMode: row.approval_mode as CodingJob['approvalMode'],
+      model: row.model as string | undefined,
+      reasoningEffort: row.reasoning_effort as string | undefined,
       worktreePath: row.worktree_path as string | undefined,
       pid: row.pid as number | undefined,
       createdAt: row.created_at as number,
@@ -226,6 +234,16 @@ export class CodingStore {
       turnCount: (row.turn_count as number) ?? 0,
       lastTurnAt: row.last_turn_at as number | undefined
     };
+  }
+
+  updateJobModelConfig(jobId: string, config: { model?: string; reasoningEffort?: string }) {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    if (config.model !== undefined) { fields.push('model = ?'); values.push(config.model); }
+    if (config.reasoningEffort !== undefined) { fields.push('reasoning_effort = ?'); values.push(config.reasoningEffort); }
+    if (fields.length === 0) return;
+    values.push(jobId);
+    this.db.prepare(`UPDATE coding_jobs SET ${fields.join(', ')} WHERE id = ?`).run(...(values as SQLInputValue[]));
   }
 
   updateAutoRespondRules(jobId: string, rules: AutoRespondRule[]) {
@@ -296,12 +314,34 @@ export class CodingStore {
 
   getRecentEvents(jobId: string, limit = 200): JobEvent[] {
     const rows = this.db.prepare(`
-      SELECT payload FROM coding_job_events
+      SELECT id, payload FROM coding_job_events
       WHERE job_id = ?
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(jobId, limit) as { payload: string }[];
-    return rows.reverse().map((r) => JSON.parse(r.payload) as JobEvent);
+    `).all(jobId, limit) as { id: number; payload: string }[];
+    return rows.reverse().map((r) => {
+      const ev = JSON.parse(r.payload) as JobEvent;
+      return { ...ev, _id: r.id };
+    });
+  }
+
+  getEventsSince(jobId: string, sinceId: number): JobEvent[] {
+    const rows = this.db.prepare(`
+      SELECT id, payload FROM coding_job_events
+      WHERE job_id = ? AND id > ?
+      ORDER BY id ASC
+    `).all(jobId, sinceId) as { id: number; payload: string }[];
+    return rows.map((r) => {
+      const ev = JSON.parse(r.payload) as JobEvent;
+      return { ...ev, _id: r.id };
+    });
+  }
+
+  getMaxEventId(jobId: string): number {
+    const row = this.db.prepare(
+      'SELECT MAX(id) as max_id FROM coding_job_events WHERE job_id = ?'
+    ).get(jobId) as { max_id: number | null } | undefined;
+    return row?.max_id ?? 0;
   }
 
   // ── File stats (computed from events, no schema changes) ─────────────────
@@ -359,8 +399,8 @@ export class CodingStore {
   upsertIntegration(row: AgentIntegrationRow) {
     this.db.prepare(`
       INSERT INTO coding_integrations
-        (id, installed, version, binary_path, auth_status, auth_message, account, last_checked_at, last_diagnostic)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, installed, enabled, version, binary_path, auth_status, auth_message, account, last_checked_at, last_diagnostic)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         installed = excluded.installed,
         version = excluded.version,
@@ -371,10 +411,23 @@ export class CodingStore {
         last_checked_at = excluded.last_checked_at,
         last_diagnostic = excluded.last_diagnostic
     `).run(
-      row.id, row.installed ? 1 : 0, row.version ?? null, row.binaryPath ?? null,
+      row.id, row.installed ? 1 : 0, row.enabled ?? 1, row.version ?? null, row.binaryPath ?? null,
       row.authStatus, row.authMessage ?? null, row.account ?? null,
       row.lastCheckedAt, row.lastDiagnostic ?? null
     );
+  }
+
+  setIntegrationEnabled(id: AgentId, enabled: boolean) {
+    this.db.prepare('UPDATE coding_integrations SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+  }
+
+  resetIntegrationAuth(id: AgentId) {
+    this.db.prepare(`
+      UPDATE coding_integrations SET
+        auth_status = 'not_authenticated', auth_message = NULL, account = NULL,
+        last_checked_at = ?, enabled = 1
+      WHERE id = ?
+    `).run(Date.now(), id);
   }
 
   getIntegration(id: AgentId): AgentIntegrationRow | null {
@@ -391,6 +444,7 @@ export class CodingStore {
     return {
       id: row.id as AgentId,
       installed: (row.installed as number) === 1 ? 1 : 0,
+      enabled: (row.enabled as number) === 0 ? 0 : 1, // default 1 for existing rows
       version: row.version as string | undefined,
       binaryPath: row.binary_path as string | undefined,
       authStatus: row.auth_status as AgentIntegrationRow['authStatus'],

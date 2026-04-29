@@ -280,11 +280,13 @@ export function App() {
           />
         }
         modelSelectorSlot={
-          <ProviderModelSelector
-            modelProviderResponse={controller.modelProviderResponse}
-            onUpdateRuntimeModelConfig={(config, options) => controller.handleUpdateRuntimeModelConfig(config, options)}
-            onChooseProvider={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
-          />
+          location.pathname.startsWith('/coding') ? null : (
+            <ProviderModelSelector
+              modelProviderResponse={controller.modelProviderResponse}
+              onUpdateRuntimeModelConfig={(config, options) => controller.handleUpdateRuntimeModelConfig(config, options)}
+              onChooseProvider={() => { navigate('/settings/models'); void controller.openPage('settings'); }}
+            />
+          )
         }
         noGutter={controller.page === 'chat'}
         sidebarCollapsed={controller.sidebarCollapsed}
