@@ -56,6 +56,9 @@ export class JobRunner {
   // True after job.agent_result fires, cleared when a new user turn is sent.
   // While awaiting the user the agent is intentionally idle — don't fire stuck detection.
   private isAwaitingUser = false;
+  // Set when the manager deliberately cancels this runner (e.g. shell approval restart).
+  // Suppresses job.completed/onExit so the replacement runner can take over cleanly.
+  private cancelledByManager = false;
 
   constructor(
     private readonly job: CodingJob,
@@ -121,6 +124,11 @@ export class JobRunner {
     this.child.on('close', (code) => {
       const wasActive = !this.stdinClosed;
       this.cleanup();
+
+      // If the manager deliberately cancelled this runner (e.g. shell-approval restart),
+      // swallow the exit entirely — the replacement runner owns the job from here on.
+      if (this.cancelledByManager) return;
+
       if (wasActive) {
         // Process exited while we expected it to be alive
         this.callbacks.onUnexpectedExit?.();
@@ -507,6 +515,7 @@ export class JobRunner {
   }
 
   cancel() {
+    this.cancelledByManager = true; // suppresses job.completed on exit
     if (this.child && !this.isExited()) {
       this.stdinClosed = true;
       try { this.child.kill('SIGTERM'); } catch { /* ignore */ }
