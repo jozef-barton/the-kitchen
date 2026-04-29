@@ -1582,7 +1582,11 @@ function JobView({
 
   // Single-pane layout on phones / narrow viewports: response and activity merge
   // into one feed (assistant messages stay inline) instead of the desktop two-column split.
-  const singlePane = useBreakpointValue({ base: true, lg: false }, { ssr: false }) ?? false;
+  // Single chat-style feed (response + activity merged) for any non-desktop viewport.
+  // The split-pane Response/Activity layout only kicks in at xl (≥1280px), so phones, tablets
+  // (portrait & landscape iPad), and Mac Split View windows all get the unified flow that
+  // matches the Claude Code terminal experience.
+  const singlePane = useBreakpointValue({ base: true, xl: false }, { ssr: false }) ?? false;
 
   // Load history first, then gate SSE subscription on sinceId so replayed
   // events can't regress the status that was authoritatively set by the load.
@@ -1903,9 +1907,10 @@ function JobView({
             )}
           </HStack>
 
-          {/* Selectors inline — lg+ only */}
+          {/* Selectors inline — xl+ only (split-pane desktop). Below xl the settings drawer
+              owns these so the breadcrumb doesn't crowd. */}
           {job && (
-            <HStack gap="1.5" display={{ base: 'none', lg: 'flex' }} flexShrink={0} align="center">
+            <HStack gap="1.5" display={{ base: 'none', xl: 'flex' }} flexShrink={0} align="center">
               <CodingHeaderSelectors
                 agent={job.agent}
                 connectedAgents={[job.agent]}
@@ -1922,9 +1927,9 @@ function JobView({
 
           {/* Right actions */}
           <HStack gap="1.5" flexShrink={0} align="center">
-            {/* Session metadata — lg+ only. On smaller viewports the same info renders in the
+            {/* Session metadata — xl+ only. On smaller viewports the same info renders in the
                 compact strip below the breadcrumb so this row stays uncluttered. */}
-            <HStack gap="1" fontSize="11px" color="var(--text-muted)" display={{ base: 'none', lg: 'flex' }}>
+            <HStack gap="1" fontSize="11px" color="var(--text-muted)" display={{ base: 'none', xl: 'flex' }}>
               {job?.turnCount !== undefined && job.turnCount > 0 && (
                 <Text>{job.turnCount} turn{job.turnCount !== 1 ? 's' : ''}</Text>
               )}
@@ -1951,12 +1956,12 @@ function JobView({
               )}
             </HStack>
 
-            {/* Settings button — visible below lg */}
+            {/* Settings button — visible below xl */}
             {job && (
               <Button
                 size="xs" h="7" px="2.5"
                 variant="ghost"
-                display={{ base: 'flex', lg: 'none' }}
+                display={{ base: 'flex', xl: 'none' }}
                 color="var(--text-muted)"
                 _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
                 rounded="var(--radius-control)"
@@ -2035,7 +2040,7 @@ function JobView({
             px="4" py="1" gap="2"
             borderTop="1px solid var(--divider)"
             fontSize="11px" color="var(--text-muted)"
-            display={{ base: 'flex', lg: 'none' }}
+            display={{ base: 'flex', xl: 'none' }}
             flexWrap="wrap"
           >
             <StatusPill status={job.status} />
