@@ -1,5 +1,5 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
-import type { CodingProject, CodingJob, JobTurn, JobEvent, AgentIntegrationRow, AutoRespondRule, PendingApproval, AgentId, JobFileStats, FileSummaryStats, ApprovalMode } from './types';
+import type { CodingProject, CodingJob, JobTurn, JobEvent, AgentIntegrationRow, AutoRespondRule, PendingApproval, AgentId, JobFileStats, JobCostStats, FileSummaryStats, ApprovalMode } from './types';
 
 const EVENT_PAYLOAD_MAX_BYTES = 400_000; // large enough for full file content
 
@@ -414,6 +414,37 @@ export class CodingStore {
     const result = new Map<string, JobFileStats>();
     for (const id of jobIds) {
       result.set(id, computeJobFileStats(grouped.get(id) ?? []));
+    }
+    return result;
+  }
+
+  /** Batch cumulative cost stats for multiple jobs — last job.cost_update per job */
+  batchGetJobCostStats(jobIds: string[]): Map<string, JobCostStats> {
+    if (jobIds.length === 0) return new Map();
+    const placeholders = jobIds.map(() => '?').join(',');
+    const rows = this.db.prepare(`
+      SELECT job_id, payload FROM coding_job_events
+      WHERE type = 'job.cost_update'
+        AND id IN (
+          SELECT MAX(id) FROM coding_job_events
+          WHERE job_id IN (${placeholders})
+            AND type = 'job.cost_update'
+          GROUP BY job_id
+        )
+    `).all(...(jobIds as SQLInputValue[])) as { job_id: string; payload: string }[];
+
+    const result = new Map<string, JobCostStats>();
+    for (const row of rows) {
+      try {
+        const ev = JSON.parse(row.payload) as { cumulative?: { tokensIn?: number; tokensOut?: number; estimatedCostUsd?: number } };
+        const c = ev.cumulative;
+        if (c) {
+          result.set(row.job_id, {
+            estimatedCostUsd: c.estimatedCostUsd ?? 0,
+            totalTokens: (c.tokensIn ?? 0) + (c.tokensOut ?? 0),
+          });
+        }
+      } catch { /* skip malformed */ }
     }
     return result;
   }

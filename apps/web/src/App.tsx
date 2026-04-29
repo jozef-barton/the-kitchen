@@ -13,6 +13,7 @@ import { SettingsPage } from './ui/pages/SettingsPage';
 import { ToolsPage } from './ui/pages/ToolsPage';
 import { HermesSetupPage } from './ui/pages/HermesSetupPage';
 import { CodingPage } from './ui/pages/CodingPage';
+import { RemoteAccessPage } from './ui/pages/RemoteAccessPage';
 import { ProviderModelSelector } from './ui/molecules/ModelSelector';
 import { TabBar } from './ui/molecules/TabBar';
 import { ShellLayout, Sidebar } from './ui/templates/ShellLayout';
@@ -48,6 +49,7 @@ function pathToPage(pathname: string): AppPage {
   if (pathname === '/sessions') return 'sessions';
   if (pathname === '/jobs') return 'jobs';
   if (pathname.startsWith('/coding')) return 'coding';
+  if (pathname.startsWith('/remote-access')) return 'remote-access';
   return 'chat';
 }
 
@@ -60,6 +62,7 @@ function pageToPath(page: AppPage): string {
     case 'jobs': return '/jobs';
     case 'coding': return '/coding';
     case 'settings': return '/settings';
+    case 'remote-access': return '/remote-access';
     default: return '/';
   }
 }
@@ -288,7 +291,7 @@ export function App() {
             />
           )
         }
-        noGutter={controller.page === 'chat'}
+        noGutter={controller.page === 'chat' || controller.page === 'coding'}
         sidebarCollapsed={controller.sidebarCollapsed}
         onToggleSidebar={() => void controller.handleSidebarCollapsedChange(!controller.sidebarCollapsed)}
         tabBar={
@@ -494,6 +497,8 @@ export function App() {
             onTabChange={(tab) => navigate(tab === 'ingredients' ? '/recipes/ingredients' : '/recipes')}
           />
         ) : null}
+
+        {controller.page === 'remote-access' ? <RemoteAccessPage /> : null}
       </ShellLayout>
       <AppToaster />
     </>
@@ -574,6 +579,7 @@ function pageTitle(page: string) {
     case 'recipes': return 'Recipes';
     case 'jobs': return 'Jobs';
     case 'coding': return 'Coding';
+    case 'remote-access': return 'Remote Access';
     case 'tools': return 'Tools';
     case 'skills': return 'Skills';
     case 'settings': return 'Settings';

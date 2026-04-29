@@ -3,6 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBridgeServer } from './http/create-bridge-server';
 import { resolveBridgeDatabasePath, resolveLegacySnapshotCandidates } from './paths';
+import {
+  createRemoteAccessController,
+  desiredBindAddress,
+  detectTailscale,
+  type RemoteAccessController
+} from './services/tailscale';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,16 +53,44 @@ async function main() {
     process.env.HERMES_FIXTURE_HOME = path.resolve(process.cwd(), '../../tmp/hermes-fixture');
   }
 
+  // Detect Tailscale up-front so the initial bind address matches the live state. The controller
+  // (created after the listener starts) can re-detect later via /api/remote-access/refresh.
+  const initialTailscale = await detectTailscale();
+  const bindAddress = desiredBindAddress(initialTailscale);
+  process.stdout.write(
+    `[bridge] Tailscale: installed=${initialTailscale.installed} running=${initialTailscale.running}${initialTailscale.dnsName ? ` dns=${initialTailscale.dnsName}` : ''}\n`
+  );
+  process.stdout.write(`[bridge] Binding to ${bindAddress}\n`);
+
+  // Holder so the create-bridge-server callbacks can resolve to the controller created after listen().
+  const remoteAccessRef: { controller: RemoteAccessController | null } = { controller: null };
+
   const { server } = createBridgeServer({
     databasePath,
     cliPath,
     staticDirectory,
     recipeRoot: process.cwd(),
-    legacySnapshotPaths: fixtureMode ? [] : resolveLegacySnapshotCandidates()
+    legacySnapshotPaths: fixtureMode ? [] : resolveLegacySnapshotCandidates(),
+    getTailscaleDnsName: () => remoteAccessRef.controller?.getDnsName() ?? null,
+    refreshRemoteAccess: async () => {
+      if (!remoteAccessRef.controller) {
+        const status = await detectTailscale();
+        return { tailscale: status, bindAddress, rebound: false };
+      }
+      return remoteAccessRef.controller.refresh();
+    }
   });
 
-  server.listen(port, '127.0.0.1', () => {
-    process.stdout.write(`Hermes bridge listening on http://127.0.0.1:${port}\n`);
+  server.listen(port, bindAddress, () => {
+    process.stdout.write(`Hermes bridge listening on http://${bindAddress}:${port}\n`);
+    if (initialTailscale.running && initialTailscale.dnsName) {
+      process.stdout.write(`[bridge] Remote access available at http://${initialTailscale.dnsName}:${port}\n`);
+    }
+    remoteAccessRef.controller = createRemoteAccessController({
+      server,
+      port,
+      initial: initialTailscale
+    });
   });
 }
 

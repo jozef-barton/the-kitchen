@@ -17,7 +17,8 @@ const NAV_LABELS: Record<AppPage, string> = {
   tools: 'Tools',
   skills: 'Skills',
   settings: 'Settings',
-  coding: 'Coding'
+  coding: 'Coding',
+  'remote-access': 'Remote Access'
 };
 
 function SearchIcon() {

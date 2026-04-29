@@ -45,9 +45,11 @@ export class JobManager {
         try { process.kill(job.pid, 'SIGTERM'); } catch { /* already dead */ }
       }
 
-      // Jobs that were idle waiting for the user — we can silently reconnect the session.
-      // The user won't notice the restart; they just send their next message as usual.
-      if (job.agentSessionId && job.status === 'awaiting_user') {
+      // Jobs that were idle waiting for user input, or actively running when the bridge
+      // went down — we can silently reconnect to the existing Claude Code session.
+      // For running jobs, the old process was killed above; the resumed process picks up
+      // from the same session history and waits for the next user message.
+      if (job.agentSessionId && (job.status === 'awaiting_user' || job.status === 'running')) {
         const project = this.store.getProject(job.projectId);
         if (project) {
           try {
@@ -530,6 +532,7 @@ export class JobManager {
   getEventsSince(jobId: string, sinceId: number) { return this.store.getEventsSince(jobId, sinceId); }
   getMaxEventId(jobId: string) { return this.store.getMaxEventId(jobId); }
   batchGetJobFileStats(jobIds: string[]) { return this.store.batchGetJobFileStats(jobIds); }
+  batchGetJobCostStats(jobIds: string[]) { return this.store.batchGetJobCostStats(jobIds); }
   getJobFileMap(jobId: string) { return this.store.getJobFileMap(jobId); }
   getToolCallEvent(jobId: string, toolUseId: string) { return this.store.getToolCallEvent(jobId, toolUseId); }
   getLogFilePath(jobId: string, index = 0) {

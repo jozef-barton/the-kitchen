@@ -54,12 +54,14 @@ type View =
 function StatusPill({ status }: { status: string }) {
   const color =
     status === 'running' ? 'var(--status-info)' :
-    status === 'completed' ? 'var(--status-success)' :
+    status === 'completed' || status === 'awaiting_user' ? 'var(--status-success)' :
     status === 'failed' || status === 'cancelled' ? 'var(--status-danger)' :
     status === 'awaiting_approval' ? 'var(--status-warning)' :
-    status === 'awaiting_user' ? 'var(--accent)' :
     status === 'interrupted' ? 'var(--status-warning)' :
     'var(--text-muted)';
+  const label =
+    status === 'awaiting_user' ? 'Completed' :
+    status.replace(/_/g, ' ');
   return (
     <Text
       display="inline-block"
@@ -73,7 +75,7 @@ function StatusPill({ status }: { status: string }) {
       px="2"
       py="0.5"
     >
-      {status}
+      {label}
     </Text>
   );
 }
@@ -571,9 +573,52 @@ function ProjectsView({
   );
 }
 
+// ── Live activity line extracted from a streaming job event ──────────────────
+
+function eventToActivityLine(event: JobEvent): string | null {
+  const e = event as Record<string, unknown>;
+  if (event.type === 'job.tool_call') {
+    const toolName = String(e.toolName ?? '');
+    const input = (e.input ?? {}) as Record<string, unknown>;
+    if (/^write$/i.test(toolName) && input.file_path)
+      return `Writing ${String(input.file_path).split('/').pop()}`;
+    if (/^(edit|str_replace_editor)$/i.test(toolName) && (input.file_path || input.path))
+      return `Editing ${String(input.file_path ?? input.path ?? '').split('/').pop()}`;
+    if (/^(multiedit|multi_edit)$/i.test(toolName)) {
+      const count = Array.isArray(input.edits) ? input.edits.length : '';
+      return count ? `Editing ${count} files` : 'Multi-editing files';
+    }
+    if (/^bash$/i.test(toolName)) {
+      const cmd = String(input.command ?? '').trim();
+      return '$ ' + (cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd);
+    }
+    if (/^read$/i.test(toolName) && input.file_path)
+      return `Reading ${String(input.file_path).split('/').pop()}`;
+    if (/^(glob|grep)$/i.test(toolName) && input.pattern)
+      return `${toolName} ${String(input.pattern).slice(0, 40)}`;
+    if (/^task$/i.test(toolName)) {
+      const desc = String(input.description ?? input.prompt ?? '').slice(0, 60);
+      return desc ? `Task: ${desc}` : 'Running task';
+    }
+    return toolName;
+  }
+  if (event.type === 'job.thinking') return 'Thinking…';
+  if (event.type === 'job.message') {
+    const text = String(e.text ?? '').replace(/\n/g, ' ').trim();
+    return text ? text.slice(0, 80) + (text.length > 80 ? '…' : '') : null;
+  }
+  if (event.type === 'job.stdout') {
+    const chunk = String(e.chunk ?? '').trim();
+    if (chunk.startsWith('[event:')) return null;
+    const line = chunk.split('\n').filter(Boolean).pop() ?? '';
+    return line ? '$ ' + line.slice(0, 60) : null;
+  }
+  return null;
+}
+
 // ── Project detail view ─────────────────────────────────────────────────────
 
-function JobRow({ job, onSelect, focused, onCancel, onArchive }: { job: CodingJob; onSelect: () => void; focused: boolean; onCancel?: () => void; onArchive?: () => void; }) {
+function JobRow({ job, onSelect, focused, onCancel, onArchive, liveActivity }: { job: CodingJob; onSelect: () => void; focused: boolean; onCancel?: () => void; onArchive?: () => void; liveActivity?: string; }) {
   const isAwaiting = job.status === 'awaiting_user';
   const isRunning = job.status === 'running';
   const isApprovalPending = job.status === 'awaiting_approval';
@@ -590,6 +635,14 @@ function JobRow({ job, onSelect, focused, onCancel, onArchive }: { job: CodingJo
   if (job.startedAt && job.completedAt) {
     const secs = Math.round((job.completedAt - job.startedAt) / 1000);
     meta.push(secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`);
+  }
+  if (job.estimatedCostUsd != null && job.estimatedCostUsd > 0) {
+    const usd = job.estimatedCostUsd;
+    const costStr = usd < 0.001 ? `<$0.001` : `~$${usd.toFixed(usd < 0.01 ? 4 : usd < 1 ? 2 : 2)}`;
+    const tokStr = job.totalTokens != null && job.totalTokens > 0
+      ? ` · ${job.totalTokens >= 1000 ? `${(job.totalTokens / 1000).toFixed(0)}k` : job.totalTokens} tok`
+      : '';
+    meta.push(`${costStr}${tokStr}`);
   }
 
   const mostRecent = job.turnCount > 1 ? job.mostRecentTurnText : null;
@@ -653,6 +706,21 @@ function JobRow({ job, onSelect, focused, onCancel, onArchive }: { job: CodingJo
               </Text>
             )}
           </HStack>
+
+          {/* Live activity preview — only shown while running */}
+          {isRunning && liveActivity && (
+            <HStack gap="1.5" mt="0.5" minW={0}>
+              <Spinner size="xs" color="var(--status-info)" flexShrink={0} />
+              <Text
+                fontSize="10px"
+                color="var(--text-muted)"
+                fontFamily="ui-monospace, monospace"
+                truncate
+              >
+                {liveActivity}
+              </Text>
+            </HStack>
+          )}
         </VStack>
 
         {/* Right side: status + last activity. Awaiting_user shows NO spinner —
@@ -718,6 +786,8 @@ function AllJobsView({
   const [jobsByProject, setJobsByProject] = useState<Record<string, CodingJob[]>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [liveActivity, setLiveActivity] = useState<Record<string, string>>({});
+  const liveUnsubRef = useRef<Record<string, () => void>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -761,6 +831,41 @@ function AllJobsView({
     const id = setInterval(() => { void load(); }, 5000);
     return () => clearInterval(id);
   }, [jobsByProject, load]);
+
+  // Subscribe to SSE events for each running job to show live activity previews
+  useEffect(() => {
+    const runningIds = new Set(
+      Object.values(jobsByProject).flat()
+        .filter(j => j.status === 'running')
+        .map(j => j.id)
+    );
+    const current = liveUnsubRef.current;
+
+    // Close subscriptions for jobs no longer running
+    for (const [id, unsub] of Object.entries(current)) {
+      if (!runningIds.has(id)) {
+        unsub();
+        delete current[id];
+      }
+    }
+
+    // Open subscriptions for newly-running jobs
+    for (const id of runningIds) {
+      if (!current[id]) {
+        current[id] = api.subscribeToJobEvents(id, (event) => {
+          const text = eventToActivityLine(event);
+          if (text != null) setLiveActivity(prev => ({ ...prev, [id]: text }));
+          if (event.type === 'job.awaiting_user' || event.type === 'job.agent_result') void load();
+        });
+      }
+    }
+  }, [jobsByProject, load]);
+
+  // Close all subscriptions on unmount
+  useEffect(() => {
+    const current = liveUnsubRef.current;
+    return () => { for (const unsub of Object.values(current)) unsub(); };
+  }, []);
 
   if (newJobProject) {
     return (
@@ -911,6 +1016,7 @@ function AllJobsView({
                         onSelect={() => onSelectJob(project.id, j.id)}
                         onCancel={async () => { await api.cancelJob(j.id); void load(); }}
                         onArchive={async () => { await api.archiveJob(j.id); void load(); }}
+                        liveActivity={liveActivity[j.id]}
                       />
                     ))
                   )}
@@ -1123,8 +1229,7 @@ function CodingHeaderSelectors({
   connectedAgents: readonly string[];
   agentLocked: boolean;
   onAgentChange: (v: string) => void;
-  // Approval-mode controls are optional — JobView renders this component
-  // without them since approval mode is locked at job creation.
+  // effectiveMode shown read-only when no onApprovalModeChange provided (job view).
   effectiveMode?: ApprovalMode;
   unrestrictedAccess?: boolean;
   onApprovalModeChange?: (m: ApprovalMode) => void;
@@ -1133,7 +1238,6 @@ function CodingHeaderSelectors({
   reasoningEffort: string;
   onReasoningEffortChange: (v: string) => void;
 }) {
-  const showApproval = effectiveMode !== undefined && onApprovalModeChange !== undefined;
   return (
     <>
       <HeaderSelect
@@ -1146,12 +1250,12 @@ function CodingHeaderSelectors({
           label: id === 'claude-code' ? 'Claude Code' : 'Codex',
         }))}
       />
-      {showApproval && (
+      {effectiveMode !== undefined && (
         <HeaderSelect
           width={150}
-          value={effectiveMode!}
-          disabled={unrestrictedAccess ?? false}
-          onChange={(v) => onApprovalModeChange!(v as ApprovalMode)}
+          value={effectiveMode}
+          disabled={!onApprovalModeChange || (unrestrictedAccess ?? false)}
+          onChange={(v) => onApprovalModeChange?.(v as ApprovalMode)}
           options={[
             { value: 'auto_safe', label: 'Edits only' },
             { value: 'auto_all', label: 'Actions only' },
@@ -1472,6 +1576,8 @@ function JobView({
   // Local overrides for model/reasoning — kept in sync with job state
   const [localModel, setLocalModel] = useState<string>('');
   const [localReasoning, setLocalReasoning] = useState<string>('medium');
+  const [project, setProject] = useState<CodingProject | null>(null);
+  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
   // Load history first, then gate SSE subscription on sinceId so replayed
   // events can't regress the status that was authoritatively set by the load.
@@ -1486,6 +1592,10 @@ function JobView({
           maxEventIdRef.current = maxEventId ?? 0;
           setSinceId(maxEventId ?? 0);
           setJob(j);
+          // Restore approval dialog if the job was loaded mid-approval (e.g. page refresh).
+          if (j.status === 'awaiting_approval' && j.approvalPending) {
+            setPendingApproval({ ...j.approvalPending, resolving: false });
+          }
           // Default unset model/reasoning to the agent's first option so the
           // shared header selectors render a real selection rather than blank.
           setLocalModel(j.model ?? (AGENT_MODELS[j.agent]?.[0]?.value ?? ''));
@@ -1578,7 +1688,7 @@ function JobView({
     return [initial, ...events];
   }, [events, job?.id, job?.prompt, job?.createdAt]);
 
-  const jobIsActive = job?.status === 'running' || job?.status === 'awaiting_user';
+  const jobIsActive = job?.status === 'running' || job?.status === 'awaiting_user' || job?.status === 'awaiting_approval';
   useEffect(() => {
     if (!jobIsActive) return;
     const timer = setInterval(syncJobStatus, 10_000);
@@ -1673,6 +1783,17 @@ function JobView({
     setActiveJobId(activeJobId);
   }
 
+  async function handleArchive() {
+    try { await api.archiveJob(activeJobId); onBack(); } catch { /* ignore */ }
+  }
+
+  // Load project info once we know the job's projectId (gives repo name + branch)
+  useEffect(() => {
+    if (!job?.projectId) return;
+    if (project?.id === job.projectId) return;
+    api.getProject(job.projectId).then(({ project: p }) => setProject(p)).catch(() => {});
+  }, [job?.projectId, project?.id]);
+
   // Open file panel — first try inline event data, then fetch from bridge
   async function openFile(filePath: string, inlineContent?: string) {
     if (inlineContent != null) {
@@ -1733,29 +1854,181 @@ function JobView({
 
   return (
     <Flex direction="column" h="100%" minH={0}>
-      {/* Header */}
-      <HStack px="4" py="2.5" borderBottom="1px solid var(--divider)" flexShrink={0} justify="space-between" gap="3">
-        <HStack gap="1" color="var(--text-muted)" minW={0} flex="1">
-          <Button variant="ghost" size="xs" h="6" px="1" onClick={onBack} color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }}>
-            ← All jobs
-          </Button>
-          <Text fontSize="12px" flexShrink={0}>/</Text>
-          <Text fontSize="13px" fontWeight="500" color="var(--text-primary)" truncate maxW="240px">
-            {job?.title ?? job?.prompt ?? '…'}
-          </Text>
+      {/* Header — responsive: selectors inline on lg+, second row on md, drawer on sm- */}
+      <Box borderBottom="1px solid var(--divider)" flexShrink={0}>
+        {/* Main row */}
+        <HStack px="4" py="2.5" gap="3" align="center">
+          {/* Breadcrumb: ← All jobs / repo / branch / title */}
+          <HStack gap="1" color="var(--text-muted)" minW={0} flex="1" overflow="hidden">
+            <Button variant="ghost" size="xs" h="6" px="1" onClick={onBack} color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }} flexShrink={0}>
+              ← All jobs
+            </Button>
+            {project && (
+              <>
+                <Text fontSize="12px" flexShrink={0}>/</Text>
+                <Text fontSize="12px" fontWeight="500" color="var(--text-secondary)" flexShrink={0} maxW="80px" truncate title={project.repoPath}>
+                  {project.name}
+                </Text>
+                {project.currentBranch && (
+                  <>
+                    <Text fontSize="12px" flexShrink={0}>/</Text>
+                    <Text fontSize="12px" fontWeight="600" color="var(--accent)" flexShrink={0} maxW="100px" truncate title={project.currentBranch}>
+                      {project.currentBranch}
+                    </Text>
+                  </>
+                )}
+                <Text fontSize="12px" flexShrink={0}>/</Text>
+              </>
+            )}
+            {!project && <Text fontSize="12px" flexShrink={0}>/</Text>}
+            <Text fontSize="13px" fontWeight="500" color="var(--text-primary)" truncate>
+              {job?.title ?? job?.prompt ?? '…'}
+            </Text>
+            {/* Running indicator */}
+            {job?.status === 'running' && (
+              <HStack
+                gap="1.5" px="2" py="0.5" rounded="full" flexShrink={0}
+                bg="hsla(210, 65%, 45%, 0.12)" border="1px solid hsla(210, 65%, 45%, 0.3)"
+                className="job-row-pulse"
+              >
+                <Spinner size="xs" color="var(--status-info)" />
+                <Text fontSize="10px" fontWeight="600" color="var(--status-info)">Running</Text>
+              </HStack>
+            )}
+          </HStack>
+
+          {/* Selectors inline — lg+ only */}
+          {job && (
+            <HStack gap="1.5" display={{ base: 'none', lg: 'flex' }} flexShrink={0} align="center">
+              <CodingHeaderSelectors
+                agent={job.agent}
+                connectedAgents={[job.agent]}
+                agentLocked
+                onAgentChange={() => undefined}
+                effectiveMode={job.approvalMode as ApprovalMode}
+                model={localModel}
+                onModelChange={v => void handleJobConfigChange('model', v)}
+                reasoningEffort={localReasoning}
+                onReasoningEffortChange={v => void handleJobConfigChange('reasoningEffort', v)}
+              />
+            </HStack>
+          )}
+
+          {/* Right actions */}
+          <HStack gap="1.5" flexShrink={0} align="center">
+            {/* Session metadata — hidden on very small */}
+            <HStack gap="1" fontSize="11px" color="var(--text-muted)" display={{ base: 'none', md: 'flex' }}>
+              {job?.turnCount !== undefined && job.turnCount > 0 && (
+                <Text>{job.turnCount} turn{job.turnCount !== 1 ? 's' : ''}</Text>
+              )}
+              {filesChangedCount > 0 && (
+                <>
+                  <Text>·</Text>
+                  <Button
+                    variant="ghost" size="xs" h="4" px="1" fontSize="11px"
+                    color="var(--text-muted)"
+                    _hover={{ color: 'var(--accent)', bg: 'transparent', textDecoration: 'underline' }}
+                    onClick={() => void openSessionSummary()}
+                  >
+                    {filesChangedCount} file{filesChangedCount !== 1 ? 's' : ''}
+                  </Button>
+                </>
+              )}
+              <CostBadge
+                latestCost={latestCost as Extract<JobEvent, { type: 'job.cost_update' }> | null}
+                startedAt={job?.startedAt}
+              />
+              {job && <StatusPill status={job.status} />}
+              {job?.approvalMode === 'auto_all' && (
+                <Text fontSize="11px" color="var(--status-warning)" fontWeight="500" flexShrink={0}>⚠ unrestricted</Text>
+              )}
+            </HStack>
+
+            {/* Settings button — visible below lg */}
+            {job && (
+              <Button
+                size="xs" h="7" px="2.5"
+                variant="ghost"
+                display={{ base: 'flex', lg: 'none' }}
+                color="var(--text-muted)"
+                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                rounded="var(--radius-control)"
+                bg="var(--surface-2)"
+                border="1px solid var(--border-subtle)"
+                onClick={() => setSettingsDrawerOpen(true)}
+                aria-label="Job settings"
+                title="Job settings"
+              >
+                ⚙
+              </Button>
+            )}
+
+            {/* Compact toggle */}
+            <Button
+              size="xs" h="6" px="2"
+              variant={compact ? 'solid' : 'outline'}
+              fontSize="10px"
+              color={compact ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+              bg={compact ? 'var(--accent)' : 'transparent'}
+              borderColor="var(--border-subtle)"
+              _hover={{ bg: compact ? 'var(--accent-strong)' : 'var(--surface-hover)' }}
+              rounded="var(--radius-control)"
+              title={compact ? 'Comfortable view' : 'Compact view'}
+              onClick={() => { const next = !compact; setCompact(next); localStorage.setItem('coding-compact', String(next)); }}
+            >
+              {compact ? '⊡' : '⊟'}
+            </Button>
+
+            {/* Archive — for terminal jobs */}
+            {job && (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && (
+              <Button
+                size="xs" h="6" px="2" variant="ghost"
+                color="var(--text-muted)"
+                _hover={{ color: 'var(--text-secondary)', bg: 'var(--surface-hover)' }}
+                rounded="var(--radius-control)"
+                onClick={() => void handleArchive()}
+              >
+                Archive
+              </Button>
+            )}
+
+            {/* Kill / End session / Cancel */}
+            {endConfirm ? (
+              <HStack gap="1">
+                <Text fontSize="11px" color="var(--status-warning)">End anyway?</Text>
+                <Button size="xs" h="6" px="2" bg="var(--status-danger)" color="white" _hover={{ opacity: 0.85 }} rounded="var(--radius-control)" onClick={() => void handleEndSession()}>Yes, end</Button>
+                <Button size="xs" h="6" px="2" variant="ghost" color="var(--text-muted)" _hover={{ bg: 'var(--surface-hover)' }} rounded="var(--radius-control)" onClick={() => setEndConfirm(false)}>Cancel</Button>
+              </HStack>
+            ) : isActive ? (
+              <Button
+                size="xs" h="7" px="3"
+                variant="outline"
+                rounded="var(--radius-control)"
+                color="var(--status-danger)"
+                borderColor="var(--status-danger)"
+                _hover={{ bg: 'var(--surface-danger)' }}
+                loading={cancelling}
+                onClick={() => { if (job?.status === 'running') { setEndConfirm(true); } else { void handleCancel(); } }}
+              >
+                {job?.status === 'running' ? 'Kill' : 'Cancel'}
+              </Button>
+            ) : null}
+          </HStack>
         </HStack>
 
-        {/* Per-job provider (locked) + model + reasoning — uses the shared
-            CodingHeaderSelectors so the chips match the new-job view exactly.
-            Approval-mode controls are intentionally omitted since approval mode
-            is locked at job creation. */}
+        {/* Selectors second row — md only (768px–992px "half-width") */}
         {job && (
-          <HStack gap="1.5" flexShrink={0} align="center">
+          <HStack
+            px="4" py="1.5" gap="1.5"
+            borderTop="1px solid var(--divider)"
+            display={{ base: 'none', md: 'flex', lg: 'none' }}
+          >
             <CodingHeaderSelectors
               agent={job.agent}
               connectedAgents={[job.agent]}
               agentLocked
               onAgentChange={() => undefined}
+              effectiveMode={job.approvalMode as ApprovalMode}
               model={localModel}
               onModelChange={v => void handleJobConfigChange('model', v)}
               reasoningEffort={localReasoning}
@@ -1763,82 +2036,7 @@ function JobView({
             />
           </HStack>
         )}
-
-        <HStack gap="2" flexShrink={0} align="center">
-          {/* Session metadata subtitle */}
-          <HStack gap="1" fontSize="11px" color="var(--text-muted)">
-            {job?.turnCount !== undefined && job.turnCount > 0 && (
-              <Text>{job.turnCount} turn{job.turnCount !== 1 ? 's' : ''}</Text>
-            )}
-            {filesChangedCount > 0 && (
-              <>
-                <Text>·</Text>
-                <Button
-                  variant="ghost" size="xs" h="4" px="1" fontSize="11px"
-                  color="var(--text-muted)"
-                  _hover={{ color: 'var(--accent)', bg: 'transparent', textDecoration: 'underline' }}
-                  onClick={() => void openSessionSummary()}
-                >
-                  {filesChangedCount} file{filesChangedCount !== 1 ? 's' : ''}
-                </Button>
-              </>
-            )}
-            <CostBadge
-              latestCost={latestCost as Extract<JobEvent, { type: 'job.cost_update' }> | null}
-              startedAt={job?.startedAt}
-            />
-            {job && <StatusPill status={job.status} />}
-            {job?.approvalMode === 'auto_all' && (
-              <Text fontSize="11px" color="var(--status-warning)" fontWeight="500" flexShrink={0}>⚠ unrestricted</Text>
-            )}
-          </HStack>
-
-          {/* Compact toggle */}
-          <Button
-            size="xs" h="6" px="2"
-            variant={compact ? 'solid' : 'outline'}
-            fontSize="10px"
-            color={compact ? 'var(--accent-contrast)' : 'var(--text-muted)'}
-            bg={compact ? 'var(--accent)' : 'transparent'}
-            borderColor="var(--border-subtle)"
-            _hover={{ bg: compact ? 'var(--accent-strong)' : 'var(--surface-hover)' }}
-            rounded="var(--radius-control)"
-            title={compact ? 'Comfortable view' : 'Compact view'}
-            onClick={() => {
-              const next = !compact;
-              setCompact(next);
-              localStorage.setItem('coding-compact', String(next));
-            }}
-          >
-            {compact ? '⊡' : '⊟'}
-          </Button>
-
-          {/* End / cancel */}
-          {endConfirm ? (
-            <HStack gap="1">
-              <Text fontSize="11px" color="var(--status-warning)">End anyway?</Text>
-              <Button size="xs" h="6" px="2" bg="var(--status-danger)" color="white" _hover={{ opacity: 0.85 }} rounded="var(--radius-control)" onClick={() => void handleEndSession()}>Yes, end</Button>
-              <Button size="xs" h="6" px="2" variant="ghost" color="var(--text-muted)" _hover={{ bg: 'var(--surface-hover)' }} rounded="var(--radius-control)" onClick={() => setEndConfirm(false)}>Cancel</Button>
-            </HStack>
-          ) : isActive ? (
-            <Button
-              size="xs" h="7" px="3"
-              variant="outline"
-              rounded="var(--radius-control)"
-              color="var(--status-danger)"
-              borderColor="var(--status-danger)"
-              _hover={{ bg: 'var(--surface-danger)' }}
-              loading={cancelling}
-              onClick={() => {
-                if (job?.status === 'running') { setEndConfirm(true); }
-                else { void handleCancel(); }
-              }}
-            >
-              {job?.status === 'running' ? 'End session' : 'Cancel'}
-            </Button>
-          ) : null}
-        </HStack>
-      </HStack>
+      </Box>
 
       {/* Two-column body: left = response, right = activity feed.
           Both columns are derived from the same persisted `events` state, so
@@ -1926,6 +2124,54 @@ function JobView({
         onClose={() => setFilePanel(null)}
         onOpenFile={(entry) => void openFile(entry.path)}
       />
+
+      {/* Settings drawer — small viewports (below md) */}
+      <Drawer.Root
+        open={settingsDrawerOpen}
+        onOpenChange={({ open }) => setSettingsDrawerOpen(open)}
+        placement="bottom"
+      >
+        <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" />
+        <Drawer.Positioner>
+          <Drawer.Content
+            bg="var(--surface-elevated)"
+            borderTop="1px solid var(--border-subtle)"
+            borderRadius="var(--radius-lg) var(--radius-lg) 0 0"
+          >
+            <Drawer.Header pb="3" borderBottom="1px solid var(--border-subtle)">
+              <HStack justify="space-between" align="center">
+                <Text fontSize="14px" fontWeight="600" color="var(--text-primary)">Job settings</Text>
+                <Button
+                  size="xs" variant="ghost" h="7" w="7" p="0"
+                  color="var(--text-muted)" _hover={{ bg: 'var(--surface-hover)' }}
+                  rounded="var(--radius-control)"
+                  onClick={() => setSettingsDrawerOpen(false)}
+                  aria-label="Close"
+                >×</Button>
+              </HStack>
+            </Drawer.Header>
+            <Drawer.Body py="4">
+              {job && (
+                <VStack align="stretch" gap="3">
+                  <HStack gap="1.5" flexWrap="wrap">
+                    <CodingHeaderSelectors
+                      agent={job.agent}
+                      connectedAgents={[job.agent]}
+                      agentLocked
+                      onAgentChange={() => undefined}
+                      effectiveMode={job.approvalMode as ApprovalMode}
+                      model={localModel}
+                      onModelChange={v => { void handleJobConfigChange('model', v); setSettingsDrawerOpen(false); }}
+                      reasoningEffort={localReasoning}
+                      onReasoningEffortChange={v => { void handleJobConfigChange('reasoningEffort', v); setSettingsDrawerOpen(false); }}
+                    />
+                  </HStack>
+                </VStack>
+              )}
+            </Drawer.Body>
+          </Drawer.Content>
+        </Drawer.Positioner>
+      </Drawer.Root>
     </Flex>
   );
 }

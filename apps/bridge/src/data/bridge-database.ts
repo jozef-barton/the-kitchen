@@ -856,6 +856,13 @@ export class BridgeDatabase {
       CREATE INDEX IF NOT EXISTS uploaded_files_session_idx
         ON uploaded_files(session_id, created_at DESC)
         WHERE session_id IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS remote_access (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_known_dns_name TEXT,
+        last_checked_at TEXT
+      );
     `);
 
     this.database.exec('DROP TABLE IF EXISTS space_reminder_jobs;');
@@ -1123,6 +1130,16 @@ export class BridgeDatabase {
             sidebar_collapsed
           )
           VALUES (1, NULL, NULL, '[]', 'chat', '{}', '{}', '{}', 'all', 'recipes', 0)
+          ON CONFLICT (id) DO NOTHING
+        `
+      )
+      .run();
+
+    this.database
+      .prepare(
+        `
+          INSERT INTO remote_access (id, enabled)
+          VALUES (1, 1)
           ON CONFLICT (id) DO NOTHING
         `
       )
@@ -1826,6 +1843,33 @@ export class BridgeDatabase {
       );
 
     return nextSettings;
+  }
+
+  getRemoteAccess(): { enabled: boolean; lastKnownDnsName: string | null; lastCheckedAt: string | null } {
+    const row = this.database
+      .prepare('SELECT enabled, last_known_dns_name, last_checked_at FROM remote_access WHERE id = 1')
+      .get() as { enabled: number; last_known_dns_name: string | null; last_checked_at: string | null } | undefined;
+    return {
+      enabled: row ? Boolean(row.enabled) : true,
+      lastKnownDnsName: row?.last_known_dns_name ?? null,
+      lastCheckedAt: row?.last_checked_at ?? null
+    };
+  }
+
+  setRemoteAccess({ enabled, lastKnownDnsName }: { enabled: boolean; lastKnownDnsName: string | null }) {
+    const now = new Date().toISOString();
+    this.database
+      .prepare(
+        `
+          INSERT INTO remote_access (id, enabled, last_known_dns_name, last_checked_at)
+          VALUES (1, ?, ?, ?)
+          ON CONFLICT (id) DO UPDATE SET
+            enabled = excluded.enabled,
+            last_known_dns_name = excluded.last_known_dns_name,
+            last_checked_at = excluded.last_checked_at
+        `
+      )
+      .run(enabled ? 1 : 0, lastKnownDnsName, now);
   }
 
   getProviderStepCompletions(profileId: string): string[] {

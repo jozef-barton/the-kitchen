@@ -380,6 +380,32 @@ describe.sequential('bridge server', () => {
     await server.close();
   });
 
+  it('returns remote-access status and refresh payloads with bind/rebound metadata', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-remote-access-'));
+    tempRoots.push(tempRoot);
+    const server = await startServer(tempRoot);
+
+    const status = await fetch(`${server.baseUrl}/api/remote-access/status`).then((r) =>
+      r.json() as Promise<{ tailscale: { running: boolean; installed: boolean }; url: string | null; enabled: boolean }>
+    );
+
+    expect(status.tailscale).toBeDefined();
+    expect(typeof status.tailscale.running).toBe('boolean');
+    expect(typeof status.enabled).toBe('boolean');
+
+    const refresh = await fetch(`${server.baseUrl}/api/remote-access/refresh`, { method: 'POST' }).then((r) =>
+      r.json() as Promise<{ tailscale: { running: boolean }; bindAddress: string; rebound: boolean; url: string | null }>
+    );
+
+    expect(typeof refresh.bindAddress).toBe('string');
+    expect(typeof refresh.rebound).toBe('boolean');
+    // The fallback path used in tests (no controller wiring) reports rebound=false even if the
+    // detected state changed — server.test.ts uses createBridgeServer directly, not server.ts main().
+    expect(refresh.rebound).toBe(false);
+
+    await server.close();
+  });
+
   it('returns skills and model/provider state and persists provider updates', async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-providers-'));
     tempRoots.push(tempRoot);

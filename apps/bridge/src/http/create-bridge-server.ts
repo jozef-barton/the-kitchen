@@ -62,6 +62,8 @@ import { BlobStore, classifyFileKind } from '../services/uploads/blob-store';
 import { parseMultipartUpload } from '../services/uploads/multipart';
 import { parseAttachment } from '../services/uploads/attachment-parser';
 import { scheduleTranscription } from '../services/uploads/transcription-service';
+import type { TailscaleStatus } from '../services/tailscale';
+import { detectTailscale } from '../services/tailscale';
 
 function toApiErrorPayload(error: unknown) {
   if (error instanceof BridgeError) {
@@ -178,6 +180,13 @@ export function createBridgeServer(options: {
   legacySnapshotPaths?: string[];
   asyncRecipeEnrichmentTimeoutMs?: number;
   asyncRecipeAppletTimeoutMs?: number;
+  // Read fresh on every request so the origin allow-list reflects the live Tailscale state.
+  // The static tailscaleDnsName option was removed: it was set once at startup, so requests with
+  // Host: <dns>:port were rejected if Tailscale started after the bridge.
+  getTailscaleDnsName?: () => string | null;
+  // Drives /api/remote-access/refresh: re-detect Tailscale, rebind the listener if needed, and
+  // return the new state. Falls back to a plain detect() when not provided (no rebind happens).
+  refreshRemoteAccess?: () => Promise<{ tailscale: TailscaleStatus; bindAddress: string; rebound: boolean }>;
 }) {
   const database = new BridgeDatabase(options.databasePath);
   migrateLegacySnapshotIfNeeded(database, {
@@ -252,7 +261,10 @@ export function createBridgeServer(options: {
       return;
     }
 
-    const originDecision = evaluateLocalOriginPolicy(request);
+    const tailscaleHostname = options.getTailscaleDnsName?.() ?? null;
+    const originDecision = evaluateLocalOriginPolicy(request, {
+      additionalAllowedHostnames: tailscaleHostname ? [tailscaleHostname] : []
+    });
     if (!originDecision.allowed) {
       sendJson(
         response,
@@ -1136,6 +1148,58 @@ export function createBridgeServer(options: {
           writeSseEvent(response, { type: 'error', detail: err instanceof Error ? err.message : 'Install failed' });
         }
         response.end();
+        return;
+      }
+
+      if (request.method === 'GET' && pathname === '/api/remote-access/status') {
+        const tailscale = await detectTailscale();
+        const stored = database.getRemoteAccess();
+        const serverPort = (server.address() as { port?: number } | null)?.port ?? 8787;
+        const url = tailscale.running && tailscale.dnsName ? `http://${tailscale.dnsName}:${serverPort}` : null;
+        if (tailscale.running && tailscale.dnsName) {
+          database.setRemoteAccess({ enabled: stored.enabled, lastKnownDnsName: tailscale.dnsName });
+        }
+        sendJson(response, 200, { tailscale, url, enabled: stored.enabled }, originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/remote-access/refresh') {
+        // Refresh re-detects Tailscale and (if state changed) rebinds the listener so external
+        // tailnet devices can actually reach the bridge. Without this, a refresh that flipped
+        // tailscale.running from false → true would advertise a QR URL to a port still bound
+        // to 127.0.0.1, and the phone would silently get connection refused.
+        const result = options.refreshRemoteAccess
+          ? await options.refreshRemoteAccess()
+          : { tailscale: await detectTailscale(), bindAddress: '127.0.0.1', rebound: false };
+        const stored = database.getRemoteAccess();
+        const serverPort = (server.address() as { port?: number } | null)?.port ?? 8787;
+        const url = result.tailscale.running && result.tailscale.dnsName
+          ? `http://${result.tailscale.dnsName}:${serverPort}`
+          : null;
+        database.setRemoteAccess({
+          enabled: stored.enabled,
+          lastKnownDnsName: result.tailscale.running
+            ? (result.tailscale.dnsName ?? stored.lastKnownDnsName)
+            : stored.lastKnownDnsName
+        });
+        sendJson(
+          response,
+          200,
+          { tailscale: result.tailscale, url, enabled: stored.enabled, bindAddress: result.bindAddress, rebound: result.rebound },
+          originDecision.allowOrigin
+        );
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/remote-access/enable') {
+        database.setRemoteAccess({ enabled: true, lastKnownDnsName: database.getRemoteAccess().lastKnownDnsName });
+        sendJson(response, 200, { enabled: true }, originDecision.allowOrigin);
+        return;
+      }
+
+      if (request.method === 'POST' && pathname === '/api/remote-access/disable') {
+        database.setRemoteAccess({ enabled: false, lastKnownDnsName: database.getRemoteAccess().lastKnownDnsName });
+        sendJson(response, 200, { enabled: false }, originDecision.allowOrigin);
         return;
       }
 

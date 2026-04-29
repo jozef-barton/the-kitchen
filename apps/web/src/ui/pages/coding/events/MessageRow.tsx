@@ -68,7 +68,11 @@ function useMessageTypewriter(
   // Start/resume the rAF when text grows or when streaming ends.
   // `shouldAnimate` is intentionally excluded from deps — it's stable at mount.
   useEffect(() => {
-    if (!shouldAnimate || doneRef.current) return;
+    if (!shouldAnimate || doneRef.current) {
+      // Animation is disabled or already finished — keep displayText in sync with text.
+      setDisplayText(text);
+      return;
+    }
 
     if (renderedRef.current < text.length) {
       if (!isStreaming) {

@@ -9,7 +9,7 @@ import { ErrorBanner } from '../molecules/ErrorBanner';
 import { SessionRow } from '../molecules/SessionRow';
 import { SessionRenameDialog } from '../molecules/SessionRenameDialog';
 
-type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'coding' | 'tools' | 'skills' | 'settings' | 'new-session' | 'search' | 'gear' | 'plus' | 'trash' | 'user' | 'chevron-right';
+type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'coding' | 'tools' | 'skills' | 'settings' | 'new-session' | 'search' | 'gear' | 'plus' | 'trash' | 'user' | 'chevron-right' | 'remote-access';
 
 function CollapseIcon() {
   const Svg = chakra('svg');
@@ -38,6 +38,7 @@ const allNav: Array<{ page: AppPage; label: string; icon: SidebarIconName; short
   { page: 'tools', label: 'Tools', icon: 'tools', requiresRuntime: true },
   { page: 'skills', label: 'Skills', icon: 'skills', requiresRuntime: true },
   { page: 'settings', label: 'Settings', icon: 'settings', requiresRuntime: false },
+  { page: 'remote-access', label: 'Remote Access', icon: 'remote-access', requiresRuntime: false },
 ];
 
 export type ProfileMetrics = {
@@ -815,6 +816,14 @@ function SidebarIcon({ name, size = 'sm' }: { name: SidebarIconName; size?: 'sm'
         return (
           <>
             <path d="M4 6l-2 2 2 2M12 6l2 2-2 2M7.5 13l1-10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        );
+      case 'remote-access':
+        return (
+          <>
+            <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M5.2 10.8a4 4 0 0 1 0-5.6M10.8 5.2a4 4 0 0 1 0 5.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M3.1 12.9a7 7 0 0 1 0-9.8M12.9 3.1a7 7 0 0 1 0 9.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </>
         );
       default:

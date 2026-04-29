@@ -12,6 +12,14 @@ function getPathParts(url: string): string[] {
   return new URL(url, 'http://localhost').pathname.split('/').filter(Boolean);
 }
 
+function getGitBranch(cwd: string): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    execFile('git', ['branch', '--show-current'], { cwd, timeout: 2000 }, (err, stdout) => {
+      resolve(err ? undefined : stdout.trim() || undefined);
+    });
+  });
+}
+
 // Runs a shell command string and streams output lines via the emit callback.
 // Resolves when the process exits (any exit code — caller decides on error).
 function streamShellCommand(
@@ -74,10 +82,13 @@ export async function handleCodingRequest(
       if (method === 'GET') {
         const project = manager.getProject(projectId!);
         if (!project) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Project not found' } }, allowOrigin); return true; }
+        const currentBranch = await getGitBranch(project.repoPath);
         const jobs = manager.listJobs({ projectId: projectId! });
-        const statsMap = manager.batchGetJobFileStats(jobs.map(j => j.id));
-        const jobsWithStats = jobs.map(j => ({ ...j, ...(statsMap.get(j.id) ?? { filesChangedCount: 0, totalLinesAdded: 0, totalLinesRemoved: 0, mostRecentTurnText: null }) }));
-        sendJson(response, 200, { project, jobs: jobsWithStats }, allowOrigin);
+        const jobIds = jobs.map(j => j.id);
+        const statsMap = manager.batchGetJobFileStats(jobIds);
+        const costMap = manager.batchGetJobCostStats(jobIds);
+        const jobsWithStats = jobs.map(j => ({ ...j, ...(statsMap.get(j.id) ?? { filesChangedCount: 0, totalLinesAdded: 0, totalLinesRemoved: 0, mostRecentTurnText: null }), ...(costMap.get(j.id) ?? {}) }));
+        sendJson(response, 200, { project: { ...project, currentBranch }, jobs: jobsWithStats }, allowOrigin);
         return true;
       }
       if (method === 'PATCH') {
@@ -104,8 +115,10 @@ export async function handleCodingRequest(
     if (method === 'GET' && parts.length === 2) {
       const qs = new URL(url, 'http://localhost').searchParams;
       const jobs = manager.listJobs({ projectId: qs.get('projectId') ?? undefined, status: qs.get('status') ?? undefined });
-      const statsMap = manager.batchGetJobFileStats(jobs.map(j => j.id));
-      const jobsWithStats = jobs.map(j => ({ ...j, ...(statsMap.get(j.id) ?? { filesChangedCount: 0, totalLinesAdded: 0, totalLinesRemoved: 0, mostRecentTurnText: null }) }));
+      const jobIds = jobs.map(j => j.id);
+      const statsMap = manager.batchGetJobFileStats(jobIds);
+      const costMap = manager.batchGetJobCostStats(jobIds);
+      const jobsWithStats = jobs.map(j => ({ ...j, ...(statsMap.get(j.id) ?? { filesChangedCount: 0, totalLinesAdded: 0, totalLinesRemoved: 0, mostRecentTurnText: null }), ...(costMap.get(j.id) ?? {}) }));
       sendJson(response, 200, { jobs: jobsWithStats }, allowOrigin);
       return true;
     }

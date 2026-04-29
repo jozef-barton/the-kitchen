@@ -594,6 +594,33 @@ export async function streamChat(input: ChatStreamRequest, onEvent: (event: Chat
   await streamSseResponse('/api/chat/stream', input, onEvent);
 }
 
+export interface RemoteAccessStatus {
+  tailscale: { installed: boolean; running: boolean; dnsName: string | null; ipv4: string | null; error?: string };
+  url: string | null;
+  enabled: boolean;
+}
+
+export async function getRemoteAccessStatus(): Promise<RemoteAccessStatus> {
+  const res = await apiFetch('/api/remote-access/status');
+  return res.json() as Promise<RemoteAccessStatus>;
+}
+
+export async function refreshRemoteAccess(): Promise<RemoteAccessStatus> {
+  const res = await apiFetch('/api/remote-access/refresh', {
+    method: 'POST',
+    headers: jsonHeaders()
+  });
+  return res.json() as Promise<RemoteAccessStatus>;
+}
+
+export async function setRemoteAccessEnabled(enabled: boolean): Promise<{ enabled: boolean }> {
+  const res = await apiFetch(`/api/remote-access/${enabled ? 'enable' : 'disable'}`, {
+    method: 'POST',
+    headers: jsonHeaders()
+  });
+  return res.json() as Promise<{ enabled: boolean }>;
+}
+
 export async function streamRecipeAction(recipeId: string, input: ExecuteRecipeActionRequest, onEvent: (event: ChatStreamEvent) => void) {
   await streamSseResponse(`/api/recipes/${encodeURIComponent(recipeId)}/actions/stream`, input, onEvent);
 }

@@ -15,6 +15,7 @@ export interface CodingProject {
   updatedAt: number;
   memoryPath?: string;
   defaultApprovalMode: ApprovalMode;
+  currentBranch?: string;
 }
 
 export interface PendingApproval {
@@ -142,6 +143,11 @@ export interface JobFileStats {
   totalLinesAdded: number;
   totalLinesRemoved: number;
   mostRecentTurnText: string | null;
+}
+
+export interface JobCostStats {
+  estimatedCostUsd: number;
+  totalTokens: number;
 }
 
 export interface FileSummaryStats {

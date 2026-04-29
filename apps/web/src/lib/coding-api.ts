@@ -17,6 +17,7 @@ export type ApprovalMode = 'manual' | 'auto_safe' | 'auto_all';
 export interface CodingProject {
   id: string; name: string; repoPath: string; createdAt: number; updatedAt: number;
   defaultApprovalMode: ApprovalMode;
+  currentBranch?: string;
 }
 export interface CodingJob {
   id: string; projectId: string; prompt: string; title?: string; agent: string; status: string;
@@ -24,11 +25,14 @@ export interface CodingJob {
   createdAt: number; startedAt?: number; completedAt?: number; viewedAt?: number; archivedAt?: number;
   exitCode?: number; error?: string; sessionId?: string; resumeSessionId?: string;
   agentSessionId?: string; turnCount: number; lastTurnAt?: number;
+  approvalPending?: { approvalId: string; message: string; options: string[]; defaultOption?: number; category: string };
   // Computed from events on demand
   filesChangedCount?: number;
   totalLinesAdded?: number;
   totalLinesRemoved?: number;
   mostRecentTurnText?: string | null;
+  estimatedCostUsd?: number;
+  totalTokens?: number;
 }
 
 export interface JobFileSummaryEntry {
