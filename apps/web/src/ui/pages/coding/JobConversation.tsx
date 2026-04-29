@@ -7,6 +7,7 @@ import { ThinkingRow } from './events/ThinkingRow';
 import { MessageRow } from './events/MessageRow';
 import { ToolPairRow } from './events/ToolPairRow';
 import { RawRow } from './events/RawRow';
+import { SystemEventRow } from './events/SystemEventRow';
 import { UserTurnRow } from './events/UserTurnRow';
 import { TurnSummary } from './events/TurnSummary';
 
@@ -259,6 +260,9 @@ export const JobConversation = memo(function JobConversation({
                     onAnimationComplete={isLatest ? () => setAnimatingToolUseId(null) : undefined}
                   />
                 );
+              }
+              if (item.kind === 'system_event') {
+                return <SystemEventRow key={`sys:${item.ts}`} payload={item.payload} />;
               }
               if (item.kind === 'raw') {
                 return <RawRow key={`raw:${item.isError ? 'e' : 'o'}:${item.ts}`} text={item.text} isError={item.isError} />;

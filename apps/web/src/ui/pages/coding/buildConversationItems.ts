@@ -22,6 +22,13 @@ export interface TurnCallEntry {
   input: Record<string, unknown>;
 }
 
+export interface SystemEventPayload {
+  subtype: string;
+  description?: string;
+  toolName?: string;
+  usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number };
+}
+
 export type ConversationItem =
   | { kind: 'init'; event: AgentInitEvent }
   | { kind: 'continuation'; prompt: string; ts: number }
@@ -29,6 +36,7 @@ export type ConversationItem =
   | { kind: 'message'; messageId: string; jobId: string; text: string; ts: number }
   | ToolPair
   | { kind: 'raw'; text: string; isError: boolean; ts: number }
+  | { kind: 'system_event'; payload: SystemEventPayload; ts: number }
   | { kind: 'result'; event: AgentResultEvent }
   | { kind: 'user_turn'; turnId: string; turnIndex: number; text: string; ts: number }
   | { kind: 'turn_boundary'; ts: number }
@@ -134,8 +142,37 @@ export function buildConversationItems(events: JobEvent[], jobPrompts?: Map<stri
       }
     } else if (e.type === 'job.stdout') {
       const ev = e as unknown as { chunk: string; ts: number };
-      if (rawBuf && !rawBuf.isError) { rawBuf.text += ev.chunk; }
-      else { flushRaw(); rawBuf = { text: ev.chunk, isError: false, ts: ev.ts }; }
+      // Parse [event:TYPE] JSON lines emitted by the codex/claude-code adapters
+      const systemMatch = ev.chunk.match(/^\[event:(\w+)\]\s*(\{.*\})\s*$/);
+      if (systemMatch) {
+        try {
+          const parsed = JSON.parse(systemMatch[2]!) as Record<string, unknown>;
+          const subtype = (parsed.subtype as string) ?? systemMatch[1]!;
+          // Only surface events that are useful to the user
+          if (subtype === 'task_progress' || systemMatch[1] === 'system') {
+            flushRaw();
+            const usageRaw = parsed.usage as Record<string, number> | undefined;
+            items.push({
+              kind: 'system_event',
+              payload: {
+                subtype,
+                description: (parsed.description as string) ?? undefined,
+                toolName: (parsed.last_tool_name as string) ?? undefined,
+                usage: usageRaw ? {
+                  total_tokens: usageRaw.total_tokens,
+                  tool_uses: usageRaw.tool_uses,
+                  duration_ms: usageRaw.duration_ms,
+                } : undefined,
+              },
+              ts: ev.ts,
+            });
+          }
+          // Skip all other system events (noise)
+        } catch { /* malformed JSON — fall through to raw */ }
+      } else {
+        if (rawBuf && !rawBuf.isError) { rawBuf.text += ev.chunk; }
+        else { flushRaw(); rawBuf = { text: ev.chunk, isError: false, ts: ev.ts }; }
+      }
     } else if (e.type === 'job.stderr') {
       const ev = e as unknown as { chunk: string; ts: number };
       if (rawBuf && rawBuf.isError) { rawBuf.text += ev.chunk; }

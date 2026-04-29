@@ -71,7 +71,18 @@ function useMessageTypewriter(
     if (!shouldAnimate || doneRef.current) return;
 
     if (renderedRef.current < text.length) {
-      if (rafRef.current === 0) rafRef.current = requestAnimationFrame(tick);
+      if (!isStreaming) {
+        // Streaming already ended — snap to full text instead of slow-typing through it.
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+        doneRef.current = true;
+        renderedRef.current = text.length;
+        setDisplayText(text);
+        setIsComplete(true);
+        onSeenRef.current();
+      } else if (rafRef.current === 0) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
     } else if (!isStreaming) {
       doneRef.current = true;
       setDisplayText(text);

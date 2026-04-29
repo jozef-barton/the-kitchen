@@ -1321,13 +1321,14 @@ function NewJobView({
 // ── Job view ─────────────────────────────────────────────────────────────────
 function JobView({
   jobId,
-  projectId: _projectId,
+  projectId,
   onBack
 }: {
   jobId: string;
   projectId: string;
   onBack: () => void;
 }) {
+  const navigate = useNavigate();
   const [job, setJob] = useState<CodingJob | null>(null);
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [cancelling, setCancelling] = useState(false);
@@ -1540,6 +1541,31 @@ function JobView({
   }
 
   const isActive = job?.status === 'running' || job?.status === 'awaiting_approval';
+  const isOpusJob = localModel === 'opus' || job?.model === 'opus';
+  const canExecuteWithSonnet =
+    job?.agent === 'claude-code' &&
+    isOpusJob &&
+    (job?.status === 'completed' || job?.status === 'awaiting_user') &&
+    !!lastAssistantMessage;
+
+  const [executingWithSonnet, setExecutingWithSonnet] = useState(false);
+
+  async function handleExecuteWithSonnet() {
+    if (!job || !lastAssistantMessage || !projectId) return;
+    setExecutingWithSonnet(true);
+    try {
+      const newJob = await api.createJob({
+        projectId: job.projectId || projectId,
+        prompt: `Execute the following plan:\n\n${lastAssistantMessage}`,
+        agent: 'claude-code',
+        approvalMode: job.approvalMode as api.ApprovalMode,
+        model: 'sonnet',
+        reasoningEffort: 'medium',
+      });
+      navigate('/coding/jobs/' + newJob.id);
+    } catch { /* ignore */ }
+    finally { setExecutingWithSonnet(false); }
+  }
 
   return (
     <Flex direction="column" h="100%" minH={0}>
@@ -1555,55 +1581,36 @@ function JobView({
           </Text>
         </HStack>
 
-        {/* Per-job provider (locked) + model + reasoning controls */}
+        {/* Per-job provider (locked) + model + reasoning — same chips as new-job view */}
         {job && (
-          <HStack gap="1.5" flexShrink={0} align="center">
-            {/* Provider — read-only badge */}
-            <Box
-              px="2" py="0.5"
-              bg="var(--surface-3)"
-              border="1px solid var(--border-subtle)"
-              rounded="sm"
-              whiteSpace="nowrap"
-              title="Provider cannot be changed after job creation"
-            >
-              <Text fontSize="11px" color="var(--text-secondary)" fontWeight="500">
-                {job.agent === 'claude-code' ? 'Claude Code' : 'Codex'}
-              </Text>
-            </Box>
-
-            {/* Model — editable */}
-            <NativeSelect.Root size="sm" h="6" minW="36">
-              <NativeSelect.Field
-                fontSize="11px"
-                bg="var(--surface-3)"
-                value={localModel}
-                title="Model for this job"
-                onChange={e => void handleJobConfigChange('model', e.currentTarget.value)}
-              >
-                <option value="">Default model</option>
-                {(AGENT_MODELS[job.agent] ?? AGENT_MODELS['claude-code']!).map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
-
-            {/* Reasoning effort — editable */}
-            <NativeSelect.Root size="sm" h="6" minW="24">
-              <NativeSelect.Field
-                fontSize="11px"
-                bg="var(--surface-3)"
-                value={localReasoning}
-                title="Reasoning level for this job"
-                onChange={e => void handleJobConfigChange('reasoningEffort', e.currentTarget.value)}
-              >
-                {(AGENT_EFFORTS[job.agent] ?? AGENT_EFFORTS['claude-code']!).map(e => (
-                  <option key={e.value} value={e.value}>{e.label}</option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+          <HStack gap="1.5" flexShrink={0} align="center" mb="1">
+            <HeaderSelect
+              width={130}
+              value={job.agent}
+              disabled
+              onChange={() => undefined}
+              options={[
+                { value: 'claude-code', label: 'Claude Code' },
+                { value: 'codex', label: 'Codex' },
+              ]}
+            />
+            <HeaderSelect
+              width={170}
+              value={localModel}
+              disabled={isActive}
+              onChange={v => void handleJobConfigChange('model', v)}
+              options={[
+                { value: '', label: 'Default model' },
+                ...(AGENT_MODELS[job.agent] ?? AGENT_MODELS['claude-code']!),
+              ]}
+            />
+            <HeaderSelect
+              width={110}
+              value={localReasoning}
+              disabled={isActive}
+              onChange={v => void handleJobConfigChange('reasoningEffort', v)}
+              options={AGENT_EFFORTS[job.agent] ?? AGENT_EFFORTS['claude-code']!}
+            />
           </HStack>
         )}
 
@@ -1699,14 +1706,28 @@ function JobView({
           </Box>
           <Box flex="1" minH={0} overflow="auto" px="4" py="3">
             {lastAssistantMessage ? (
-              <Box>
+              <VStack align="stretch" gap="3">
                 <MessageRow
                   messageId="last-response"
                   jobId={job?.id ?? ''}
                   text={lastAssistantMessage}
                   isStreaming={job?.status === 'running'}
                 />
-              </Box>
+                {canExecuteWithSonnet && (
+                  <Box pt="2" borderTop="1px solid var(--border-subtle)">
+                    <Button
+                      size="sm" h="8" px="4"
+                      bg="var(--accent)" color="var(--accent-contrast)"
+                      _hover={{ bg: 'var(--accent-strong)' }}
+                      rounded="var(--radius-control)"
+                      loading={executingWithSonnet}
+                      onClick={() => void handleExecuteWithSonnet()}
+                    >
+                      ↗ Execute with Sonnet
+                    </Button>
+                  </Box>
+                )}
+              </VStack>
             ) : (
               <Text fontSize="13px" color="var(--text-muted)" mt="4" textAlign="center">
                 {isActive ? 'Waiting for response…' : 'No response yet.'}
