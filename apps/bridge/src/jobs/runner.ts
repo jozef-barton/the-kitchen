@@ -484,6 +484,18 @@ export class JobRunner {
     return true;
   }
 
+  /**
+   * Clear the pending approval without writing to stdin. Used for shell- and stuck- approvals
+   * where the agent is in stay-alive stream-json mode — writing a raw option index ("0\n", "2\n",
+   * etc.) would be parse-garbage and corrupt the input stream. The follow-up user message is
+   * delivered separately via sendTurn (which writes a properly framed JSON user turn).
+   */
+  clearPendingApproval(approvalId: string): boolean {
+    if (this.pendingApprovalId !== approvalId) return false;
+    this.pendingApprovalId = null;
+    return true;
+  }
+
   private startHeartbeat() {
     this.heartbeatTimer = setInterval(() => {
       if (!this.isExited()) {
@@ -514,16 +526,30 @@ export class JobRunner {
     }
   }
 
-  cancel() {
+  /**
+   * Kill the child process and resolve when it has fully exited. Returning a promise lets
+   * the manager await full teardown before spawning a replacement runner on the same session id —
+   * otherwise two Claude Code processes briefly hold the same session file open and race on it.
+   */
+  cancel(): Promise<void> {
     this.cancelledByManager = true; // suppresses job.completed on exit
-    if (this.child && !this.isExited()) {
-      this.stdinClosed = true;
-      try { this.child.kill('SIGTERM'); } catch { /* ignore */ }
-      setTimeout(() => {
-        try { this.child?.kill('SIGKILL'); } catch { /* ignore */ }
-      }, 3000);
+    if (!this.child || this.isExited()) {
+      this.cleanup();
+      return Promise.resolve();
     }
-    this.cleanup();
+    this.stdinClosed = true;
+    const child = this.child;
+    const exited = new Promise<void>((resolve) => {
+      child.once('close', () => resolve());
+    });
+    try { child.kill('SIGTERM'); } catch { /* ignore */ }
+    const killTimer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    }, 3000);
+    return exited.finally(() => {
+      clearTimeout(killTimer);
+      this.cleanup();
+    });
   }
 
   getLogFilePath(index = 0): string {

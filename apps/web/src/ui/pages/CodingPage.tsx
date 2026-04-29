@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Box, Button, CloseButton, Drawer, Flex, HStack, Input, NativeSelect, Spinner, Tabs, Text, Textarea, VStack
+  Box, Button, CloseButton, Drawer, Flex, HStack, Input, NativeSelect, Spinner, Tabs, Text, Textarea, VStack,
+  useBreakpointValue
 } from '@chakra-ui/react';
 import * as api from '../../lib/coding-api';
 import type { CodingProject, CodingJob, JobEvent, JobFileSummaryEntry, ApprovalMode } from '../../lib/coding-api';
@@ -756,7 +757,7 @@ function JobRow({ job, onSelect, focused, onCancel, onArchive, liveActivity }: {
               Kill
             </Button>
           )}
-          {onArchive && isTerminal && (
+          {onArchive && !isRunning && !isApprovalPending && (
             <Button
               size="xs" h="5" px="2" fontSize="10px"
               variant="ghost"
@@ -1579,6 +1580,14 @@ function JobView({
   const [project, setProject] = useState<CodingProject | null>(null);
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
+  // Single-pane layout on phones / narrow viewports: response and activity merge
+  // into one feed (assistant messages stay inline) instead of the desktop two-column split.
+  // Single chat-style feed (response + activity merged) for any non-desktop viewport.
+  // The split-pane Response/Activity layout only kicks in at xl (≥1280px), so phones, tablets
+  // (portrait & landscape iPad), and Mac Split View windows all get the unified flow that
+  // matches the Claude Code terminal experience.
+  const singlePane = useBreakpointValue({ base: true, xl: false }, { ssr: false }) ?? false;
+
   // Load history first, then gate SSE subscription on sinceId so replayed
   // events can't regress the status that was authoritatively set by the load.
   useEffect(() => {
@@ -1860,19 +1869,20 @@ function JobView({
         <HStack px="4" py="2.5" gap="3" align="center">
           {/* Breadcrumb: ← All jobs / repo / branch / title */}
           <HStack gap="1" color="var(--text-muted)" minW={0} flex="1" overflow="hidden">
-            <Button variant="ghost" size="xs" h="6" px="1" onClick={onBack} color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }} flexShrink={0}>
-              ← All jobs
+            <Button variant="ghost" size="xs" h="6" px="1" onClick={onBack} color="var(--text-muted)" _hover={{ color: 'var(--text-primary)' }} flexShrink={0} aria-label="Back to all jobs">
+              <Box as="span" display={{ base: 'inline', sm: 'none' }}>←</Box>
+              <Box as="span" display={{ base: 'none', sm: 'inline' }}>← All jobs</Box>
             </Button>
             {project && (
               <>
-                <Text fontSize="12px" flexShrink={0}>/</Text>
-                <Text fontSize="12px" fontWeight="500" color="var(--text-secondary)" flexShrink={0} maxW="80px" truncate title={project.repoPath}>
+                <Text fontSize="12px" flexShrink={0} display={{ base: 'none', sm: 'inline' }}>/</Text>
+                <Text fontSize="12px" fontWeight="500" color="var(--text-secondary)" flexShrink={0} maxW="80px" truncate title={project.repoPath} display={{ base: 'none', sm: 'inline' }}>
                   {project.name}
                 </Text>
                 {project.currentBranch && (
                   <>
-                    <Text fontSize="12px" flexShrink={0}>/</Text>
-                    <Text fontSize="12px" fontWeight="600" color="var(--accent)" flexShrink={0} maxW="100px" truncate title={project.currentBranch}>
+                    <Text fontSize="12px" flexShrink={0} display={{ base: 'none', md: 'inline' }}>/</Text>
+                    <Text fontSize="12px" fontWeight="600" color="var(--accent)" flexShrink={0} maxW="100px" truncate title={project.currentBranch} display={{ base: 'none', md: 'inline' }}>
                       {project.currentBranch}
                     </Text>
                   </>
@@ -1897,9 +1907,10 @@ function JobView({
             )}
           </HStack>
 
-          {/* Selectors inline — lg+ only */}
+          {/* Selectors inline — xl+ only (split-pane desktop). Below xl the settings drawer
+              owns these so the breadcrumb doesn't crowd. */}
           {job && (
-            <HStack gap="1.5" display={{ base: 'none', lg: 'flex' }} flexShrink={0} align="center">
+            <HStack gap="1.5" display={{ base: 'none', xl: 'flex' }} flexShrink={0} align="center">
               <CodingHeaderSelectors
                 agent={job.agent}
                 connectedAgents={[job.agent]}
@@ -1916,8 +1927,9 @@ function JobView({
 
           {/* Right actions */}
           <HStack gap="1.5" flexShrink={0} align="center">
-            {/* Session metadata — hidden on very small */}
-            <HStack gap="1" fontSize="11px" color="var(--text-muted)" display={{ base: 'none', md: 'flex' }}>
+            {/* Session metadata — xl+ only. On smaller viewports the same info renders in the
+                compact strip below the breadcrumb so this row stays uncluttered. */}
+            <HStack gap="1" fontSize="11px" color="var(--text-muted)" display={{ base: 'none', xl: 'flex' }}>
               {job?.turnCount !== undefined && job.turnCount > 0 && (
                 <Text>{job.turnCount} turn{job.turnCount !== 1 ? 's' : ''}</Text>
               )}
@@ -1944,12 +1956,12 @@ function JobView({
               )}
             </HStack>
 
-            {/* Settings button — visible below lg */}
+            {/* Settings button — visible below xl */}
             {job && (
               <Button
                 size="xs" h="7" px="2.5"
                 variant="ghost"
-                display={{ base: 'flex', lg: 'none' }}
+                display={{ base: 'flex', xl: 'none' }}
                 color="var(--text-muted)"
                 _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
                 rounded="var(--radius-control)"
@@ -1963,7 +1975,7 @@ function JobView({
               </Button>
             )}
 
-            {/* Compact toggle */}
+            {/* Compact toggle — hidden on phones (lives in settings drawer) */}
             <Button
               size="xs" h="6" px="2"
               variant={compact ? 'solid' : 'outline'}
@@ -1973,19 +1985,21 @@ function JobView({
               borderColor="var(--border-subtle)"
               _hover={{ bg: compact ? 'var(--accent-strong)' : 'var(--surface-hover)' }}
               rounded="var(--radius-control)"
+              display={{ base: 'none', md: 'inline-flex' }}
               title={compact ? 'Comfortable view' : 'Compact view'}
               onClick={() => { const next = !compact; setCompact(next); localStorage.setItem('coding-compact', String(next)); }}
             >
               {compact ? '⊡' : '⊟'}
             </Button>
 
-            {/* Archive — for terminal jobs */}
-            {job && (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && (
+            {/* Archive — for any non-running job; hidden on phones (drawer) */}
+            {job && job.status !== 'running' && job.status !== 'awaiting_approval' && (
               <Button
                 size="xs" h="6" px="2" variant="ghost"
                 color="var(--text-muted)"
                 _hover={{ color: 'var(--text-secondary)', bg: 'var(--surface-hover)' }}
                 rounded="var(--radius-control)"
+                display={{ base: 'none', md: 'inline-flex' }}
                 onClick={() => void handleArchive()}
               >
                 Archive
@@ -2016,93 +2030,126 @@ function JobView({
           </HStack>
         </HStack>
 
-        {/* Selectors second row — md only (768px–992px "half-width") */}
+        {/* Compact metadata strip — phones/tablets below lg.
+            On lg+ this info lives inline in the main header row; below lg the inline strip
+            was hidden, leaving the user with no view of cost/turn count/status without opening
+            the settings drawer. Putting it under the breadcrumb keeps it visible without
+            crowding the busy main row (which has Cancel/Kill etc.). */}
         {job && (
           <HStack
-            px="4" py="1.5" gap="1.5"
+            px="4" py="1" gap="2"
             borderTop="1px solid var(--divider)"
-            display={{ base: 'none', md: 'flex', lg: 'none' }}
+            fontSize="11px" color="var(--text-muted)"
+            display={{ base: 'flex', xl: 'none' }}
+            flexWrap="wrap"
           >
-            <CodingHeaderSelectors
-              agent={job.agent}
-              connectedAgents={[job.agent]}
-              agentLocked
-              onAgentChange={() => undefined}
-              effectiveMode={job.approvalMode as ApprovalMode}
-              model={localModel}
-              onModelChange={v => void handleJobConfigChange('model', v)}
-              reasoningEffort={localReasoning}
-              onReasoningEffortChange={v => void handleJobConfigChange('reasoningEffort', v)}
+            <StatusPill status={job.status} />
+            {job.turnCount !== undefined && job.turnCount > 0 && (
+              <Text>{job.turnCount} turn{job.turnCount !== 1 ? 's' : ''}</Text>
+            )}
+            {filesChangedCount > 0 && (
+              <Button
+                variant="ghost" size="xs" h="5" px="1" fontSize="11px"
+                color="var(--text-muted)"
+                _hover={{ color: 'var(--accent)', bg: 'transparent', textDecoration: 'underline' }}
+                onClick={() => void openSessionSummary()}
+              >
+                {filesChangedCount} file{filesChangedCount !== 1 ? 's' : ''}
+              </Button>
+            )}
+            <CostBadge
+              latestCost={latestCost as Extract<JobEvent, { type: 'job.cost_update' }> | null}
+              startedAt={job.startedAt}
             />
+            {job.approvalMode === 'auto_all' && (
+              <Text fontSize="11px" color="var(--status-warning)" fontWeight="500">⚠ unrestricted</Text>
+            )}
           </HStack>
         )}
       </Box>
 
-      {/* Two-column body: left = response, right = activity feed.
-          Both columns are derived from the same persisted `events` state, so
-          reopened jobs replay their full history into both columns. The right
-          column hides assistant messages because they live on the left. */}
+      {/* Body: two-column on lg+ (response | activity), single-pane on mobile/tablet
+          (assistant messages render inline in the activity feed). */}
       <Flex flex="1" minH={0} overflow="hidden">
-        {/* Left column — final markdown response */}
-        <Box
-          w="38%"
-          minH={0}
-          borderRight="1px solid var(--divider)"
-          display="flex"
-          flexDirection="column"
-          flexShrink={0}
-        >
-          <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
-            <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Response</Text>
+        {/* Response column — hidden on small viewports (singlePane mode) */}
+        {!singlePane && (
+          <Box
+            w="38%"
+            minH={0}
+            borderRight="1px solid var(--divider)"
+            display="flex"
+            flexDirection="column"
+            flexShrink={0}
+          >
+            <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
+              <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Response</Text>
+            </Box>
+            <Box flex="1" minH={0} overflow="auto" px="4" py="3">
+              {lastAssistantMessage ? (
+                <VStack align="stretch" gap="3">
+                  <MessageRow
+                    messageId="last-response"
+                    jobId={job?.id ?? ''}
+                    text={lastAssistantMessage}
+                    isStreaming={job?.status === 'running'}
+                  />
+                  {canExecuteWithSonnet && (
+                    <Box pt="2" borderTop="1px solid var(--border-subtle)">
+                      <Button
+                        size="sm" h="8" px="4"
+                        bg="var(--accent)" color="var(--accent-contrast)"
+                        _hover={{ bg: 'var(--accent-strong)' }}
+                        rounded="var(--radius-control)"
+                        loading={executingWithSonnet}
+                        onClick={() => void handleExecuteWithSonnet()}
+                      >
+                        ↗ Execute with Sonnet
+                      </Button>
+                    </Box>
+                  )}
+                </VStack>
+              ) : (
+                <Text fontSize="13px" color="var(--text-muted)" mt="4" textAlign="center">
+                  {isActive ? 'Waiting for response…' : 'No response yet.'}
+                </Text>
+              )}
+            </Box>
           </Box>
-          <Box flex="1" minH={0} overflow="auto" px="4" py="3">
-            {lastAssistantMessage ? (
-              <VStack align="stretch" gap="3">
-                <MessageRow
-                  messageId="last-response"
-                  jobId={job?.id ?? ''}
-                  text={lastAssistantMessage}
-                  isStreaming={job?.status === 'running'}
-                />
-                {canExecuteWithSonnet && (
-                  <Box pt="2" borderTop="1px solid var(--border-subtle)">
-                    <Button
-                      size="sm" h="8" px="4"
-                      bg="var(--accent)" color="var(--accent-contrast)"
-                      _hover={{ bg: 'var(--accent-strong)' }}
-                      rounded="var(--radius-control)"
-                      loading={executingWithSonnet}
-                      onClick={() => void handleExecuteWithSonnet()}
-                    >
-                      ↗ Execute with Sonnet
-                    </Button>
-                  </Box>
-                )}
-              </VStack>
-            ) : (
-              <Text fontSize="13px" color="var(--text-muted)" mt="4" textAlign="center">
-                {isActive ? 'Waiting for response…' : 'No response yet.'}
-              </Text>
-            )}
-          </Box>
-        </Box>
+        )}
 
-        {/* Right column — live activity (tool calls, thinking, system events) */}
-        <Box flex="1" minH={0} overflow="hidden" display="flex" flexDirection="column">
-          <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
-            <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Activity</Text>
-          </Box>
+        {/* Activity column (full width on mobile, right-pane on desktop) */}
+        <Box flex="1" minW={0} minH={0} overflow="hidden" display="flex" flexDirection="column">
+          {!singlePane && (
+            <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
+              <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Activity</Text>
+            </Box>
+          )}
           <JobConversation
             events={conversationEvents}
             isActive={isActive}
             jobStatus={job?.status}
             compact={compact}
-            hideAssistantMessages
+            hideAssistantMessages={!singlePane}
             pendingApproval={pendingApproval}
             onApprove={handleApprove}
             jobPrompts={jobPrompts}
             onOpenFile={(fp) => void openFile(fp)}
           />
+          {/* Execute-with-Sonnet — surfaced in the inline feed on mobile */}
+          {singlePane && canExecuteWithSonnet && (
+            <Box px="3" py="2" borderTop="1px solid var(--border-subtle)" flexShrink={0}>
+              <Button
+                size="sm" h="8" px="4" w="100%"
+                bg="var(--accent)" color="var(--accent-contrast)"
+                _hover={{ bg: 'var(--accent-strong)' }}
+                rounded="var(--radius-control)"
+                loading={executingWithSonnet}
+                onClick={() => void handleExecuteWithSonnet()}
+              >
+                ↗ Execute with Sonnet
+              </Button>
+            </Box>
+          )}
         </Box>
       </Flex>
 
@@ -2152,7 +2199,7 @@ function JobView({
             </Drawer.Header>
             <Drawer.Body py="4">
               {job && (
-                <VStack align="stretch" gap="3">
+                <VStack align="stretch" gap="4">
                   <HStack gap="1.5" flexWrap="wrap">
                     <CodingHeaderSelectors
                       agent={job.agent}
@@ -2166,6 +2213,38 @@ function JobView({
                       onReasoningEffortChange={v => { void handleJobConfigChange('reasoningEffort', v); setSettingsDrawerOpen(false); }}
                     />
                   </HStack>
+
+                  {/* Mobile-only: density + archive controls */}
+                  <VStack align="stretch" gap="2" display={{ base: 'flex', md: 'none' }}>
+                    <HStack justify="space-between" align="center">
+                      <Text fontSize="12px" color="var(--text-secondary)">Density</Text>
+                      <Button
+                        size="sm" h="8" px="3"
+                        variant={compact ? 'solid' : 'outline'}
+                        fontSize="11px"
+                        color={compact ? 'var(--accent-contrast)' : 'var(--text-muted)'}
+                        bg={compact ? 'var(--accent)' : 'transparent'}
+                        borderColor="var(--border-subtle)"
+                        rounded="var(--radius-control)"
+                        onClick={() => { const next = !compact; setCompact(next); localStorage.setItem('coding-compact', String(next)); }}
+                      >
+                        {compact ? 'Compact' : 'Comfortable'}
+                      </Button>
+                    </HStack>
+                    {job.status !== 'running' && job.status !== 'awaiting_approval' && (
+                      <HStack justify="space-between" align="center">
+                        <Text fontSize="12px" color="var(--text-secondary)">Archive</Text>
+                        <Button
+                          size="sm" h="8" px="3" variant="outline"
+                          color="var(--text-muted)" borderColor="var(--border-subtle)"
+                          rounded="var(--radius-control)"
+                          onClick={() => { setSettingsDrawerOpen(false); void handleArchive(); }}
+                        >
+                          Archive job
+                        </Button>
+                      </HStack>
+                    )}
+                  </VStack>
                 </VStack>
               )}
             </Drawer.Body>

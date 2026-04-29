@@ -407,18 +407,25 @@ export class JobManager {
       if (!project) return false;
 
       if (optionIdx === 2) {
-        // Deny — tell the agent to continue without running it
-        runner.respond(approvalId, response); // clears pendingApprovalId
-        this.store.updateJobStatus(jobId, 'running', { approvalPending: undefined });
+        // Deny — the agent is already idle (agent_result fired before we surfaced the approval).
+        // Just clear the pending state and deliver the explanatory turn via sendTurn so it's
+        // framed as a stream-json user message. Don't writeStdin a raw "2" — Claude Code's
+        // stream-json parser would silently drop it, freezing the job in running with the
+        // deny message queued forever (no agent_result will fire to flush the queue).
+        runner.clearPendingApproval(approvalId);
+        this.store.updateJobStatus(jobId, 'awaiting_user', { approvalPending: undefined });
         await this.sendTurn(jobId, "Please skip that command and continue without running it.");
       } else {
-        // Approve (once or all) — restart with bypassPermissions so the command actually runs
-        runner.cancel();
+        // Approve (once or all) — restart with bypassPermissions so the command actually runs.
+        // Await cancel so the old child fully exits before we --resume the same session id;
+        // two Claude Code processes briefly sharing a session file otherwise race on it.
+        await runner.cancel();
         this.activeRunners.delete(jobId);
         const bypassJob = { ...job, approvalMode: 'auto_all' as CodingJob['approvalMode'] };
         this.store.updateJobStatus(jobId, 'running', { approvalPending: undefined });
         this.startJob(bypassJob, project, job.agentSessionId ?? undefined);
-        // Set awaiting_user so sendTurn can queue the continuation
+        // Set awaiting_user so sendTurn delivers the continuation immediately (the resumed
+        // agent is idle, waiting for the next user message).
         this.store.updateJobStatus(jobId, 'awaiting_user');
         const msg = optionIdx === 1
           ? "You're approved to run that and similar commands for the rest of this session. Please proceed."
@@ -438,18 +445,22 @@ export class JobManager {
 
       if (optionIdx === 1) {
         // "Cancel job"
-        runner.cancel();
+        await runner.cancel();
         this.activeRunners.delete(jobId);
         this.store.updateJobStatus(jobId, 'cancelled', { completedAt: Date.now() });
       } else if (!isNaN(optionIdx) && optionIdx >= 2) {
-        // "Type custom input" — treat as a user turn so Claude Code gets it via JSON protocol
-        runner.respond(approvalId, response); // clears pendingApprovalId without stdin write for stuck-
-        this.store.updateJobStatus(jobId, 'running', { approvalPending: undefined });
+        // "Type custom input" — clear the pending approval, then deliver the user's text as a
+        // proper stream-json user turn. Status must be 'awaiting_user' so sendTurn delivers
+        // immediately; if it stayed 'running' the turn would queue and never be flushed because
+        // no agent_result is in flight.
+        runner.clearPendingApproval(approvalId);
+        this.store.updateJobStatus(jobId, 'awaiting_user', { approvalPending: undefined });
         await this.sendTurn(jobId, response);
       } else {
-        // Option 0: "Continue waiting" — just dismiss the dialog and return to awaiting_user.
-        // Do NOT write to stdin; the agent is already idle waiting for user input.
-        runner.respond(approvalId, response); // clears pendingApprovalId only
+        // Option 0: "Continue waiting" — dismiss the dialog and return to awaiting_user.
+        // Use clearPendingApproval; runner.respond() writes the option index to stdin, which
+        // is parse-garbage in stream-json mode and silently corrupts the input stream.
+        runner.clearPendingApproval(approvalId);
         this.store.updateJobStatus(jobId, 'awaiting_user', { approvalPending: undefined });
       }
 

@@ -6,12 +6,17 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const PREFERRED_PORT = Number.parseInt(process.env.BRIDGE_PORT ?? '8787', 10);
 
+// Probe on 0.0.0.0 so we collide with sockets bound to either 127.0.0.1 *or* 0.0.0.0.
+// The bridge binds to 0.0.0.0 when Tailscale is running (so tailnet devices can reach
+// the QR code URL); a 127.0.0.1 probe falsely reports the port as free in that case
+// because macOS lets the loopback bind succeed even when the wildcard address is taken,
+// then the real listen fails with EADDRINUSE.
 function tryPort(port) {
   return new Promise((resolve) => {
     const srv = net.createServer();
     srv.unref();
     srv.once('error', () => resolve(false));
-    srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)));
+    srv.listen(port, '0.0.0.0', () => srv.close(() => resolve(true)));
   });
 }
 
@@ -20,7 +25,7 @@ function pickEphemeralPort() {
     const srv = net.createServer();
     srv.unref();
     srv.once('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
+    srv.listen(0, '0.0.0.0', () => {
       const { port } = srv.address();
       srv.close(() => resolve(port));
     });

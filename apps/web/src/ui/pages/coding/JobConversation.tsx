@@ -305,7 +305,9 @@ export const JobConversation = memo(function JobConversation({
               return null;
             })}
 
-            {/* Pending approval card */}
+            {/* Pending approval card. Buttons are h={9} on mobile (44px tap target Apple HIG)
+                and h={7} on tablets+, with Approve-style options always rendered first so the
+                primary action is one thumb-tap from the bottom of the screen. */}
             {pendingApproval && (
               <Box mt="2" p="3" rounded="var(--radius-card)" border="1px solid var(--status-warning)" bg="var(--surface-warning)">
                 <HStack gap="2" mb="2">
@@ -315,24 +317,36 @@ export const JobConversation = memo(function JobConversation({
                 <Text fontSize="12px" color="var(--text-primary)" whiteSpace="pre-wrap" mb="3" fontFamily="ui-monospace, monospace">
                   {pendingApproval.message}
                 </Text>
-                <HStack gap="2" flexWrap="wrap">
-                  {pendingApproval.options.map((opt, i) => (
-                    <Button
-                      key={i} size="xs" h="7" px="3"
-                      bg={i === (pendingApproval.defaultOption ?? 0) ? 'var(--accent)' : 'transparent'}
-                      color={i === (pendingApproval.defaultOption ?? 0) ? 'var(--accent-contrast)' : 'var(--text-secondary)'}
-                      border="1px solid var(--border-default)"
-                      _hover={{ bg: 'var(--surface-hover)' }}
-                      rounded="var(--radius-control)"
-                      loading={pendingApproval.resolving}
-                      onClick={() => void onApprove(pendingApproval.approvalId, String(i), false)}
-                    >
-                      {opt}
-                    </Button>
-                  ))}
+                <Box display="flex" flexDirection={{ base: 'column', sm: 'row' }} gap="2" flexWrap="wrap">
+                  {pendingApproval.options.map((opt, i) => {
+                    const isDefault = i === (pendingApproval.defaultOption ?? 0);
+                    return (
+                      <Button
+                        key={i}
+                        size="sm"
+                        h={{ base: '11', sm: '8' }}
+                        px="4"
+                        w={{ base: '100%', sm: 'auto' }}
+                        bg={isDefault ? 'var(--accent)' : 'transparent'}
+                        color={isDefault ? 'var(--accent-contrast)' : 'var(--text-secondary)'}
+                        border="1px solid var(--border-default)"
+                        fontWeight={isDefault ? '600' : '500'}
+                        _hover={{ bg: isDefault ? 'var(--accent-strong)' : 'var(--surface-hover)' }}
+                        rounded="var(--radius-control)"
+                        loading={pendingApproval.resolving}
+                        onClick={() => void onApprove(pendingApproval.approvalId, String(i), false)}
+                      >
+                        {opt}
+                      </Button>
+                    );
+                  })}
                   {pendingApproval.category !== 'unknown' && (
                     <Button
-                      size="xs" h="7" px="3" variant="ghost"
+                      size="sm"
+                      h={{ base: '10', sm: '8' }}
+                      px="4"
+                      w={{ base: '100%', sm: 'auto' }}
+                      variant="ghost"
                       color="var(--text-muted)"
                       _hover={{ color: 'var(--text-primary)', bg: 'var(--surface-hover)' }}
                       rounded="var(--radius-control)"
@@ -342,7 +356,7 @@ export const JobConversation = memo(function JobConversation({
                       Always approve {pendingApproval.category}s
                     </Button>
                   )}
-                </HStack>
+                </Box>
               </Box>
             )}
 
