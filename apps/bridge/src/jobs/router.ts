@@ -192,10 +192,12 @@ export async function handleCodingRequest(
       }
 
       // GET /api/jobs/:id
+      // Returns the FULL event history (not capped) so reopened long jobs
+      // replay every prior turn into both columns of the detail view.
       if (method === 'GET' && !sub) {
         const job = manager.getJob(jobId);
         if (!job) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Job not found' } }, allowOrigin); return true; }
-        const events = manager.getRecentEvents(jobId);
+        const events = manager.getAllEvents(jobId);
         const maxEventId = manager.getMaxEventId(jobId);
         sendJson(response, 200, { job, events, maxEventId }, allowOrigin);
         return true;
@@ -250,6 +252,22 @@ export async function handleCodingRequest(
       if (method === 'POST' && sub === 'cancel') {
         manager.cancelJob(jobId);
         sendJson(response, 200, { ok: true }, allowOrigin);
+        return true;
+      }
+
+      // POST /api/jobs/:id/viewed — mark a job as opened by the user (for read-state UI)
+      if (method === 'POST' && sub === 'viewed') {
+        const updated = manager.markJobViewed(jobId);
+        if (!updated) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Job not found' } }, allowOrigin); return true; }
+        sendJson(response, 200, { job: updated }, allowOrigin);
+        return true;
+      }
+
+      // POST /api/jobs/:id/archive — archive a job (hidden from list, data kept)
+      if (method === 'POST' && sub === 'archive') {
+        const updated = manager.archiveJob(jobId);
+        if (!updated) { sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'Job not found' } }, allowOrigin); return true; }
+        sendJson(response, 200, { job: updated }, allowOrigin);
         return true;
       }
 

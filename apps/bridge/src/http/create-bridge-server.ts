@@ -208,7 +208,22 @@ export function createBridgeServer(options: {
       })()
   });
 
-  const jobManager = new JobManager(database.getRawDatabase());
+  const jobManager = new JobManager(database.getRawDatabase(), {
+    titleDeps: {
+      hermesCli,
+      getActiveProfile: () => {
+        // Mirror HermesBridge.resolveActiveProfileId(): UI state → is_active flag → first profile.
+        const profiles = database.listProfiles();
+        const uiState = database.getUiState();
+        const activeId =
+          (uiState.activeProfileId && profiles.some(p => p.id === uiState.activeProfileId) ? uiState.activeProfileId : null) ??
+          profiles.find(p => p.isActive)?.id ??
+          profiles[0]?.id ??
+          null;
+        return activeId ? (profiles.find(p => p.id === activeId) ?? null) : null;
+      }
+    }
+  });
   jobManager.cleanupOrphanedJobs();
   // Log startup warning if codex adapter is not version-verified
   import('../jobs/agents/codex').then(({ codexAdapter }) => {

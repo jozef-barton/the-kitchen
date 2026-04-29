@@ -22,13 +22,22 @@ export interface TurnCallEntry {
   input: Record<string, unknown>;
 }
 
+export interface SystemEventPayload {
+  subtype: string;
+  description?: string;
+  toolName?: string;
+  usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number };
+}
+
 export type ConversationItem =
   | { kind: 'init'; event: AgentInitEvent }
+  | { kind: 'model_config'; model: string; reasoning: string; source: 'init' | 'change'; ts: number }
   | { kind: 'continuation'; prompt: string; ts: number }
   | { kind: 'thinking'; messageId: string; text: string; ts: number }
   | { kind: 'message'; messageId: string; jobId: string; text: string; ts: number }
   | ToolPair
   | { kind: 'raw'; text: string; isError: boolean; ts: number }
+  | { kind: 'system_event'; payload: SystemEventPayload; ts: number }
   | { kind: 'result'; event: AgentResultEvent }
   | { kind: 'user_turn'; turnId: string; turnIndex: number; text: string; ts: number }
   | { kind: 'turn_boundary'; ts: number }
@@ -55,11 +64,20 @@ export function buildConversationItems(events: JobEvent[], jobPrompts?: Map<stri
   for (let idx = 0; idx < events.length; idx++) {
     const e = events[idx]!;
 
-    if (e.type === 'job.agent_initialized') {
+    if ((e.type as string) === 'job.model_change') {
+      const mc = e as unknown as { model: string; reasoning: string; ts: number };
       flushRaw();
+      items.push({ kind: 'model_config', model: mc.model, reasoning: mc.reasoning, source: 'change', ts: mc.ts });
+    } else if (e.type === 'job.agent_initialized') {
+      flushRaw();
+      const initEv = e as unknown as AgentInitEvent;
       if (firstJobId === null) {
         firstJobId = e.jobId;
-        items.push({ kind: 'init', event: e as unknown as AgentInitEvent });
+        items.push({ kind: 'init', event: initEv });
+        // Surface the model that the agent actually started with
+        if (initEv.model) {
+          items.push({ kind: 'model_config', model: initEv.model, reasoning: '', source: 'init', ts: e.ts });
+        }
       } else {
         const prompt = jobPrompts?.get(e.jobId) ?? '';
         items.push({ kind: 'continuation', prompt, ts: e.ts });
@@ -134,8 +152,37 @@ export function buildConversationItems(events: JobEvent[], jobPrompts?: Map<stri
       }
     } else if (e.type === 'job.stdout') {
       const ev = e as unknown as { chunk: string; ts: number };
-      if (rawBuf && !rawBuf.isError) { rawBuf.text += ev.chunk; }
-      else { flushRaw(); rawBuf = { text: ev.chunk, isError: false, ts: ev.ts }; }
+      // Parse [event:TYPE] JSON lines emitted by the codex/claude-code adapters
+      const systemMatch = ev.chunk.match(/^\[event:(\w+)\]\s*(\{.*\})\s*$/);
+      if (systemMatch) {
+        try {
+          const parsed = JSON.parse(systemMatch[2]!) as Record<string, unknown>;
+          const subtype = (parsed.subtype as string) ?? systemMatch[1]!;
+          // Only surface events that are useful to the user
+          if (subtype === 'task_progress' || systemMatch[1] === 'system') {
+            flushRaw();
+            const usageRaw = parsed.usage as Record<string, number> | undefined;
+            items.push({
+              kind: 'system_event',
+              payload: {
+                subtype,
+                description: (parsed.description as string) ?? undefined,
+                toolName: (parsed.last_tool_name as string) ?? undefined,
+                usage: usageRaw ? {
+                  total_tokens: usageRaw.total_tokens,
+                  tool_uses: usageRaw.tool_uses,
+                  duration_ms: usageRaw.duration_ms,
+                } : undefined,
+              },
+              ts: ev.ts,
+            });
+          }
+          // Skip all other system events (noise)
+        } catch { /* malformed JSON — fall through to raw */ }
+      } else {
+        if (rawBuf && !rawBuf.isError) { rawBuf.text += ev.chunk; }
+        else { flushRaw(); rawBuf = { text: ev.chunk, isError: false, ts: ev.ts }; }
+      }
     } else if (e.type === 'job.stderr') {
       const ev = e as unknown as { chunk: string; ts: number };
       if (rawBuf && rawBuf.isError) { rawBuf.text += ev.chunk; }

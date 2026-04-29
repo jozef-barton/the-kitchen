@@ -99,7 +99,20 @@ Bridge:
   - streaming assistant updates
   - persistence access
   - reviewed tool execution
+- Coding agent integration (Claude Code + Codex) — see below
 - OS-agnostic local data path resolution for macOS/Linux/Windows
+
+Coding agent integration:
+
+- Status detection uses `claude auth status` (JSON) and `codex login status` (text) — non-interactive, no tokens spent.
+- Approval-mode flag mapping:
+  - `manual`: no flag (Claude) / `-a on-request -s read-only` (Codex)
+  - `auto_safe`: `--permission-mode acceptEdits` (Claude) / `--full-auto` (Codex)
+  - `auto_all`: `--permission-mode bypassPermissions` (Claude) / `--dangerously-bypass-approvals-and-sandbox` (Codex)
+- Codex uses `spawn-per-turn` multi-turn mode (fresh `codex exec` process per turn, resumed via `codex exec resume`). Claude Code uses `stay-alive` mode (stdin kept open, `--input-format stream-json`).
+- Integration `enabled` column controls soft-disable (in-app toggle, no CLI logout). Hard delete runs `claude auth logout` / `codex logout`.
+- SSE replay uses `?since=<eventId>` cursor to prevent duplicate events on client reconnect.
+- Stuck heuristic fires only after 5 minutes of idle with no in-flight tool calls. "No output" false-alarms are suppressed — a `job.heartbeat_warning` inline note is shown instead.
 
 Persistence:
 

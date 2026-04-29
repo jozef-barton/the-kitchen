@@ -24,6 +24,7 @@ export class CodingStore {
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES coding_projects(id),
         prompt TEXT NOT NULL,
+        title TEXT,
         agent TEXT NOT NULL,
         status TEXT NOT NULL,
         approval_mode TEXT NOT NULL,
@@ -40,7 +41,8 @@ export class CodingStore {
         session_id TEXT,
         agent_session_id TEXT,
         turn_count INTEGER NOT NULL DEFAULT 0,
-        last_turn_at INTEGER
+        last_turn_at INTEGER,
+        viewed_at INTEGER
       );
 
       CREATE TABLE IF NOT EXISTS coding_job_turns (
@@ -90,7 +92,10 @@ export class CodingStore {
     try { db.exec("ALTER TABLE coding_projects ADD COLUMN default_approval_mode TEXT NOT NULL DEFAULT 'auto_safe'"); } catch { /* ok */ }
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN model TEXT'); } catch { /* ok */ }
     try { db.exec('ALTER TABLE coding_jobs ADD COLUMN reasoning_effort TEXT'); } catch { /* ok */ }
+    try { db.exec('ALTER TABLE coding_jobs ADD COLUMN title TEXT'); } catch { /* ok */ }
+    try { db.exec('ALTER TABLE coding_jobs ADD COLUMN viewed_at INTEGER'); } catch { /* ok */ }
     try { db.exec('ALTER TABLE coding_integrations ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1'); } catch { /* ok */ }
+    try { db.exec('ALTER TABLE coding_jobs ADD COLUMN archived_at INTEGER'); } catch { /* ok */ }
     // Index for type-filtered event queries (batchGetJobFileStats, etc.)
     try { db.exec('CREATE INDEX IF NOT EXISTS idx_coding_job_events_type ON coding_job_events(job_id, type)'); } catch { /* ok */ }
   }
@@ -142,13 +147,13 @@ export class CodingStore {
   createJob(job: CodingJob): CodingJob {
     this.db.prepare(`
       INSERT INTO coding_jobs
-        (id, project_id, prompt, agent, status, approval_mode, model, reasoning_effort,
+        (id, project_id, prompt, title, agent, status, approval_mode, model, reasoning_effort,
          worktree_path, pid, created_at, started_at, completed_at, exit_code, error,
          approval_pending, auto_respond_rules, resume_session_id, session_id,
-         agent_session_id, turn_count, last_turn_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         agent_session_id, turn_count, last_turn_at, viewed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      job.id, job.projectId, job.prompt, job.agent, job.status, job.approvalMode,
+      job.id, job.projectId, job.prompt, job.title ?? null, job.agent, job.status, job.approvalMode,
       job.model ?? null, job.reasoningEffort ?? null,
       job.worktreePath ?? null, job.pid ?? null, job.createdAt,
       job.startedAt ?? null, job.completedAt ?? null, job.exitCode ?? null,
@@ -159,9 +164,23 @@ export class CodingStore {
       job.sessionId ?? null,
       job.agentSessionId ?? null,
       job.turnCount ?? 0,
-      job.lastTurnAt ?? null
+      job.lastTurnAt ?? null,
+      job.viewedAt ?? null
     );
     return job;
+  }
+
+  updateJobTitle(jobId: string, title: string): void {
+    this.db.prepare('UPDATE coding_jobs SET title = ? WHERE id = ?').run(title, jobId);
+  }
+
+  markJobViewed(jobId: string, ts: number): void {
+    // Only set on the first view — preserves "never opened" state if explicitly cleared.
+    this.db.prepare('UPDATE coding_jobs SET viewed_at = ? WHERE id = ? AND viewed_at IS NULL').run(ts, jobId);
+  }
+
+  archiveJob(jobId: string, ts: number): void {
+    this.db.prepare('UPDATE coding_jobs SET archived_at = ? WHERE id = ?').run(ts, jobId);
   }
 
   updateJobSessionId(jobId: string, sessionId: string) {
@@ -183,11 +202,12 @@ export class CodingStore {
     return row ? this.rowToJob(row) : null;
   }
 
-  listJobs(opts?: { projectId?: string; status?: string }): CodingJob[] {
+  listJobs(opts?: { projectId?: string; status?: string; includeArchived?: boolean }): CodingJob[] {
     let sql = 'SELECT * FROM coding_jobs WHERE 1=1';
     const params: unknown[] = [];
     if (opts?.projectId) { sql += ' AND project_id = ?'; params.push(opts.projectId); }
     if (opts?.status) { sql += ' AND status = ?'; params.push(opts.status); }
+    if (!opts?.includeArchived) { sql += ' AND archived_at IS NULL'; }
     sql += ' ORDER BY COALESCE(last_turn_at, created_at) DESC';
     const rows = this.db.prepare(sql).all(...(params as SQLInputValue[])) as Record<string, unknown>[];
     return rows.map((r) => this.rowToJob(r));
@@ -214,6 +234,7 @@ export class CodingStore {
       id: row.id as string,
       projectId: row.project_id as string,
       prompt: row.prompt as string,
+      title: (row.title as string | undefined) ?? undefined,
       agent: row.agent as AgentId,
       status: row.status as CodingJob['status'],
       approvalMode: row.approval_mode as CodingJob['approvalMode'],
@@ -224,6 +245,8 @@ export class CodingStore {
       createdAt: row.created_at as number,
       startedAt: row.started_at as number | undefined,
       completedAt: row.completed_at as number | undefined,
+      viewedAt: (row.viewed_at as number | undefined) ?? undefined,
+      archivedAt: (row.archived_at as number | undefined) ?? undefined,
       exitCode: row.exit_code as number | undefined,
       error: row.error as string | undefined,
       approvalPending: row.approval_pending ? JSON.parse(row.approval_pending as string) as PendingApproval : undefined,
@@ -320,6 +343,21 @@ export class CodingStore {
       LIMIT ?
     `).all(jobId, limit) as { id: number; payload: string }[];
     return rows.reverse().map((r) => {
+      const ev = JSON.parse(r.payload) as JobEvent;
+      return { ...ev, _id: r.id };
+    });
+  }
+
+  // Full event history for a job, in chronological order. Used by the
+  // detail-page initial load so reopened long jobs see every prior turn —
+  // getRecentEvents' default 200 cap previously dropped early activity.
+  getAllEvents(jobId: string): JobEvent[] {
+    const rows = this.db.prepare(`
+      SELECT id, payload FROM coding_job_events
+      WHERE job_id = ?
+      ORDER BY id ASC
+    `).all(jobId) as { id: number; payload: string }[];
+    return rows.map((r) => {
       const ev = JSON.parse(r.payload) as JobEvent;
       return { ...ev, _id: r.id };
     });

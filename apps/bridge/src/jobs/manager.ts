@@ -11,6 +11,7 @@ import { claudeCodeAdapter } from './agents/claude-code';
 import { codexAdapter } from './agents/codex';
 import { IntegrationManager } from './integrations';
 import { writeSseEvent } from '../http/response';
+import { generateJobTitle, type TitleGeneratorDeps } from './title-generator';
 
 const ADAPTERS = { 'claude-code': claudeCodeAdapter, codex: codexAdapter };
 
@@ -20,10 +21,12 @@ export class JobManager {
   private activeRunners = new Map<string, JobRunner>();
   // SSE subscribers: jobId -> list of response objects
   private sseSubscribers = new Map<string, Set<ServerResponse>>();
+  private titleDeps?: TitleGeneratorDeps;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, opts: { titleDeps?: TitleGeneratorDeps } = {}) {
     this.store = new CodingStore(db);
     this.integrations = new IntegrationManager(this.store);
+    this.titleDeps = opts.titleDeps;
   }
 
   // ── Startup cleanup ──────────────────────────────────────────────────────
@@ -160,8 +163,23 @@ export class JobManager {
     };
 
     this.store.createJob(job);
+    console.warn(`[coding] job created id=${job.id} project=${project.id} agent=${job.agent} model=${job.model ?? 'default'} approval=${job.approvalMode}`);
     this.startJob(job, project);
+    void this.generateTitleAsync(job.id, opts.prompt);
     return this.store.getJob(job.id)!;
+  }
+
+  private async generateTitleAsync(jobId: string, prompt: string): Promise<void> {
+    if (!this.titleDeps) return;
+    const title = await generateJobTitle(prompt, this.titleDeps);
+    if (!title) return;
+    // Job may have been deleted while we were generating — best-effort write.
+    const current = this.store.getJob(jobId);
+    if (!current) return;
+    this.store.updateJobTitle(jobId, title);
+    const event: JobEvent = { type: 'job.title_set', jobId, title, ts: Date.now() };
+    this.store.insertEvent(jobId, event);
+    this.broadcast(jobId, event);
   }
 
   private startJob(job: CodingJob, project: CodingProject, resumeSessionId?: string) {
@@ -200,8 +218,10 @@ export class JobManager {
         onExit: (exitCode, error) => {
           this.activeRunners.delete(job.id);
           if (error) {
+            console.warn(`[coding] job ${job.id} failed: ${error}`);
             this.store.updateJobStatus(job.id, 'failed', { error, completedAt: Date.now() });
           } else {
+            console.warn(`[coding] job ${job.id} completed exit=${exitCode ?? 0}`);
             this.store.updateJobStatus(job.id, 'completed', { exitCode: exitCode ?? 0, completedAt: Date.now() });
           }
         },
@@ -225,6 +245,7 @@ export class JobManager {
 
     this.activeRunners.set(job.id, runner);
     this.store.updateJobStatus(job.id, 'running', { startedAt: Date.now() });
+    console.warn(`[coding] job ${job.id} → running${resumeSessionId ? ` (resumed session=${resumeSessionId})` : ''}`);
     runner.start();
   }
 
@@ -263,6 +284,7 @@ export class JobManager {
       }
     } else {
       // No pending turns — wait for user
+      console.warn(`[coding] job ${jobId} → awaiting_user (turns=${turns.length})`);
       this.store.updateJobStatus(jobId, 'awaiting_user');
       const event: JobEvent = { type: 'job.awaiting_user', jobId, ts: now };
       this.store.insertEvent(jobId, event);
@@ -339,6 +361,7 @@ export class JobManager {
   endJob(jobId: string): boolean {
     const runner = this.activeRunners.get(jobId);
     if (!runner) return false;
+    console.warn(`[coding] job ${jobId} ended by user`);
     runner.end();
     this.store.updateJobStatus(jobId, 'completed', { completedAt: Date.now() });
     this.activeRunners.delete(jobId);
@@ -358,6 +381,7 @@ export class JobManager {
 
     this.startJob(job, project, job.agentSessionId);
     this.store.updateJobStatus(jobId, 'awaiting_user');
+    console.warn(`[coding] job ${jobId} resumed (session=${job.agentSessionId})`);
 
     const event: JobEvent = { type: 'job.session_resumed', jobId, sessionId: job.agentSessionId, ts: Date.now() };
     this.store.insertEvent(jobId, event);
@@ -406,6 +430,33 @@ export class JobManager {
       return true;
     }
 
+    // Stuck-detection approvals need special handling — writing stdin would corrupt the stream.
+    if (approvalId.startsWith('stuck-')) {
+      const optionIdx = parseInt(response, 10);
+
+      if (optionIdx === 1) {
+        // "Cancel job"
+        runner.cancel();
+        this.activeRunners.delete(jobId);
+        this.store.updateJobStatus(jobId, 'cancelled', { completedAt: Date.now() });
+      } else if (!isNaN(optionIdx) && optionIdx >= 2) {
+        // "Type custom input" — treat as a user turn so Claude Code gets it via JSON protocol
+        runner.respond(approvalId, response); // clears pendingApprovalId without stdin write for stuck-
+        this.store.updateJobStatus(jobId, 'running', { approvalPending: undefined });
+        await this.sendTurn(jobId, response);
+      } else {
+        // Option 0: "Continue waiting" — just dismiss the dialog and return to awaiting_user.
+        // Do NOT write to stdin; the agent is already idle waiting for user input.
+        runner.respond(approvalId, response); // clears pendingApprovalId only
+        this.store.updateJobStatus(jobId, 'awaiting_user', { approvalPending: undefined });
+      }
+
+      const event: JobEvent = { type: 'job.approval_resolved', jobId, approvalId, response, ts: Date.now() };
+      this.store.insertEvent(jobId, event);
+      this.broadcast(jobId, event);
+      return true;
+    }
+
     const written = runner.respond(approvalId, response);
     if (!written) return false;
 
@@ -437,6 +488,7 @@ export class JobManager {
   cancelJob(id: string): boolean {
     const runner = this.activeRunners.get(id);
     if (runner) {
+      console.warn(`[coding] job ${id} cancelled by user`);
       runner.cancel();
       this.store.updateJobStatus(id, 'cancelled', { completedAt: Date.now() });
       const event: JobEvent = { type: 'job.failed', jobId: id, error: 'cancelled_by_user', ts: Date.now() };
@@ -453,9 +505,28 @@ export class JobManager {
     return this.store.getJob(jobId);
   }
 
+  markJobViewed(jobId: string): CodingJob | null {
+    const job = this.store.getJob(jobId);
+    if (!job) return null;
+    if (job.viewedAt != null) return job;
+    const ts = Date.now();
+    this.store.markJobViewed(jobId, ts);
+    console.warn(`[coding] job ${jobId} marked viewed at ${ts}`);
+    return this.store.getJob(jobId);
+  }
+
+  archiveJob(jobId: string): CodingJob | null {
+    const job = this.store.getJob(jobId);
+    if (!job) return null;
+    this.store.archiveJob(jobId, Date.now());
+    console.warn(`[coding] job ${jobId} archived`);
+    return this.store.getJob(jobId);
+  }
+
   getJob(id: string) { return this.store.getJob(id); }
   listJobs(opts?: { projectId?: string; status?: string }) { return this.store.listJobs(opts); }
   getRecentEvents(jobId: string) { return this.store.getRecentEvents(jobId); }
+  getAllEvents(jobId: string) { return this.store.getAllEvents(jobId); }
   getEventsSince(jobId: string, sinceId: number) { return this.store.getEventsSince(jobId, sinceId); }
   getMaxEventId(jobId: string) { return this.store.getMaxEventId(jobId); }
   batchGetJobFileStats(jobIds: string[]) { return this.store.batchGetJobFileStats(jobIds); }
