@@ -31,6 +31,7 @@ export interface SystemEventPayload {
 
 export type ConversationItem =
   | { kind: 'init'; event: AgentInitEvent }
+  | { kind: 'model_config'; model: string; reasoning: string; source: 'init' | 'change'; ts: number }
   | { kind: 'continuation'; prompt: string; ts: number }
   | { kind: 'thinking'; messageId: string; text: string; ts: number }
   | { kind: 'message'; messageId: string; jobId: string; text: string; ts: number }
@@ -63,11 +64,20 @@ export function buildConversationItems(events: JobEvent[], jobPrompts?: Map<stri
   for (let idx = 0; idx < events.length; idx++) {
     const e = events[idx]!;
 
-    if (e.type === 'job.agent_initialized') {
+    if ((e.type as string) === 'job.model_change') {
+      const mc = e as unknown as { model: string; reasoning: string; ts: number };
       flushRaw();
+      items.push({ kind: 'model_config', model: mc.model, reasoning: mc.reasoning, source: 'change', ts: mc.ts });
+    } else if (e.type === 'job.agent_initialized') {
+      flushRaw();
+      const initEv = e as unknown as AgentInitEvent;
       if (firstJobId === null) {
         firstJobId = e.jobId;
-        items.push({ kind: 'init', event: e as unknown as AgentInitEvent });
+        items.push({ kind: 'init', event: initEv });
+        // Surface the model that the agent actually started with
+        if (initEv.model) {
+          items.push({ kind: 'model_config', model: initEv.model, reasoning: '', source: 'init', ts: e.ts });
+        }
       } else {
         const prompt = jobPrompts?.get(e.jobId) ?? '';
         items.push({ kind: 'continuation', prompt, ts: e.ts });

@@ -190,8 +190,33 @@ export const JobConversation = memo(function JobConversation({
           <VStack align="stretch" gap={gap}>
             {visibleItems.map((item, _i) => {
               if (item.kind === 'init') {
-                // Only ever one init per conversation — ts is unique enough
                 return <AgentInitRow key={`init:${item.event.ts}`} event={item.event as unknown as Extract<JobEvent, { type: 'job.agent_initialized' }>} />;
+              }
+              if (item.kind === 'model_config') {
+                const label = item.model
+                  ? item.reasoning
+                    ? `${item.model} · ${item.reasoning}`
+                    : item.model
+                  : null;
+                if (!label) return null;
+                return (
+                  <HStack key={`mc:${item.ts}`} gap="1.5" px="2">
+                    <Text fontSize="10px" color="var(--text-muted)">{item.source === 'change' ? '↻' : '◈'}</Text>
+                    <Box
+                      px="1.5" py="0.5"
+                      bg="var(--surface-3)"
+                      border="1px solid var(--border-subtle)"
+                      rounded="4px"
+                    >
+                      <Text fontSize="10px" fontFamily="ui-monospace, monospace" color="var(--text-secondary)" fontWeight="500">
+                        {label}
+                      </Text>
+                    </Box>
+                    {item.source === 'change' && (
+                      <Text fontSize="10px" color="var(--text-muted)">model updated</Text>
+                    )}
+                  </HStack>
+                );
               }
               if (item.kind === 'continuation') {
                 return (

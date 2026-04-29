@@ -1472,10 +1472,20 @@ function JobView({
   }, [events, job?.status]);
 
   async function handleJobConfigChange(field: 'model' | 'reasoningEffort', value: string) {
+    const nextModel = field === 'model' ? value : localModel;
+    const nextReasoning = field === 'reasoningEffort' ? value : localReasoning;
     if (field === 'model') setLocalModel(value);
     else setLocalReasoning(value);
     try {
       await api.updateJobConfig(activeJobId, { [field]: value });
+      // Surface the change as a synthetic activity-feed event
+      setEvents(prev => [...prev, {
+        type: 'job.model_change' as unknown as JobEvent['type'],
+        jobId: activeJobId,
+        model: nextModel,
+        reasoning: nextReasoning,
+        ts: Date.now(),
+      } as JobEvent]);
     } catch { /* keep local state, show no error — non-critical */ }
   }
 
