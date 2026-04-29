@@ -389,6 +389,23 @@ tbody tr:hover {
   100% { background-position: 200% center; }
 }
 
+/* Soft pulsing border used by JobRow for `running` jobs — communicates
+   in-flight work without the noisier spinner. The two animatable
+   properties (border-color, box-shadow) are GPU-cheap. */
+@keyframes job-row-pulse {
+  0%, 100% {
+    border-color: var(--status-info);
+    box-shadow: 0 0 0 0 hsla(210, 65%, 45%, 0.0);
+  }
+  50% {
+    border-color: var(--status-info);
+    box-shadow: 0 0 0 3px hsla(210, 65%, 45%, 0.18);
+  }
+}
+.job-row-pulse {
+  animation: job-row-pulse 1.6s ease-in-out infinite;
+}
+
 /* Quick mount-fade for historical diff lines (non-animated cards) */
 @keyframes diff-line-in {
   from { opacity: 0; transform: translateY(3px); }

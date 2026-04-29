@@ -45,6 +45,7 @@ export interface CodingJob {
   id: string;
   projectId: string;
   prompt: string;
+  title?: string;            // Hermes-generated 3–6 word display title; falls back to prompt
   agent: AgentId;
   status: JobStatus;
   approvalMode: ApprovalMode;
@@ -55,6 +56,7 @@ export interface CodingJob {
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
+  viewedAt?: number;         // First time the user opened this job's detail view
   exitCode?: number;
   error?: string;
   approvalPending?: PendingApproval;
@@ -93,7 +95,8 @@ export type JobEvent =
   | { type: 'job.heartbeat_warning'; jobId: string; idleMs: number; message: string; ts: number }
   | { type: 'job.user_turn'; jobId: string; turnId: string; turnIndex: number; text: string; ts: number }
   | { type: 'job.session_resumed'; jobId: string; sessionId: string; ts: number }
-  | { type: 'job.awaiting_user'; jobId: string; ts: number };
+  | { type: 'job.awaiting_user'; jobId: string; ts: number }
+  | { type: 'job.title_set'; jobId: string; title: string; ts: number };
 
 export interface ApprovalPattern {
   regex: RegExp;

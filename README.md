@@ -80,6 +80,35 @@ Default database location:
 - **Chat** — streaming responses from Hermes via SSE. Full Markdown rendering with syntax highlighting, tables, and lists.
 - **Recipes** — structured workspaces Hermes generates during chat. Select a template from the Recipe Book tab, or let Hermes generate one based on your request. Recipes are attached to sessions and persist across restarts.
 - **Settings** — configure Hermes providers with step-by-step guided setup for every supported provider, including API key links and example `hermes config set` commands.
+- **Coding** — agentic coding jobs backed by Claude Code or Codex. See [Coding agents](#coding-agents) below.
+
+## Coding agents
+
+The `/coding` screen runs long-lived agentic coding sessions via Claude Code or Codex.
+
+**Tabs:**
+- **Jobs** — projects list, job list, live job view with two-column layout (response left, activity right).
+- **Repos** — same project list for quick navigation without leaving the coding context.
+- **Integrations** — connect and manage Claude Code and Codex. Status is auto-detected every 30 s, on focus, and after any connect/disconnect operation.
+
+**Required CLIs** (installed separately from the Kitchen):
+
+| Agent | Install | Min. version | Auth status check |
+|---|---|---|---|
+| Claude Code | `npm install -g @anthropic-ai/claude-code` | 2.0+ | `claude auth status` |
+| Codex | `npm install -g @openai/codex` | 0.120+ | `codex login status` |
+
+**Approval modes:**
+
+| Mode | Claude Code | Codex |
+|---|---|---|
+| Manual | *(no flag)* | `-a on-request -s read-only` |
+| Auto-safe | `--permission-mode acceptEdits` | `--full-auto` |
+| Bypass | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |
+
+**Disconnect vs. Delete:**
+- **Disable in app** (toggle in the Integrations tab) — stops the Kitchen from offering the agent for new jobs, but does *not* sign out of the CLI. Your terminal sessions remain authenticated.
+- **Delete** (3-dot menu → Delete) — runs `claude auth logout` / `codex logout` and signs you out everywhere. You'll need to re-authenticate from the terminal.
 
 All state persists in a local SQLite database. The bridge accepts connections from `localhost` / `127.0.0.1` only.
 

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Box, Button, Flex, HStack, Input, NativeSelect, Spinner, Tabs, Text, Textarea, VStack
+  Box, Button, CloseButton, Drawer, Flex, HStack, Input, NativeSelect, Spinner, Tabs, Text, Textarea, VStack
 } from '@chakra-ui/react';
 import * as api from '../../lib/coding-api';
 import type { CodingProject, CodingJob, JobEvent, JobFileSummaryEntry, ApprovalMode } from '../../lib/coding-api';
@@ -308,51 +308,48 @@ function ClonePanel({ onDone, onCancel }: { onDone: (path: string, name: string)
 
   return (
     <>
-      <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
-        <VStack align="stretch" gap="3">
-          <Text fontSize="13px" fontWeight="600" color="var(--text-primary)">Clone GitHub Repository</Text>
+      <VStack align="stretch" gap="3">
+        <Input
+          placeholder="https://github.com/owner/repo.git"
+          value={repoUrl}
+          onChange={e => setRepoUrl(e.currentTarget.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && repoUrl.trim()) setShowTerminal(true); }}
+          size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
+          rounded="var(--radius-control)"
+        />
+        <HStack gap="2">
           <Input
-            placeholder="https://github.com/owner/repo.git"
-            value={repoUrl}
-            onChange={e => setRepoUrl(e.currentTarget.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && repoUrl.trim()) setShowTerminal(true); }}
+            placeholder={`~/Code/${inferName(repoUrl) || 'repo'}`}
+            value={targetDir}
+            onChange={e => setTargetDir(e.currentTarget.value)}
             size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-            rounded="var(--radius-control)"
+            rounded="var(--radius-control)" flex="1"
           />
-          <HStack gap="2">
-            <Input
-              placeholder={`~/Code/${inferName(repoUrl) || 'repo'}`}
-              value={targetDir}
-              onChange={e => setTargetDir(e.currentTarget.value)}
-              size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-              rounded="var(--radius-control)" flex="1"
-            />
-            <Button
-              size="sm" h="8" px="3" flexShrink={0} variant="outline"
-              color="var(--text-secondary)" borderColor="var(--border-subtle)"
-              _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-              rounded="var(--radius-control)"
-              onClick={async () => {
-                const p = await api.pickDirectory();
-                if (p) setTargetDir(p + '/' + inferName(repoUrl));
-              }}
-            >
-              Browse…
-            </Button>
-          </HStack>
-          <HStack gap="2" justify="flex-end">
-            <Button variant="ghost" size="sm" h="8" px="3" onClick={onCancel} color="var(--text-muted)">Cancel</Button>
-            <Button
-              size="sm" h="8" px="3" bg="var(--accent)" color="var(--accent-contrast)"
-              _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)"
-              disabled={!repoUrl.trim()}
-              onClick={() => setShowTerminal(true)}
-            >
-              Clone
-            </Button>
-          </HStack>
-        </VStack>
-      </Box>
+          <Button
+            size="sm" h="8" px="3" flexShrink={0} variant="outline"
+            color="var(--text-secondary)" borderColor="var(--border-subtle)"
+            _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+            rounded="var(--radius-control)"
+            onClick={async () => {
+              const p = await api.pickDirectory();
+              if (p) setTargetDir(p + '/' + inferName(repoUrl));
+            }}
+          >
+            Browse…
+          </Button>
+        </HStack>
+        <HStack gap="2" justify="flex-end">
+          <Button variant="ghost" size="sm" h="8" px="3" onClick={onCancel} color="var(--text-muted)">Cancel</Button>
+          <Button
+            size="sm" h="8" px="3" bg="var(--accent)" color="var(--accent-contrast)"
+            _hover={{ bg: 'var(--accent-strong)' }} rounded="var(--radius-control)"
+            disabled={!repoUrl.trim()}
+            onClick={() => setShowTerminal(true)}
+          >
+            Clone
+          </Button>
+        </HStack>
+      </VStack>
 
       {showTerminal && (
         <CloneTerminal
@@ -413,6 +410,9 @@ function ProjectsView({
     finally { setDeletingId(null); }
   }
 
+  const drawerOpen = panel !== 'none';
+  const drawerTitle = panel === 'clone' ? 'Clone GitHub repository' : 'Add project';
+
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0" px="4" py="4">
       <HStack justify="space-between" mb="4" flexShrink={0}>
@@ -423,80 +423,101 @@ function ProjectsView({
             color="var(--text-secondary)" borderColor="var(--border-subtle)"
             _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
             rounded="var(--radius-control)"
-            onClick={() => setPanel(p => p === 'clone' ? 'none' : 'clone')}
+            onClick={() => setPanel('clone')}
           >
-            {panel === 'clone' ? 'Cancel' : '↓ Clone repo'}
+            ↓ Clone repo
           </Button>
           <Button
             size="sm" h="8" px="3"
             bg="var(--accent)" color="var(--accent-contrast)"
             _hover={{ bg: 'var(--accent-strong)' }}
             rounded="var(--radius-control)"
-            onClick={() => setPanel(p => p === 'add' ? 'none' : 'add')}
+            onClick={() => setPanel('add')}
           >
-            {panel === 'add' ? 'Cancel' : '+ Add project'}
+            + Add project
           </Button>
         </HStack>
       </HStack>
 
-      {panel === 'clone' && (
-        <ClonePanel
-          onCancel={() => setPanel('none')}
-          onDone={(clonedPath, suggestedName) => {
-            setPanel('add');
-            setRepoPath(clonedPath);
-            setName(suggestedName);
-          }}
-        />
-      )}
-
-      {panel === 'add' && (
-        <Box mb="4" p="4" rounded="var(--radius-card)" border="1px solid var(--border-subtle)" bg="var(--surface-2)" flexShrink={0}>
-          <VStack align="stretch" gap="3">
-            <Input
-              placeholder="Project name"
-              value={name}
-              onChange={e => setName(e.currentTarget.value)}
-              size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-              rounded="var(--radius-control)"
-            />
-            <HStack gap="2">
-              <Input
-                placeholder="/absolute/path/to/repo"
-                value={repoPath}
-                onChange={e => setRepoPath(e.currentTarget.value)}
-                size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
-                rounded="var(--radius-control)"
-                flex="1"
-              />
-              <Button
-                size="sm" h="8" px="3" flexShrink={0}
-                variant="outline"
-                color="var(--text-secondary)"
-                borderColor="var(--border-subtle)"
-                _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
-                rounded="var(--radius-control)"
-                onClick={async () => {
-                  const picked = await api.pickDirectory();
-                  if (picked) setRepoPath(picked);
-                }}
-              >
-                Browse…
-              </Button>
-            </HStack>
-            {addError && <Text fontSize="12px" color="var(--status-danger)">{addError}</Text>}
-            <Button
-              size="sm" bg="var(--accent)" color="var(--accent-contrast)"
-              _hover={{ bg: 'var(--accent-strong)' }}
-              rounded="var(--radius-control)"
-              loading={submitting}
-              onClick={() => void handleAdd()}
-            >
-              Add project
-            </Button>
-          </VStack>
-        </Box>
-      )}
+      {/* Add Project / Clone Repo — right-side drawer.
+          The two modes share a drawer; clone success transitions in place to
+          the add form (see ClonePanel.onDone), pre-filling name + path. */}
+      <Drawer.Root
+        open={drawerOpen}
+        onOpenChange={(e) => { if (!e.open) setPanel('none'); }}
+        size={{ base: 'full', md: 'md' }}
+      >
+        <Drawer.Backdrop backdropFilter="auto" backdropBlur="sm" bg="blackAlpha.500" />
+        <Drawer.Positioner>
+          <Drawer.Content bg="var(--surface-elevated)" borderLeft="1px solid var(--border-subtle)" data-testid="coding-projects-drawer">
+            <Drawer.Header>
+              <Flex justify="space-between" align="center" gap="4">
+                <Drawer.Title color="var(--text-primary)">{drawerTitle}</Drawer.Title>
+                <Drawer.CloseTrigger asChild>
+                  <CloseButton size="sm" aria-label="Close" />
+                </Drawer.CloseTrigger>
+              </Flex>
+            </Drawer.Header>
+            <Drawer.Body>
+              {panel === 'clone' && (
+                <ClonePanel
+                  onCancel={() => setPanel('none')}
+                  onDone={(clonedPath, suggestedName) => {
+                    setPanel('add');
+                    setRepoPath(clonedPath);
+                    setName(suggestedName);
+                  }}
+                />
+              )}
+              {panel === 'add' && (
+                <VStack align="stretch" gap="3">
+                  <Input
+                    placeholder="Project name"
+                    value={name}
+                    onChange={e => setName(e.currentTarget.value)}
+                    size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
+                    rounded="var(--radius-control)"
+                  />
+                  <HStack gap="2">
+                    <Input
+                      placeholder="/absolute/path/to/repo"
+                      value={repoPath}
+                      onChange={e => setRepoPath(e.currentTarget.value)}
+                      size="sm" bg="var(--surface-3)" border="1px solid var(--border-subtle)"
+                      rounded="var(--radius-control)"
+                      flex="1"
+                    />
+                    <Button
+                      size="sm" h="8" px="3" flexShrink={0}
+                      variant="outline"
+                      color="var(--text-secondary)"
+                      borderColor="var(--border-subtle)"
+                      _hover={{ bg: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+                      rounded="var(--radius-control)"
+                      onClick={async () => {
+                        const picked = await api.pickDirectory();
+                        if (picked) setRepoPath(picked);
+                      }}
+                    >
+                      Browse…
+                    </Button>
+                  </HStack>
+                  {addError && <Text fontSize="12px" color="var(--status-danger)">{addError}</Text>}
+                  <Button
+                    size="sm" bg="var(--accent)" color="var(--accent-contrast)"
+                    _hover={{ bg: 'var(--accent-strong)' }}
+                    rounded="var(--radius-control)"
+                    loading={submitting}
+                    onClick={() => void handleAdd()}
+                  >
+                    Add project
+                  </Button>
+                </VStack>
+              )}
+            </Drawer.Body>
+          </Drawer.Content>
+        </Drawer.Positioner>
+      </Drawer.Root>
 
       {loading ? (
         <Flex flex="1" align="center" justify="center"><Spinner size="sm" /></Flex>
@@ -555,7 +576,10 @@ function ProjectsView({
 function JobRow({ job, onSelect, focused }: { job: CodingJob; onSelect: () => void; focused: boolean }) {
   const isAwaiting = job.status === 'awaiting_user';
   const isRunning = job.status === 'running';
+  const isApprovalPending = job.status === 'awaiting_approval';
   const isTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
+  const isUnread = isAwaiting && job.viewedAt == null;
+  const isReadAwaiting = isAwaiting && job.viewedAt != null;
 
   const lastActivity = job.lastTurnAt ?? job.createdAt;
 
@@ -570,31 +594,50 @@ function JobRow({ job, onSelect, focused }: { job: CodingJob; onSelect: () => vo
 
   const mostRecent = job.turnCount > 1 ? job.mostRecentTurnText : null;
 
+  // Outline rules (per design):
+  //   running           → blue, pulsing (in-flight work)
+  //   awaiting_user new → green (never opened — needs your attention)
+  //   awaiting_user read→ gray  (already opened, still awaiting reply)
+  //   awaiting_approval → amber (existing semantics)
+  //   failed/cancelled  → red
+  //   else              → subtle border
+  const borderColor =
+    isRunning ? 'var(--status-info)' :
+    isUnread ? 'var(--status-success)' :
+    isApprovalPending ? 'var(--status-warning)' :
+    isReadAwaiting ? 'var(--text-muted)' :
+    job.status === 'failed' || job.status === 'cancelled' ? 'var(--status-danger)' :
+    'var(--border-subtle)';
+
+  // Pulsing only for running. Other "active" states (awaiting_user) are static.
+  const pulseClass = isRunning ? 'job-row-pulse' : undefined;
+
   return (
     <Box
+      className={pulseClass}
       p="3"
       rounded="var(--radius-card)"
       border="1px solid"
-      borderColor={isAwaiting ? 'var(--status-warning)' : 'var(--border-subtle)'}
-      borderLeft={isAwaiting ? '3px solid var(--status-warning)' : '1px solid var(--border-subtle)'}
+      borderColor={borderColor}
+      borderLeft={isUnread || isApprovalPending ? `3px solid ${borderColor}` : `1px solid ${borderColor}`}
       bg={isTerminal ? 'var(--surface-1)' : 'var(--surface-2)'}
       opacity={isTerminal ? 0.65 : 1}
       cursor="pointer"
       outline={focused ? '2px solid var(--accent)' : undefined}
-      _hover={{ bg: isTerminal ? 'var(--surface-2)' : 'var(--surface-hover)', borderColor: isAwaiting ? 'var(--status-warning)' : 'var(--border-default)', opacity: 1 }}
+      _hover={{ bg: isTerminal ? 'var(--surface-2)' : 'var(--surface-hover)', opacity: 1 }}
       transition="background var(--transition-fast), opacity var(--transition-fast)"
       onClick={onSelect}
     >
       <HStack justify="space-between" align="flex-start" gap="3">
         <VStack align="start" gap="0.5" minW={0} flex="1">
-          {/* Title row — initial prompt */}
+          {/* Title row — Hermes-generated title falls back to the raw initial prompt */}
           <Text
             fontSize="13px"
-            fontWeight="500"
+            fontWeight={isUnread ? '600' : '500'}
             color="var(--text-primary)"
             lineClamp={1}
           >
-            {job.prompt}
+            {job.title ?? job.prompt}
           </Text>
 
           {/* Subtitle row — most recent turn + metadata */}
@@ -612,16 +655,19 @@ function JobRow({ job, onSelect, focused }: { job: CodingJob; onSelect: () => vo
           </HStack>
         </VStack>
 
-        {/* Right side: status + last activity */}
+        {/* Right side: status + last activity. Awaiting_user shows NO spinner —
+            it's not running, just waiting for the user. Running shows a spinner. */}
         <VStack align="end" gap="1" flexShrink={0}>
           <HStack gap="1.5" align="center">
             {isRunning ? (
-              <Spinner size="xs" color="var(--status-success)" flexShrink={0} />
+              <Spinner size="xs" color="var(--status-info)" flexShrink={0} />
             ) : (
               <Box
                 w="6px" h="6px" rounded="full" flexShrink={0}
                 bg={
-                  isAwaiting ? 'var(--status-warning)' :
+                  isUnread ? 'var(--status-success)' :
+                  isReadAwaiting ? 'var(--text-muted)' :
+                  isApprovalPending ? 'var(--status-warning)' :
                   job.status === 'failed' || job.status === 'cancelled' ? 'var(--status-danger)' :
                   'transparent'
                 }
@@ -636,12 +682,97 @@ function JobRow({ job, onSelect, focused }: { job: CodingJob; onSelect: () => vo
   );
 }
 
+// Inline single-line composer rendered under each expanded repo on the All Jobs
+// page. Lets the user start a new job without navigating into the project view.
+// Uses the project's defaultApprovalMode + the agent's first model. For deeper
+// configuration (unrestricted access, etc.), the full NewJobView is still
+// available via the project detail view.
+function InlineNewJobComposer({
+  project,
+  agentReady,
+  onCreated,
+}: {
+  project: CodingProject;
+  agentReady: boolean;
+  onCreated: (projectId: string, jobId: string) => void;
+}) {
+  const [prompt, setPrompt] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    const text = prompt.trim();
+    if (!text || submitting || !agentReady) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const job = await api.createJob({
+        projectId: project.id,
+        prompt: text,
+        agent: 'claude-code',
+        approvalMode: project.defaultApprovalMode ?? 'auto_safe',
+        model: AGENT_MODELS['claude-code']?.[0]?.value,
+        reasoningEffort: 'medium',
+      });
+      setPrompt('');
+      onCreated(project.id, job.id);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Box
+      mt="1"
+      p="2"
+      rounded="var(--radius-control)"
+      border="1px dashed var(--border-subtle)"
+      bg="var(--surface-1)"
+      // Stop expansion-toggle clicks bubbling from inputs/buttons inside.
+      onClick={e => e.stopPropagation()}
+    >
+      <HStack gap="2" align="center">
+        <Input
+          placeholder={agentReady ? `New job in ${project.name}…` : 'Connect Claude Code in Integrations to start a job'}
+          value={prompt}
+          onChange={e => setPrompt(e.currentTarget.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSubmit(); } }}
+          size="sm" h="8"
+          bg="var(--surface-2)"
+          border="1px solid var(--border-subtle)"
+          rounded="var(--radius-control)"
+          flex="1"
+          fontSize="12px"
+          disabled={!agentReady || submitting}
+        />
+        <Button
+          size="sm" h="8" px="3"
+          bg="var(--accent)" color="var(--accent-contrast)"
+          _hover={{ bg: 'var(--accent-strong)' }}
+          rounded="var(--radius-control)"
+          loading={submitting}
+          disabled={!agentReady || !prompt.trim()}
+          onClick={() => void handleSubmit()}
+        >
+          Start
+        </Button>
+      </HStack>
+      {error && <Text fontSize="11px" color="var(--status-danger)" mt="1">{error}</Text>}
+    </Box>
+  );
+}
+
 // ── All-jobs view (Jobs tab) ─────────────────────────────────────────────────
 function AllJobsView({
   onSelectJob
 }: {
   onSelectJob: (projectId: string, jobId: string) => void;
 }) {
+  const { integrations } = useCodingIntegrations();
+  const claudeIntg = integrations.find(i => i.id === 'claude-code');
+  const agentReady = claudeIntg?.installed === 1 && claudeIntg.authStatus === 'ok';
   const [projects, setProjects] = useState<CodingProject[]>([]);
   const [jobsByProject, setJobsByProject] = useState<Record<string, CodingJob[]>>({});
   const [loading, setLoading] = useState(true);
@@ -713,8 +844,11 @@ function AllJobsView({
     );
   }
 
+  // "Running" tally: only jobs actually running or awaiting an approval.
+  // awaiting_user is *not* running — it's blocked on the user, so it gets a
+  // green/gray outline on the row instead of a spinner here.
   const totalRunning = Object.values(jobsByProject).flat()
-    .filter(j => j.status === 'running' || j.status === 'awaiting_approval' || j.status === 'awaiting_user').length;
+    .filter(j => j.status === 'running' || j.status === 'awaiting_approval').length;
 
   return (
     <VStack align="stretch" h="100%" minH={0} gap="0">
@@ -724,9 +858,9 @@ function AllJobsView({
           <Text fontSize="14px" fontWeight="600" color="var(--text-primary)">All jobs</Text>
           {totalRunning > 0 && (
             <HStack gap="1.5" px="2" py="0.5" rounded="full"
-              bg="rgba(34,197,94,0.12)" border="1px solid rgba(34,197,94,0.3)">
-              <Spinner size="xs" color="var(--status-success)" />
-              <Text fontSize="11px" fontWeight="600" color="var(--status-success)">
+              bg="hsla(210, 65%, 45%, 0.12)" border="1px solid hsla(210, 65%, 45%, 0.3)">
+              <Spinner size="xs" color="var(--status-info)" />
+              <Text fontSize="11px" fontWeight="600" color="var(--status-info)">
                 {totalRunning} running
               </Text>
             </HStack>
@@ -747,7 +881,10 @@ function AllJobsView({
           const jobs = jobsByProject[project.id] ?? [];
           const isOpen = expanded[project.id] ?? false;
           const runningCount = jobs.filter(j =>
-            j.status === 'running' || j.status === 'awaiting_approval' || j.status === 'awaiting_user'
+            j.status === 'running' || j.status === 'awaiting_approval'
+          ).length;
+          const unreadAwaitingCount = jobs.filter(j =>
+            j.status === 'awaiting_user' && j.viewedAt == null
           ).length;
 
           return (
@@ -772,9 +909,21 @@ function AllJobsView({
                 <HStack gap="2" flexShrink={0}>
                   {runningCount > 0 && (
                     <HStack gap="1">
-                      <Spinner size="xs" color="var(--status-success)" />
-                      <Text fontSize="11px" color="var(--status-success)" fontWeight="600">
+                      <Spinner size="xs" color="var(--status-info)" />
+                      <Text fontSize="11px" color="var(--status-info)" fontWeight="600">
                         {runningCount}
+                      </Text>
+                    </HStack>
+                  )}
+                  {unreadAwaitingCount > 0 && (
+                    <HStack
+                      gap="1" px="1.5" py="0.5" rounded="full"
+                      bg="hsla(140, 60%, 45%, 0.12)"
+                      border="1px solid var(--status-success)"
+                      title="Awaiting your reply"
+                    >
+                      <Text fontSize="11px" color="var(--status-success)" fontWeight="600">
+                        {unreadAwaitingCount} new
                       </Text>
                     </HStack>
                   )}
@@ -784,7 +933,8 @@ function AllJobsView({
                 </HStack>
               </HStack>
 
-              {/* Jobs list */}
+              {/* Jobs list + inline composer to start a new job in this repo
+                  without navigating into the project detail view. */}
               {isOpen && (
                 <VStack align="stretch" gap="1.5" pl="5" pb="2">
                   {jobs.length === 0 ? (
@@ -799,6 +949,11 @@ function AllJobsView({
                       />
                     ))
                   )}
+                  <InlineNewJobComposer
+                    project={project}
+                    agentReady={agentReady}
+                    onCreated={onSelectJob}
+                  />
                 </VStack>
               )}
             </Box>
@@ -1006,14 +1161,17 @@ function CodingHeaderSelectors({
   connectedAgents: readonly string[];
   agentLocked: boolean;
   onAgentChange: (v: string) => void;
-  effectiveMode: ApprovalMode;
-  unrestrictedAccess: boolean;
-  onApprovalModeChange: (m: ApprovalMode) => void;
+  // Approval-mode controls are optional — JobView renders this component
+  // without them since approval mode is locked at job creation.
+  effectiveMode?: ApprovalMode;
+  unrestrictedAccess?: boolean;
+  onApprovalModeChange?: (m: ApprovalMode) => void;
   model: string;
   onModelChange: (v: string) => void;
   reasoningEffort: string;
   onReasoningEffortChange: (v: string) => void;
 }) {
+  const showApproval = effectiveMode !== undefined && onApprovalModeChange !== undefined;
   return (
     <>
       <HeaderSelect
@@ -1026,17 +1184,19 @@ function CodingHeaderSelectors({
           label: id === 'claude-code' ? 'Claude Code' : 'Codex',
         }))}
       />
-      <HeaderSelect
-        width={150}
-        value={effectiveMode}
-        disabled={unrestrictedAccess}
-        onChange={(v) => onApprovalModeChange(v as ApprovalMode)}
-        options={[
-          { value: 'auto_safe', label: 'Edits only' },
-          { value: 'auto_all', label: 'Actions only' },
-          { value: 'manual', label: 'Manual approval' },
-        ]}
-      />
+      {showApproval && (
+        <HeaderSelect
+          width={150}
+          value={effectiveMode!}
+          disabled={unrestrictedAccess ?? false}
+          onChange={(v) => onApprovalModeChange!(v as ApprovalMode)}
+          options={[
+            { value: 'auto_safe', label: 'Edits only' },
+            { value: 'auto_all', label: 'Actions only' },
+            { value: 'manual', label: 'Manual approval' },
+          ]}
+        />
+      )}
       <HeaderSelect
         width={170}
         value={model}
@@ -1364,8 +1524,10 @@ function JobView({
           maxEventIdRef.current = maxEventId ?? 0;
           setSinceId(maxEventId ?? 0);
           setJob(j);
-          if (j.model) setLocalModel(j.model);
-          if (j.reasoningEffort) setLocalReasoning(j.reasoningEffort);
+          // Default unset model/reasoning to the agent's first option so the
+          // shared header selectors render a real selection rather than blank.
+          setLocalModel(j.model ?? (AGENT_MODELS[j.agent]?.[0]?.value ?? ''));
+          setLocalReasoning(j.reasoningEffort ?? 'medium');
           setEvents(evts);
           const costEvt = [...evts].reverse().find(e => e.type === 'job.cost_update');
           if (costEvt) setLatestCost(costEvt);
@@ -1420,9 +1582,39 @@ function JobView({
       if (event.type === 'job.approval_resolved') { setPendingApproval(null); setJob(prev => prev ? { ...prev, status: 'running' } : prev); }
       if (event.type === 'job.cost_update') setLatestCost(event);
       if (event.type === 'job.message') setLastAssistantMessage((event as JobEvent & { text: string }).text);
+      if (event.type === 'job.title_set') {
+        const e = event as JobEvent & { title: string };
+        setJob(prev => prev ? { ...prev, title: e.title } : prev);
+      }
     }, syncJobStatus, sinceId > 0 ? sinceId : undefined);
     return unsubscribe;
   }, [activeJobId, syncJobStatus, sinceId]);
+
+  // Mark the job as viewed on first open. Fire-and-forget — UI doesn't block on it.
+  useEffect(() => {
+    if (!job?.id) return;
+    if (job.viewedAt != null) return;
+    void api.markJobViewed(job.id).then((updated) => {
+      if (updated) setJob(prev => prev ? { ...prev, viewedAt: updated.viewedAt } : prev);
+    });
+  }, [job?.id, job?.viewedAt]);
+
+  // Prepend a synthetic user_turn for the initial prompt so the conversation view
+  // shows it as the first message. The bridge stores the prompt on coding_jobs.prompt
+  // (not as an event), so without this the timeline starts mid-conversation.
+  const conversationEvents = useMemo<JobEvent[]>(() => {
+    if (!job?.prompt) return events;
+    const initial = {
+      type: 'job.user_turn',
+      jobId: job.id,
+      turnId: '__initial__',
+      turnIndex: 0,
+      text: job.prompt,
+      ts: job.createdAt,
+      _id: -1,
+    } as unknown as JobEvent;
+    return [initial, ...events];
+  }, [events, job?.id, job?.prompt, job?.createdAt]);
 
   const jobIsActive = job?.status === 'running' || job?.status === 'awaiting_user';
   useEffect(() => {
@@ -1587,39 +1779,25 @@ function JobView({
           </Button>
           <Text fontSize="12px" flexShrink={0}>/</Text>
           <Text fontSize="13px" fontWeight="500" color="var(--text-primary)" truncate maxW="240px">
-            {job?.prompt ?? '…'}
+            {job?.title ?? job?.prompt ?? '…'}
           </Text>
         </HStack>
 
-        {/* Per-job provider (locked) + model + reasoning — same chips as new-job view */}
+        {/* Per-job provider (locked) + model + reasoning — uses the shared
+            CodingHeaderSelectors so the chips match the new-job view exactly.
+            Approval-mode controls are intentionally omitted since approval mode
+            is locked at job creation. */}
         {job && (
-          <HStack gap="1.5" flexShrink={0} align="center" mb="1">
-            <HeaderSelect
-              width={130}
-              value={job.agent}
-              disabled
-              onChange={() => undefined}
-              options={[
-                { value: 'claude-code', label: 'Claude Code' },
-                { value: 'codex', label: 'Codex' },
-              ]}
-            />
-            <HeaderSelect
-              width={170}
-              value={localModel}
-              disabled={isActive}
-              onChange={v => void handleJobConfigChange('model', v)}
-              options={[
-                { value: '', label: 'Default model' },
-                ...(AGENT_MODELS[job.agent] ?? AGENT_MODELS['claude-code']!),
-              ]}
-            />
-            <HeaderSelect
-              width={110}
-              value={localReasoning}
-              disabled={isActive}
-              onChange={v => void handleJobConfigChange('reasoningEffort', v)}
-              options={AGENT_EFFORTS[job.agent] ?? AGENT_EFFORTS['claude-code']!}
+          <HStack gap="1.5" flexShrink={0} align="center">
+            <CodingHeaderSelectors
+              agent={job.agent}
+              connectedAgents={[job.agent]}
+              agentLocked
+              onAgentChange={() => undefined}
+              model={localModel}
+              onModelChange={v => void handleJobConfigChange('model', v)}
+              reasoningEffort={localReasoning}
+              onReasoningEffortChange={v => void handleJobConfigChange('reasoningEffort', v)}
             />
           </HStack>
         )}
@@ -1700,7 +1878,10 @@ function JobView({
         </HStack>
       </HStack>
 
-      {/* Two-column body: left = final response, right = activity feed */}
+      {/* Two-column body: left = response, right = activity feed.
+          Both columns are derived from the same persisted `events` state, so
+          reopened jobs replay their full history into both columns. The right
+          column hides assistant messages because they live on the left. */}
       <Flex flex="1" minH={0} overflow="hidden">
         {/* Left column — final markdown response */}
         <Box
@@ -1746,13 +1927,13 @@ function JobView({
           </Box>
         </Box>
 
-        {/* Right column — live activity (tool calls, thinking, etc.) */}
+        {/* Right column — live activity (tool calls, thinking, system events) */}
         <Box flex="1" minH={0} overflow="hidden" display="flex" flexDirection="column">
           <Box px="3" py="2" borderBottom="1px solid var(--divider)" flexShrink={0}>
             <Text fontSize="11px" fontWeight="600" color="var(--text-muted)" textTransform="uppercase" letterSpacing="0.06em">Activity</Text>
           </Box>
           <JobConversation
-            events={events}
+            events={conversationEvents}
             isActive={isActive}
             jobStatus={job?.status}
             compact={compact}

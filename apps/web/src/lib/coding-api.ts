@@ -19,9 +19,9 @@ export interface CodingProject {
   defaultApprovalMode: ApprovalMode;
 }
 export interface CodingJob {
-  id: string; projectId: string; prompt: string; agent: string; status: string;
+  id: string; projectId: string; prompt: string; title?: string; agent: string; status: string;
   approvalMode: string; model?: string; reasoningEffort?: string;
-  createdAt: number; startedAt?: number; completedAt?: number;
+  createdAt: number; startedAt?: number; completedAt?: number; viewedAt?: number;
   exitCode?: number; error?: string; sessionId?: string; resumeSessionId?: string;
   agentSessionId?: string; turnCount: number; lastTurnAt?: number;
   // Computed from events on demand
@@ -103,6 +103,12 @@ export async function createJob(opts: {
 }
 export async function cancelJob(id: string) {
   await codingFetch(`/api/jobs/${id}/cancel`, { method: 'POST' });
+}
+export async function markJobViewed(id: string): Promise<CodingJob | null> {
+  const r = await codingFetch(`/api/jobs/${id}/viewed`, { method: 'POST' });
+  if (!r.ok) return null;
+  const d = await r.json() as { job: CodingJob };
+  return d.job;
 }
 export async function sendTurn(jobId: string, text: string): Promise<{ turnId: string; turnIndex: number; queued?: boolean }> {
   const r = await codingFetch(`/api/jobs/${jobId}/turn`, {
