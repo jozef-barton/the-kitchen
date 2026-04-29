@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
 import type { JobEvent } from '../../../lib/coding-api';
 import { buildConversationItems } from './buildConversationItems';
@@ -17,6 +17,7 @@ interface Props {
   isActive: boolean;
   jobStatus?: string;
   compact?: boolean;
+  hideAssistantMessages?: boolean;
   pendingApproval: {
     approvalId: string;
     message: string;
@@ -32,7 +33,7 @@ interface Props {
 }
 
 export const JobConversation = memo(function JobConversation({
-  events, isActive, jobStatus, compact, pendingApproval, onApprove, jobPrompts, composerSlot, onOpenFile
+  events, isActive, jobStatus, compact, hideAssistantMessages, pendingApproval, onApprove, jobPrompts, composerSlot, onOpenFile
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
@@ -75,15 +76,21 @@ export const JobConversation = memo(function JobConversation({
   // finishes. Messages and tool calls still appear immediately.
   const ANIMATION_BLOCKED = new Set(['turn_action_summary', 'result', 'turn_boundary']);
   const visibleItems = useMemo(() => {
-    const all = items.slice(-500);
-    if (!animatingToolUseId) return all;
-    const blockAt = all.findIndex(item =>
-      item.kind === 'tool_pair' &&
-      (item.call as unknown as { toolUseId: string }).toolUseId === animatingToolUseId
-    );
-    if (blockAt < 0) return all;
-    return all.filter((item, idx) => idx <= blockAt || !ANIMATION_BLOCKED.has(item.kind));
-  }, [items, animatingToolUseId]); // eslint-disable-line react-hooks/exhaustive-deps
+    let all = items.slice(-500);
+    if (animatingToolUseId) {
+      const blockAt = all.findIndex(item =>
+        item.kind === 'tool_pair' &&
+        (item.call as unknown as { toolUseId: string }).toolUseId === animatingToolUseId
+      );
+      if (blockAt >= 0) {
+        all = all.filter((item, idx) => idx <= blockAt || !ANIMATION_BLOCKED.has(item.kind));
+      }
+    }
+    if (hideAssistantMessages) {
+      all = all.filter(item => item.kind !== 'message');
+    }
+    return all;
+  }, [items, animatingToolUseId, hideAssistantMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ID of the message currently being streamed (last message item when job is running)
   const streamingMessageId = useMemo(() => {
@@ -96,28 +103,53 @@ export const JobConversation = memo(function JobConversation({
     return null;
   }, [visibleItems, jobStatus]);
 
-  // Auto-scroll: always scroll on user_turn; detect awaiting_user while scrolled up
-  useEffect(() => {
-    const lastEvent = events[events.length - 1];
-    if (lastEvent?.type === 'job.user_turn') {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        setNewCount(0);
-        setAwaitingWhileScrolledUp(false);
-        autoScrollRef.current = true;
-      }
-      prevItemsLen.current = items.length;
-      return;
-    }
+  const rafRef = useRef<number | null>(null);
 
+  const scrollToBottomIfPinned = useCallback(() => {
     if (autoScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       setNewCount(0);
+    }
+  }, []);
+
+  // Auto-scroll: always scroll on user_turn; detect awaiting_user while scrolled up.
+  // useLayoutEffect runs after DOM commits — we then use requestAnimationFrame
+  // to wait for post-paint heights (catches async-rendered code blocks, etc.)
+  useLayoutEffect(() => {
+    const lastEvent = events[events.length - 1];
+    if (lastEvent?.type === 'job.user_turn') {
+      autoScrollRef.current = true;
+      setNewCount(0);
+      setAwaitingWhileScrolledUp(false);
+      prevItemsLen.current = items.length;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      });
+      return;
+    }
+
+    if (autoScrollRef.current) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(scrollToBottomIfPinned);
     } else if (items.length > prevItemsLen.current) {
       setNewCount(c => c + (items.length - prevItemsLen.current));
     }
     prevItemsLen.current = items.length;
-  }, [items.length, events]);
+  }, [items.length, events, scrollToBottomIfPinned]);
+
+  // MutationObserver: catch late height changes from async-rendered code blocks
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const observer = new MutationObserver(() => {
+      if (autoScrollRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+    observer.observe(container, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   // Detect awaiting_user while user is scrolled up
   useEffect(() => {
@@ -146,8 +178,12 @@ export const JobConversation = memo(function JobConversation({
           px="4" py="3"
           onScroll={(e) => {
             const el = e.currentTarget;
-            autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-            if (autoScrollRef.current) { setNewCount(0); setAwaitingWhileScrolledUp(false); }
+            // requestAnimationFrame debounces transient layout-mid-frame flip
+            requestAnimationFrame(() => {
+              const pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+              autoScrollRef.current = pinned;
+              if (pinned) { setNewCount(0); setAwaitingWhileScrolledUp(false); }
+            });
           }}
         >
           <VStack align="stretch" gap={gap}>

@@ -20,7 +20,8 @@ export interface CodingProject {
 }
 export interface CodingJob {
   id: string; projectId: string; prompt: string; agent: string; status: string;
-  approvalMode: string; createdAt: number; startedAt?: number; completedAt?: number;
+  approvalMode: string; model?: string; reasoningEffort?: string;
+  createdAt: number; startedAt?: number; completedAt?: number;
   exitCode?: number; error?: string; sessionId?: string; resumeSessionId?: string;
   agentSessionId?: string; turnCount: number; lastTurnAt?: number;
   // Computed from events on demand
@@ -51,8 +52,9 @@ export interface JobTurn {
   status: string;
 }
 export interface AgentIntegration {
-  id: string; installed: 0|1; version?: string; binaryPath?: string;
+  id: string; installed: 0|1; enabled: 0|1; version?: string; binaryPath?: string;
   authStatus: string; authMessage?: string; account?: string; lastCheckedAt: number; lastDiagnostic?: string;
+  latestVersion?: string;
 }
 export type JobEvent = { type: string; jobId: string; ts: number; [k: string]: unknown };
 
@@ -86,7 +88,9 @@ export async function listJobs(opts?: { projectId?: string; status?: string }): 
   return d.jobs;
 }
 export async function createJob(opts: {
-  projectId: string; prompt: string; agent: string; approvalMode: string; confirmAutoAll?: boolean; resumeSessionId?: string;
+  projectId: string; prompt: string; agent: string; approvalMode: string;
+  confirmAutoAll?: boolean; resumeSessionId?: string;
+  model?: string; reasoningEffort?: string;
 }): Promise<CodingJob> {
   const r = await codingFetch('/api/jobs', { method: 'POST', body: JSON.stringify(opts) });
   if (!r.ok) {
@@ -137,10 +141,17 @@ export async function respondToApproval(jobId: string, approvalId: string, respo
     throw new Error(e.error.message);
   }
 }
-export async function getJobWithEvents(id: string): Promise<{ job: CodingJob; events: JobEvent[] }> {
+export async function getJobWithEvents(id: string): Promise<{ job: CodingJob; events: JobEvent[]; maxEventId: number }> {
   const r = await codingFetch(`/api/jobs/${id}`);
-  return r.json() as Promise<{ job: CodingJob; events: JobEvent[] }>;
+  return r.json() as Promise<{ job: CodingJob; events: JobEvent[]; maxEventId: number }>;
 }
+export async function updateJobConfig(id: string, config: { model?: string; reasoningEffort?: string }): Promise<CodingJob> {
+  const r = await codingFetch(`/api/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(config) });
+  if (!r.ok) { const e = await r.json() as { error: { message: string } }; throw new Error(e.error.message); }
+  const d = await r.json() as { job: CodingJob };
+  return d.job;
+}
+
 export async function getJob(id: string): Promise<CodingJob> {
   const r = await codingFetch(`/api/jobs/${id}`);
   const d = await r.json() as { job: CodingJob; events: JobEvent[] };
@@ -165,8 +176,12 @@ export function subscribeToJobEvents(
   jobId: string,
   onEvent: (e: JobEvent) => void,
   onError?: () => void,
+  sinceId?: number,
 ): () => void {
-  const es = new EventSource(`${BASE}/api/jobs/${jobId}/events`);
+  const url = sinceId != null
+    ? `${BASE}/api/jobs/${jobId}/events?since=${sinceId}`
+    : `${BASE}/api/jobs/${jobId}/events`;
+  const es = new EventSource(url);
   es.onmessage = (e) => {
     try { onEvent(JSON.parse(e.data) as JobEvent); } catch { /* ignore */ }
   };
@@ -233,12 +248,33 @@ export type ConnectEvent =
   | { type: 'connect.complete'; agentId: string; integration: AgentIntegration }
   | { type: 'connect.error'; agentId: string; message: string };
 
+/** @deprecated Use disableAgent instead — disconnect no longer runs CLI logout */
 export function disconnectAgent(agentId: string, onEvent: (e: ConnectEvent) => void): () => void {
   return _streamIntegrationAction(agentId, 'disconnect', onEvent);
 }
 
 export function connectAgent(agentId: string, onEvent: (e: ConnectEvent) => void): () => void {
   return _streamIntegrationAction(agentId, 'connect', onEvent);
+}
+
+export function updateAgent(agentId: string, onEvent: (e: ConnectEvent) => void): () => void {
+  return _streamIntegrationAction(agentId, 'update', onEvent);
+}
+
+export async function disableAgent(agentId: string): Promise<AgentIntegration> {
+  const r = await codingFetch(`/api/integrations/${agentId}/disable`, { method: 'POST' });
+  const d = await r.json() as { integration: AgentIntegration };
+  return d.integration;
+}
+
+export async function enableAgent(agentId: string): Promise<AgentIntegration> {
+  const r = await codingFetch(`/api/integrations/${agentId}/enable`, { method: 'POST' });
+  const d = await r.json() as { integration: AgentIntegration };
+  return d.integration;
+}
+
+export function deleteAgent(agentId: string, onEvent: (e: ConnectEvent) => void): () => void {
+  return _streamIntegrationAction(agentId, 'delete', onEvent);
 }
 
 function _streamIntegrationAction(agentId: string, action: string, onEvent: (e: ConnectEvent) => void): () => void {

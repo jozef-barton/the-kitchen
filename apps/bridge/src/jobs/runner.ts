@@ -5,12 +5,14 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { AgentAdapter, ApprovalCategory, CodingJob, JobEvent, PendingApproval } from './types';
 import { attachClaudeCodeParser } from './agents/claude-code';
+import { attachCodexParser } from './agents/codex';
 
 const SHELL_APPROVAL_RE = /This .{0,60}command.{0,60}requires? approval|requires? your? approval|must be approved before|The following parts? requires? approval|contains multiple operations/i;
 
 const IDLE_THRESHOLD_MS = 20_000;         // wait 20s before first idle event (cold starts take 15-30s)
 const IDLE_EMIT_INTERVAL_MS = 30_000;     // emit maybe_idle at most once per 30s
-const STUCK_THRESHOLD_MS = 180_000;       // 3 min before "stuck" warning — cold starts are slow
+const STUCK_THRESHOLD_MS = 300_000;       // 5 min before "stuck" warning (was 3 min — too aggressive)
+const HEARTBEAT_WARNING_IDLE_MS = 300_000; // 5 min — emit heartbeat_warning instead of approval dialog when no in-flight tools
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const EVENT_PAYLOAD_MAX_BYTES = 4000;
 const LOG_ROTATE_BYTES = 50 * 1024 * 1024;
@@ -44,6 +46,9 @@ export class JobRunner {
   private stuckCheckTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingApprovalId: string | null = null;
   private stdinClosed = false;
+  // Tracks in-flight tool calls (tool_call seen, tool_result not yet received)
+  private inFlightToolCalls = new Set<string>();
+  private lastInFlightClearedAt = 0;
   // Shell approval detected from a blocked tool_result — surfaced after the turn ends
   private pendingShellApproval: { command: string; category: string } | null = null;
   // Last bash command seen, so we can show the real command in the approval message
@@ -64,7 +69,9 @@ export class JobRunner {
       prompt: this.job.prompt,
       cwd: this.job.worktreePath ?? process.cwd(),
       approvalMode: this.job.approvalMode,
-      resumeSessionId: this.job.resumeSessionId
+      resumeSessionId: this.job.resumeSessionId,
+      model: this.job.model,
+      reasoningEffort: this.job.reasoningEffort
     });
 
     this.child = spawn(command, args, {
@@ -94,9 +101,13 @@ export class JobRunner {
       });
     }
 
-    // Use the semantic stream-json parser for Claude Code; raw handler for all other agents
+    // Use the semantic parsers for claude-code and codex; raw handler for everything else
     if (this.job.agent === 'claude-code') {
       attachClaudeCodeParser(this.child, this.job.id, (event) => {
+        this.handleOutput_semantic(event);
+      });
+    } else if (this.job.agent === 'codex') {
+      attachCodexParser(this.child, this.job.id, this.job.model ?? 'unknown', (event) => {
         this.handleOutput_semantic(event);
       });
     } else {
@@ -245,12 +256,18 @@ export class JobRunner {
       }
     }
 
-    // Track the last bash command so we can show it in the approval message
+    // Track in-flight tool calls for stuck heuristic
     if (event.type === 'job.tool_call') {
       const tc = event as Extract<JobEvent, { type: 'job.tool_call' }>;
+      this.inFlightToolCalls.add(tc.toolUseId);
       if (/^bash$/i.test(tc.toolName)) {
         this.lastBashCommand = (tc.input.command as string) ?? '';
       }
+    }
+    if (event.type === 'job.tool_result') {
+      const tr = event as Extract<JobEvent, { type: 'job.tool_result' }>;
+      this.inFlightToolCalls.delete(tr.toolUseId);
+      this.lastInFlightClearedAt = Date.now();
     }
 
     // Detect shell approval blocks from tool_results.
@@ -327,27 +344,24 @@ export class JobRunner {
       }
     }, 1000);
 
-    // Stuck detection: after 60s continuous idle, emit a visible warning
+    // Stuck detection: two-tier — heartbeat warning (no dialog) vs approval dialog
     this.stuckCheckTimer = setInterval(() => {
       const idleMs = Date.now() - this.lastOutputAt;
-      if (idleMs >= STUCK_THRESHOLD_MS && this.child?.pid && !this.isExited()) {
-        // Use stable approvalId so we don't spam duplicate stuck events
-        const stuckApprovalId = `stuck-${this.lastOutputAt}`;
-        // Don't fire a new stuck event if one is already pending
-        if (this.pendingApprovalId !== null) return;
+      if (idleMs < HEARTBEAT_WARNING_IDLE_MS || !this.child?.pid || this.isExited()) return;
+      if (this.pendingApprovalId !== null) return;
 
+      const hasInFlightTools = this.inFlightToolCalls.size > 0;
+      const toolsJustCleared = (Date.now() - this.lastInFlightClearedAt) < 60_000;
+      const hasOutputHistory = this.outputLineBuffer.filter(l => l.trim()).length > 0;
+
+      // If tools are in-flight or were recently running, the agent is actively working — no alert.
+      if (hasInFlightTools || toolsJustCleared) return;
+
+      // If there's output history, fire a real stuck approval dialog.
+      if (hasOutputHistory) {
+        const stuckApprovalId = `stuck-${this.lastOutputAt}`;
         this.pendingApprovalId = stuckApprovalId;
-        const lastLine = this.outputLineBuffer.filter(l => l.trim()).at(-1) ?? '(no output)';
-        this.emit({
-          type: 'job.needs_approval',
-          jobId: this.job.id,
-          approvalId: stuckApprovalId,
-          message: `Agent appears stuck. Last output was: ${lastLine}`,
-          options: ['Continue waiting', 'Cancel job', 'Type custom input'],
-          defaultOption: 0,
-          category: 'unknown',
-          ts: Date.now()
-        });
+        const lastLine = this.outputLineBuffer.filter(l => l.trim()).at(-1) ?? '';
         const approval: PendingApproval = {
           approvalId: stuckApprovalId,
           message: `Agent appears stuck. Last output was: ${lastLine}`,
@@ -355,7 +369,19 @@ export class JobRunner {
           defaultOption: 0,
           category: 'unknown'
         };
+        this.emit({
+          type: 'job.needs_approval', jobId: this.job.id, ...approval, ts: Date.now()
+        });
         this.callbacks.onNeedsApproval(stuckApprovalId, approval);
+      } else {
+        // No output at all — emit a soft heartbeat warning, not an approval dialog
+        this.emit({
+          type: 'job.heartbeat_warning',
+          jobId: this.job.id,
+          idleMs,
+          message: 'No activity for 5 min — agent may still be processing',
+          ts: Date.now()
+        });
       }
     }, STUCK_THRESHOLD_MS);
   }

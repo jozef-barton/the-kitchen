@@ -48,6 +48,8 @@ export interface CodingJob {
   agent: AgentId;
   status: JobStatus;
   approvalMode: ApprovalMode;
+  model?: string;
+  reasoningEffort?: string;
   worktreePath?: string;
   pid?: number;
   createdAt: number;
@@ -88,6 +90,7 @@ export type JobEvent =
   | { type: 'job.completed'; jobId: string; exitCode: number; ts: number }
   | { type: 'job.failed'; jobId: string; error: string; ts: number }
   | { type: 'job.warning'; jobId: string; message: string; ts: number }
+  | { type: 'job.heartbeat_warning'; jobId: string; idleMs: number; message: string; ts: number }
   | { type: 'job.user_turn'; jobId: string; turnId: string; turnIndex: number; text: string; ts: number }
   | { type: 'job.session_resumed'; jobId: string; sessionId: string; ts: number }
   | { type: 'job.awaiting_user'; jobId: string; ts: number };
@@ -107,7 +110,15 @@ export interface AgentAdapter {
   name: string;
   binary: string;
   installDocsUrl: string;
-  buildCommand(opts: { prompt: string; cwd: string; approvalMode: ApprovalMode; resumeSessionId?: string }): { command: string; args: string[]; env: Record<string, string> };
+  multiTurnMode?: 'stay-alive' | 'spawn-per-turn';
+  buildCommand(opts: {
+    prompt: string;
+    cwd: string;
+    approvalMode: ApprovalMode;
+    resumeSessionId?: string;
+    model?: string;
+    reasoningEffort?: string;
+  }): { command: string; args: string[]; env: Record<string, string> };
   approvalPatterns: ApprovalPattern[];
   parseCostUpdate(recentLines: string[]): { tokensIn: number; tokensOut: number; estimatedCostUsd: number } | null;
   detect(): Promise<{ installed: false } | { installed: true; version: string; path: string }>;
@@ -146,6 +157,7 @@ export interface JobFileSummaryEntry extends FileSummaryStats {
 export interface AgentIntegrationRow {
   id: AgentId;
   installed: 0 | 1;
+  enabled: 0 | 1;
   version?: string;
   binaryPath?: string;
   authStatus: IntegrationAuthStatus;
@@ -153,4 +165,13 @@ export interface AgentIntegrationRow {
   account?: string;
   lastCheckedAt: number;
   lastDiagnostic?: string;
+  latestVersion?: string;
 }
+
+export type JobHeartbeatWarning = {
+  type: 'job.heartbeat_warning';
+  jobId: string;
+  idleMs: number;
+  message: string;
+  ts: number;
+};

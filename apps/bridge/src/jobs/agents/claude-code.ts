@@ -3,13 +3,7 @@ import { promisify } from 'node:util';
 import type { ChildProcess } from 'node:child_process';
 import type { AgentAdapter, JobEvent } from '../types';
 import { StreamJsonParser } from './stream-parser';
-
-// ── Pricing table (per 1M tokens) ────────────────────────────────────────────
-const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number; cacheReadPerM: number; cacheWritePerM: number }> = {
-  'claude-sonnet-4-6':  { inputPerM: 3.00,  outputPerM: 15.00, cacheReadPerM: 0.30, cacheWritePerM: 3.75 },
-  'claude-opus-4-7':    { inputPerM: 15.00, outputPerM: 75.00, cacheReadPerM: 1.50, cacheWritePerM: 18.75 },
-  'claude-haiku-4-5':   { inputPerM: 0.80,  outputPerM: 4.00,  cacheReadPerM: 0.08, cacheWritePerM: 1.00 },
-};
+import { getPricing } from '../pricing';
 
 interface ClaudeRunState {
   model: string;
@@ -100,12 +94,11 @@ function handleClaudeEvent(
       const tokensOut = usage.output_tokens ?? 0;
       const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
       const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
-      const pricing = MODEL_PRICING[state.model];
-      if (!pricing && !state.loggedUnknownModels.has(state.model)) {
+      const p = getPricing('claude-code', state.model);
+      if (!state.loggedUnknownModels.has(state.model) && state.model !== 'unknown') {
+        // Log unknown models once for diagnostics
         state.loggedUnknownModels.add(state.model);
-        console.warn(`[coding] Unknown model "${state.model}" — using sonnet pricing for cost estimate`);
       }
-      const p = pricing ?? MODEL_PRICING['claude-sonnet-4-6']!;
       const stepCost =
         (tokensIn * p.inputPerM + tokensOut * p.outputPerM +
          cacheReadTokens * p.cacheReadPerM + cacheWriteTokens * p.cacheWritePerM) / 1_000_000;
@@ -208,7 +201,7 @@ export const claudeCodeAdapter: AgentAdapter = {
   binary: 'claude',
   installDocsUrl: 'https://docs.anthropic.com/claude-code',
 
-  buildCommand({ prompt: _prompt, cwd: _cwd, approvalMode, resumeSessionId }) {
+  buildCommand({ prompt: _prompt, cwd: _cwd, approvalMode, resumeSessionId, model, reasoningEffort }) {
     // Stay-alive mode: use --input-format stream-json so stdin accepts JSON messages.
     // The initial prompt is NOT passed via -p; instead the runner sends it via stdin
     // immediately after spawn using sendUserMessage().
@@ -223,6 +216,12 @@ export const claudeCodeAdapter: AgentAdapter = {
       args.push('--permission-mode', 'bypassPermissions');
     }
     // manual: no --permission-mode flag; Claude Code asks for everything
+    if (model) {
+      args.push('--model', model);
+    }
+    if (reasoningEffort) {
+      args.push('--effort', reasoningEffort);
+    }
     if (resumeSessionId) {
       // --resume <sessionId> continues the specific prior session, giving the agent
       // full conversation history (knows what files were created, what was said, etc.)
@@ -311,28 +310,37 @@ export const claudeCodeAdapter: AgentAdapter = {
 
   async checkAuth() {
     try {
-      // Use a minimal prompt to verify auth. Times out in 15s.
-      await execFileAsync('claude', ['-p', 'say ok', '--max-turns', '1', '--permission-mode', 'acceptEdits'], {
-        timeout: 15000,
+      // `claude auth status` outputs JSON and exits without spending API tokens.
+      const { stdout } = await execFileAsync('claude', ['auth', 'status'], {
+        timeout: 8000,
         env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', TERM: 'dumb' }
       });
-      return { ok: true };
+      const parsed = JSON.parse(stdout.trim()) as {
+        loggedIn?: boolean;
+        email?: string;
+        orgName?: string;
+        authMethod?: string;
+      };
+      if (parsed.loggedIn) {
+        const account = parsed.email ?? parsed.orgName ?? undefined;
+        return { ok: true as const, account };
+      }
+      return { ok: false as const, reason: 'not_authenticated' as const, message: 'Not logged in to Claude Code' };
     } catch (err) {
       const stderr = (err as { stderr?: string }).stderr ?? '';
-      const message = stderr.slice(0, 500) || String(err).slice(0, 500);
+      const stdout = (err as { stdout?: string }).stdout ?? '';
+      const message = (stderr || stdout || String(err)).slice(0, 500);
       if (/not.auth|login|sign.in|credentials/i.test(message)) {
-        return { ok: false, reason: 'not_authenticated', message };
+        return { ok: false as const, reason: 'not_authenticated' as const, message };
       }
       if (/timeout|ETIMEDOUT|network|connect/i.test(message)) {
-        return { ok: false, reason: 'network', message };
+        return { ok: false as const, reason: 'network' as const, message };
       }
-      // Check for unknown flag errors — fall back gracefully
-      if (/unknown.flag|unrecognized/i.test(message)) {
-        // TODO: update flags when verified for this claude version
-        console.warn('[coding] claude-code auth check failed with unknown flag error — adapter may need flag updates for this version');
-        return { ok: false, reason: 'unknown', message: `Flag compatibility issue: ${message}` };
+      // JSON parse failure — likely not logged in
+      if (err instanceof SyntaxError) {
+        return { ok: false as const, reason: 'not_authenticated' as const, message: 'Could not parse auth status' };
       }
-      return { ok: false, reason: 'unknown', message };
+      return { ok: false as const, reason: 'unknown' as const, message };
     }
   },
 
@@ -343,7 +351,7 @@ export const claudeCodeAdapter: AgentAdapter = {
   },
 
   authCommand() {
-    return 'claude auth login --console';
+    return 'claude auth login';
   },
 
   disconnectCommand() {
