@@ -21,13 +21,6 @@ export default defineConfig({
     exclude: ['**/node_modules/**'],
     environment: 'jsdom',
     setupFiles: ['apps/web/src/test/setup.ts'],
-    server: {
-      deps: {
-        // Prevent vitest 4 from trying to bundle Node.js built-in modules
-        // (e.g. node:sqlite used by bridge tests) for the jsdom client environment.
-        external: [/^node:/]
-      }
-    },
     coverage: {
       reporter: ['text', 'html'],
       include: [
