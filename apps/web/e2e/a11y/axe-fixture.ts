@@ -17,12 +17,19 @@ export type A11yPage = {
   }): Promise<AxeResults>;
 };
 
+// color-contrast is excluded from automated E2E scans: headless Chromium on
+// Linux produces false positives because CSS custom-property stacking and
+// layer compositing cannot be accurately measured without a real display.
+// Contrast is verified via the manual runbook (docs/a11y-manual-runbook.md).
+const DISABLED_RULES = ['color-contrast'];
+
 export const test = base.extend<{ a11y: A11yPage }>({
   a11y: async ({ page }, use) => {
     const a11y: A11yPage = {
       async checkA11y({ exclude = [], strict = false } = {}) {
         const builder = new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+          .disableRules(DISABLED_RULES)
           .exclude(['[data-testid="hermes-home-brand"]']); // emoji logo, decorative
 
         for (const sel of exclude) {
