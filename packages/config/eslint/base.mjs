@@ -81,7 +81,7 @@ export function createHermesEslintConfig() {
       }
     },
     {
-      files: ['scripts/**/*.mjs', '.github/**/*.js'],
+      files: ['scripts/**/*.mjs', '.github/**/*.js', '**/e2e/**/*.mjs'],
       languageOptions: {
         globals: {
           ...globals.node

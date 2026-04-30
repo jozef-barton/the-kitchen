@@ -153,12 +153,19 @@ export function CommandPalette({
         style={{ position: 'relative' }}
       >
         <div className="command-palette__input-row">
-          <span className="command-palette__icon">
+          <span className="command-palette__icon" aria-hidden="true">
             <SearchIcon />
           </span>
           <input
             ref={inputRef}
+            id="command-palette-input"
             className="command-palette__input"
+            role="combobox"
+            aria-expanded={flatItems.length > 0}
+            aria-haspopup="listbox"
+            aria-controls={flatItems.length > 0 ? 'command-palette-listbox' : undefined}
+            aria-activedescendant={flatItems[activeIndex] ? `cp-item-${flatItems[activeIndex].id}` : undefined}
+            aria-autocomplete="list"
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
@@ -169,45 +176,67 @@ export function CommandPalette({
           />
         </div>
 
-        <div className="command-palette__results" role="listbox">
+        {/* Live status for screen readers — announced whenever results change */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="command-palette__sr-count"
+          style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap' }}
+        >
+          {flatItems.length === 0
+            ? `No results for ${query}`
+            : `${flatItems.length} result${flatItems.length === 1 ? '' : 's'}`}
+        </div>
+
+        <div className="command-palette__results">
           {flatItems.length === 0 ? (
-            <div className="command-palette__empty">No results for &ldquo;{query}&rdquo;</div>
+            <div className="command-palette__empty">
+              No results for &ldquo;{query}&rdquo;
+            </div>
           ) : (
-            (() => {
-              let globalIndex = 0;
-              return sections.map((section) => {
-                const items = filteredItems.filter((i) => i.section === section);
-                if (items.length === 0) return null;
-                return (
-                  <div key={section}>
-                    <div className="command-palette__section-label">{sectionLabels[section]}</div>
-                    {items.map((item) => {
-                      const idx = globalIndex++;
-                      return (
-                        <div
-                          key={item.id}
-                          className={`command-palette__item${activeIndex === idx ? ' command-palette__item--active' : ''}`}
-                          role="option"
-                          aria-selected={activeIndex === idx}
-                          tabIndex={0}
-                          onMouseEnter={() => setActiveIndex(idx)}
-                          onClick={() => item.action()}
-                          onKeyDown={(e) => { if (e.key === 'Enter') item.action(); }}
-                        >
-                          <span className="command-palette__item-icon">
-                            {item.section === 'sessions' ? <SessionIcon /> : <NavIcon />}
-                          </span>
-                          <span className="command-palette__item-label">{item.label}</span>
-                          {item.hint ? (
-                            <span className="command-palette__item-hint">{item.hint}</span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              });
-            })()
+            <div
+              id="command-palette-listbox"
+              role="listbox"
+              aria-label="Command palette results"
+            >
+              {(() => {
+                let globalIndex = 0;
+                return sections.map((section) => {
+                  const items = filteredItems.filter((i) => i.section === section);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={section} role="group" aria-label={sectionLabels[section]}>
+                      <div className="command-palette__section-label" aria-hidden="true">{sectionLabels[section]}</div>
+                      {items.map((item) => {
+                        const idx = globalIndex++;
+                        return (
+                          <div
+                            key={item.id}
+                            id={`cp-item-${item.id}`}
+                            className={`command-palette__item${activeIndex === idx ? ' command-palette__item--active' : ''}`}
+                            role="option"
+                            aria-selected={activeIndex === idx}
+                            tabIndex={-1}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            onClick={() => item.action()}
+                            onKeyDown={(e) => { if (e.key === 'Enter') item.action(); }}
+                          >
+                            <span className="command-palette__item-icon" aria-hidden="true">
+                              {item.section === 'sessions' ? <SessionIcon /> : <NavIcon />}
+                            </span>
+                            <span className="command-palette__item-label">{item.label}</span>
+                            {item.hint ? (
+                              <span className="command-palette__item-hint" aria-label={`Shortcut: ${item.hint}`}>{item.hint}</span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           )}
         </div>
 

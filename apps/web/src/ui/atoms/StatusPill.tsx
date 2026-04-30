@@ -27,8 +27,8 @@ const STATUS_SLOT: Record<string, string> = {
 export function StatusPill({ label }: { label: string }) {
   const slot = STATUS_SLOT[label] ?? 'unknown';
   return (
-    <span className={`status-badge status-badge--${slot}`}>
-      <span className="status-badge__dot" />
+    <span className={`status-badge status-badge--${slot}`} role="status" aria-label={`Status: ${label}`}>
+      <span className="status-badge__dot" aria-hidden="true" />
       {label}
     </span>
   );

@@ -91,6 +91,54 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+  a11y-tests:
+    name: A11y tests (WCAG 2.2 AA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build bridge
+        run: pnpm --filter @hermes-recipes/bridge build
+
+      - name: Build web app
+        run: pnpm --filter @hermes-recipes/web build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run a11y tests (desktop + mobile + dark)
+        run: pnpm exec playwright test --project=a11y-desktop --project=a11y-mobile --project=a11y-dark
+
+      - name: Upload a11y reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-reports-${{ github.run_id }}
+          path: |
+            test-results/a11y/
+            playwright-report/a11y-desktop/
+            playwright-report/a11y-mobile/
+            playwright-report/a11y-dark/
+          retention-days: 30
+
   security:
     name: Security check
     runs-on: ubuntu-latest

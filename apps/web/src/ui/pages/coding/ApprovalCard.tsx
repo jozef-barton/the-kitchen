@@ -125,6 +125,11 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
         rounded="var(--radius-control)"
         loading={resolving}
         disabled={resolving}
+        aria-label={
+          intent.category === 'destructive'
+            ? `${intent.affirmativeText} (hold to confirm destructive action)`
+            : intent.affirmativeText
+        }
         onMouseDown={intent.category === 'destructive' ? startHold : undefined}
         onMouseUp={intent.category === 'destructive' ? cancelHold : undefined}
         onMouseLeave={intent.category === 'destructive' ? cancelHold : undefined}
@@ -156,6 +161,9 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
   return (
     <Box
       ref={cardRef}
+      role="region"
+      aria-label={`Agent approval request: ${intent.category} action`}
+      aria-describedby="approval-question"
       tabIndex={0}
       outline="none"
       p="3"
@@ -177,6 +185,7 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
           rounded="var(--radius-pill)"
           px="2" py="0.5"
           flexShrink={0}
+          aria-label={`Category: ${intent.category}`}
         >
           {intent.category}
         </Text>
@@ -184,6 +193,7 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
 
       {/* Question in quoted block */}
       <Box
+        id="approval-question"
         mb="3"
         pl="3"
         borderLeft={`3px solid ${borderColor}66`}
@@ -212,6 +222,8 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
           _hover={{ color: 'var(--text-primary)', bg: 'var(--surface-hover)' }}
           rounded="var(--radius-control)"
           disabled={resolving}
+          aria-expanded={customOpen}
+          aria-controls="approval-custom-reply"
           onClick={() => setCustomOpen(v => !v)}
         >
           {customOpen ? 'Cancel' : 'Reply differently'}
@@ -220,8 +232,9 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
 
       {/* Custom reply expander */}
       {customOpen && (
-        <VStack mt="3" align="stretch" gap="2">
+        <VStack id="approval-custom-reply" mt="3" align="stretch" gap="2">
           <Textarea
+            aria-label="Custom reply to agent"
             placeholder="Type a custom reply…"
             value={customText}
             onChange={e => setCustomText(e.currentTarget.value)}
@@ -247,6 +260,7 @@ export function ApprovalCard({ intent, onApprove, onDeny, onCustomReply, resolvi
               _hover={{ bg: 'var(--accent-strong)' }}
               rounded="var(--radius-control)"
               disabled={!customText.trim() || resolving}
+              aria-label="Send custom reply"
               onClick={() => { if (customText.trim()) onCustomReply(customText.trim()); }}
             >
               Send

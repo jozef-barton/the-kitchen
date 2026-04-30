@@ -66,7 +66,7 @@ describe('ChatComposer', () => {
     const textarea = screen.getByPlaceholderText('Ask Hermes something real.');
 
     await userEvent.type(textarea, 'Retry this draft');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: /send/i }));
 
     expect(onSend).toHaveBeenCalledWith('Retry this draft', []);
     expect(textarea).toHaveValue('Retry this draft');
