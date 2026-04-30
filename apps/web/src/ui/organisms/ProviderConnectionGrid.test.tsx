@@ -46,7 +46,7 @@ const PROVIDERS: RuntimeProviderOption[] = [
 ];
 
 function renderGrid(props: Partial<Parameters<typeof ProviderConnectionGrid>[0]> = {}) {
-  const onConnect = (props.onConnect ?? vi.fn()) as ReturnType<typeof vi.fn>;
+  const onConnect = (props.onConnect ?? vi.fn()) as ReturnType<typeof vi.fn> & ((providerId: string) => void);
   render(
     <ChakraProvider value={defaultSystem}>
       <ProviderConnectionGrid
