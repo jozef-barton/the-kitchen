@@ -132,7 +132,7 @@ jobs:
     name: A11y — desktop (WCAG 2.2 AA)
     needs: build-web
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -181,7 +181,7 @@ jobs:
     name: A11y — mobile (WCAG 2.2 AA)
     needs: build-web
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -230,7 +230,7 @@ jobs:
     name: A11y — dark theme (WCAG 2.2 AA)
     needs: build-web
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4

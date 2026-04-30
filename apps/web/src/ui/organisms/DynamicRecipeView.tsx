@@ -556,6 +556,7 @@ export function DynamicRecipeView({
   const [activeTabs, setActiveTabs] = useState<Record<string, string>>({});
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
   const mergedActions = useMemo(() => [...(actionSpec?.actions ?? [])], [actionSpec]);
   const actionMap = useMemo(() => new Map(mergedActions.map((action) => [action.id, action] as const)), [mergedActions]);
   const retryBuildAction = actionMap.get('retry-build');
@@ -2152,12 +2153,12 @@ export function DynamicRecipeView({
                                     variant={tone.variant}
                                     colorPalette={tone.colorPalette}
                                     loading={actionLoadingId === action.id}
-                                    onClick={() =>
+                                    onClick={() => {
                                       void runAction(action.id, {
                                         datasetId: dataset.id,
                                         selectedItemIds: [selectedItem.id]
-                                      })
-                                    }
+                                      });
+                                    }}
                                   >
                                     {action.label}
                                   </Button>

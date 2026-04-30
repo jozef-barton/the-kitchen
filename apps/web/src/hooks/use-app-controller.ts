@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   AuditEventsResponse,
   AppPage,
@@ -538,6 +538,7 @@ export function useAppController() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [sessionPayload, setSessionPayload] = useState<SessionMessagesResponse | null>(null);
+  const sessionPayloadRef = useRef<SessionMessagesResponse | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionStreams, setSessionStreams] = useState<Map<string, SessionStreamState>>(() => new Map());
@@ -724,17 +725,25 @@ export function useAppController() {
     }
   }, [activeRecipe, page]);
 
-  useEffect(() => {
+  // useLayoutEffect so these refs are current before any event handler or async
+  // callback reads them. In React 19 concurrent mode, useEffect can be deferred
+  // past the point where a button click fires, causing stale-ref early-returns
+  // in runStreamingRequest and similar handlers.
+  useLayoutEffect(() => {
     activeProfileIdRef.current = activeProfileId;
   }, [activeProfileId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sessionStreamsRef.current = sessionStreams;
   }, [sessionStreams]);
+
+  useLayoutEffect(() => {
+    sessionPayloadRef.current = sessionPayload;
+  }, [sessionPayload]);
 
   const updateSessionStream = useCallback(
     (sessionId: string, updater: (prev: SessionStreamState) => SessionStreamState) => {
@@ -1335,8 +1344,12 @@ export function useAppController() {
 
       try {
         const response = await getModelProviders(profileId, nextInspectedProviderId ?? undefined);
-        setModelProviderResponse(response);
-        setInspectedProviderId(response.inspectedProviderId);
+        // startTransition defers the response update so it doesn't interleave with
+        // pending microtasks (e.g. findByText resolution) in React 19 test environments.
+        startTransition(() => {
+          setModelProviderResponse(response);
+          setInspectedProviderId(response.inspectedProviderId);
+        });
         return response;
       } catch (error) {
         const message = getErrorMessage(error, 'Failed to load model and provider settings.');
@@ -2631,17 +2644,22 @@ export function useAppController() {
         formValues?: Record<string, string | number | boolean | null>;
       }
     ) => {
-      if (!activeProfileId) {
+      // Read from refs to avoid stale closures in React 19 concurrent mode.
+      const profileId = activeProfileIdRef.current;
+      const sessionId = activeSessionIdRef.current;
+      const payload = sessionPayloadRef.current;
+
+      if (!profileId) {
         setChatError('Select a real Hermes profile before running a workspace action.');
         return;
       }
 
-      if (!activeSessionId) {
+      if (!sessionId) {
         setChatError('Open the attached workspace session before running a workspace action.');
         return;
       }
 
-      if (!sessionPayload || sessionPayload.attachedRecipe?.id !== recipe.id) {
+      if (!payload || payload.attachedRecipe?.id !== recipe.id) {
         setChatError('Open the attached workspace session before running a workspace action.');
         return;
       }
@@ -2653,8 +2671,8 @@ export function useAppController() {
           streamRecipeAction(
             recipe.id,
             {
-              profileId: activeProfileId,
-              sessionId: activeSessionId,
+              profileId,
+              sessionId,
               actionId,
               selectedItemIds: input.selectedItemIds ?? [],
               pageState: input.pageState ?? {},
@@ -2665,7 +2683,7 @@ export function useAppController() {
           )
       });
     },
-    [activeProfileId, activeSessionId, runStreamingRequest, sessionPayload]
+    [runStreamingRequest]
   );
 
   const handleSaveSettings = useCallback(async (

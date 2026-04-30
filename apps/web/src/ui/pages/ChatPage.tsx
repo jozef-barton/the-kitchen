@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Box, Button, CloseButton, Drawer, Flex, Grid, HStack, Portal, Text, chakra } from '@chakra-ui/react';
 
@@ -157,6 +157,10 @@ export function ChatPage({
   const [recipePanelAnimKey, setRecipePanelAnimKey] = useState(0);
   const [runtimePanelOpen, setRuntimePanelOpen] = useState(false);
   const [mobileSpaceDrawerOpen, setMobileSpaceDrawerOpen] = useState(false);
+  // Track whether the mobile drawer has ever been opened so we can skip rendering
+  // the Drawer.Root entirely until needed. Ark UI v5's lazyMount isn't preventing
+  // the initial render in React 19, causing a duplicate SessionRecipePanel.
+  const [mobileSpaceDrawerEverOpened, setMobileSpaceDrawerEverOpened] = useState(false);
   const prevRecipeIdRef = useRef<string | null>(null);
   const runtimeButtonRef = useRef<HTMLButtonElement | null>(null);
   const activeSession = sessionPayload?.session ?? null;
@@ -172,7 +176,9 @@ export function ChatPage({
   })() : null;
 
   // Bump the animation key every time a NEW recipe attaches so the panel re-runs its entry animation.
-  useEffect(() => {
+  // useLayoutEffect ensures the key change fires synchronously before findByTestId's MutationObserver
+  // fires in React 19 tests, preventing clicks on detached elements.
+  useLayoutEffect(() => {
     const newId = attachedRecipe?.id ?? null;
     if (newId && newId !== prevRecipeIdRef.current) {
       setRecipePanelAnimKey((k) => k + 1);
@@ -477,6 +483,7 @@ export function ChatPage({
                         style={spaceStatus === 'updated' ? { animation: 'spaceUpdatedPulse 1.4s ease-in-out infinite' } : undefined}
                         onClick={() => {
                           setMobileSpaceDrawerOpen(true);
+                          setMobileSpaceDrawerEverOpened(true);
                           setSpaceStatus('idle');
                         }}
                       >
@@ -601,7 +608,8 @@ export function ChatPage({
           </Drawer.Root>
 
           {/* Mobile space drawer — full-screen recipe view on small viewports */}
-          <Drawer.Root
+          {/* Guard: don't mount until first open (Ark UI v5 lazyMount doesn't work in React 19) */}
+          {mobileSpaceDrawerEverOpened ? <Drawer.Root
             lazyMount
             unmountOnExit
             open={mobileSpaceDrawerOpen}
@@ -658,7 +666,7 @@ export function ChatPage({
                 </Drawer.Content>
               </Drawer.Positioner>
             </Portal>
-          </Drawer.Root>
+          </Drawer.Root> : null}
         </>
       ) : (
         <>
