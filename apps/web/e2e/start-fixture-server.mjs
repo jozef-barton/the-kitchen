@@ -70,8 +70,10 @@ bridge.on('error', (err) => {
   process.exit(1);
 });
 
-// Keep alive until the bridge exits; forward its exit code
-await new Promise((_resolve) => {
+// Keep alive until the bridge exits; forward its exit code.
+// The Promise intentionally never resolves — process.exit() in the
+// close handler is the only exit path.
+await new Promise(() => {
   bridge.on('close', (code) => {
     process.exit(code ?? 0);
   });
