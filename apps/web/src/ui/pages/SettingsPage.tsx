@@ -9,12 +9,14 @@ function StepSlider({
   steps,
   value,
   onChange,
-  disabled
+  disabled,
+  label
 }: {
   steps: Array<{ value: number; label: string }>;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  label: string;
 }) {
   const idx = Math.max(0, steps.findIndex((s) => String(s.value) === value));
   const currentStep = steps[idx];
@@ -25,6 +27,7 @@ function StepSlider({
       <HStack gap="3" align="center">
         <input
           type="range"
+          aria-label={label}
           min={0}
           max={steps.length - 1}
           step={1}
@@ -434,6 +437,7 @@ export function SettingsPage({
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Sessions page size</Field.Label>
                 <StepSlider
+                  label="Sessions page size"
                   steps={[{ value: 25, label: '25' }, { value: 50, label: '50' }, { value: 100, label: '100' }]}
                   value={sessionsPageSize}
                   onChange={(v) => { setSessionsPageSize(v); scheduleSave({ sessionsPageSize: v }); }}
@@ -443,6 +447,7 @@ export function SettingsPage({
               <Field.Root disabled={unrestrictedAccessEnabled}>
                 <Field.Label color="var(--text-secondary)">Restricted max turns</Field.Label>
                 <StepSlider
+                  label="Restricted max turns"
                   steps={[{ value: 4, label: '4' }, { value: 8, label: '8' }, { value: 16, label: '16' }, { value: 32, label: '32' }]}
                   value={restrictedChatMaxTurns}
                   disabled={unrestrictedAccessEnabled}
@@ -456,6 +461,7 @@ export function SettingsPage({
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Normal chat timeout</Field.Label>
                 <StepSlider
+                  label="Normal chat timeout"
                   steps={[
                     { value: 30000, label: '30s' },
                     { value: 60000, label: '1m' },
@@ -473,6 +479,7 @@ export function SettingsPage({
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Search / discovery timeout</Field.Label>
                 <StepSlider
+                  label="Search / discovery timeout"
                   steps={[
                     { value: 60000, label: '1m' },
                     { value: 120000, label: '2m' },
@@ -491,6 +498,7 @@ export function SettingsPage({
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Nearby / local-search timeout</Field.Label>
                 <StepSlider
+                  label="Nearby / local-search timeout"
                   steps={[
                     { value: 60000, label: '1m' },
                     { value: 120000, label: '2m' },
@@ -509,6 +517,7 @@ export function SettingsPage({
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Recipe timeout</Field.Label>
                 <StepSlider
+                  label="Recipe timeout"
                   steps={[
                     { value: 30000, label: '30s' },
                     { value: 60000, label: '1m' },
@@ -533,6 +542,7 @@ export function SettingsPage({
               <Field.Root>
                 <Field.Label color="var(--text-secondary)">Max turns</Field.Label>
                 <StepSlider
+                  label="Max turns"
                   steps={[
                     { value: 10, label: '10' },
                     { value: 25, label: '25' },
@@ -604,6 +614,7 @@ export function SettingsPage({
                   <Field.Root>
                     <Field.Label color="var(--text-secondary)">Unrestricted timeout</Field.Label>
                     <StepSlider
+                      label="Unrestricted timeout"
                       steps={[
                         { value: 300000, label: '5m' },
                         { value: 600000, label: '10m' },
