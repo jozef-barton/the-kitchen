@@ -939,17 +939,18 @@ export const RecipeContentModelSchema = z.object({
   markdownRepresentation: RecipeMarkdownDataSchema.default({
     markdown: ''
   }),
-  tableRepresentation: RecipeTableDataSchema.default({
+  tableRepresentation: RecipeTableDataSchema.default(() => ({
     columns: [
       {
         id: 'value',
         label: 'Value',
-        emphasis: 'primary'
+        emphasis: 'primary' as const,
+        presentation: 'text' as const
       }
     ],
     rows: [],
     emptyMessage: 'No rows yet.'
-  }),
+  })),
   cardRepresentation: RecipeCardDataSchema.default({
     cards: [],
     emptyMessage: 'No cards yet.'
@@ -1825,7 +1826,7 @@ export type RecipeUiNode =
   | RecipeUiSectionGroupNode
   | RecipeUiTabGroupNode;
 
-export const RecipeUiSectionGroupNodeSchema: z.ZodType<RecipeUiSectionGroupNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeUiSectionGroupNodeSchema: z.ZodType<RecipeUiSectionGroupNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -1837,7 +1838,7 @@ export const RecipeUiSectionGroupNodeSchema: z.ZodType<RecipeUiSectionGroupNode,
     .strict()
 );
 
-export const RecipeUiTabNodeSchema: z.ZodType<RecipeUiTabNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeUiTabNodeSchema: z.ZodType<RecipeUiTabNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -1856,7 +1857,7 @@ export const RecipeUiTabGroupNodeSchema = z
   })
   .strict();
 
-export const RecipeUiNodeSchema: z.ZodType<RecipeUiNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeUiNodeSchema: z.ZodType<RecipeUiNode> = z.lazy(() =>
   z.union([
     RecipeUiCollectionNodeSchema,
     RecipeUiGroupedCollectionNodeSchema,
@@ -2958,7 +2959,7 @@ export type RecipeAppletNode =
   | RecipeAppletLoadingStateNode
   | RecipeAppletSkeletonSectionNode;
 
-export const RecipeAppletTabNodeSchema: z.ZodType<RecipeAppletTabNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletTabNodeSchema: z.ZodType<RecipeAppletTabNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -2968,7 +2969,7 @@ export const RecipeAppletTabNodeSchema: z.ZodType<RecipeAppletTabNode, z.ZodType
     .strict()
 );
 
-export const RecipeAppletStackNodeSchema: z.ZodType<RecipeAppletStackNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletStackNodeSchema: z.ZodType<RecipeAppletStackNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -2979,7 +2980,7 @@ export const RecipeAppletStackNodeSchema: z.ZodType<RecipeAppletStackNode, z.Zod
     .strict()
 );
 
-export const RecipeAppletInlineNodeSchema: z.ZodType<RecipeAppletInlineNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletInlineNodeSchema: z.ZodType<RecipeAppletInlineNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -2991,7 +2992,7 @@ export const RecipeAppletInlineNodeSchema: z.ZodType<RecipeAppletInlineNode, z.Z
     .strict()
 );
 
-export const RecipeAppletGridNodeSchema: z.ZodType<RecipeAppletGridNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletGridNodeSchema: z.ZodType<RecipeAppletGridNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -3003,7 +3004,7 @@ export const RecipeAppletGridNodeSchema: z.ZodType<RecipeAppletGridNode, z.ZodTy
     .strict()
 );
 
-export const RecipeAppletCardNodeSchema: z.ZodType<RecipeAppletCardNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletCardNodeSchema: z.ZodType<RecipeAppletCardNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -3065,7 +3066,7 @@ export const RecipeAppletStatNodeSchema = z
   })
   .strict();
 
-export const RecipeAppletTabsNodeSchema: z.ZodType<RecipeAppletTabsNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletTabsNodeSchema: z.ZodType<RecipeAppletTabsNode> = z.lazy(() =>
   z
     .object({
       id: z.string().min(1),
@@ -3236,7 +3237,7 @@ export const RecipeAppletSkeletonSectionNodeSchema = z
   })
   .strict();
 
-export const RecipeAppletNodeSchema: z.ZodType<RecipeAppletNode, z.ZodTypeDef, unknown> = z.lazy(() =>
+export const RecipeAppletNodeSchema: z.ZodType<RecipeAppletNode> = z.lazy(() =>
   z.union([
     RecipeAppletStackNodeSchema,
     RecipeAppletInlineNodeSchema,
@@ -3519,10 +3520,11 @@ const rawRecipeSchema = z.object({
   }),
   lastUpdatedBy: z.string().min(1).optional(),
   source: RecipeSourceSchema.default('user'),
-  metadata: RecipeMetadataSchema.default({
+  metadata: RecipeMetadataSchema.default(() => ({
     changeVersion: 1,
-    auditTags: []
-  }),
+    auditTags: [],
+    homeRecipe: false
+  })),
   renderMode: RecipeRenderModeSchema.default('legacy_content_v1'),
   dynamic: RecipeDynamicStateSchema.optional()
 });

@@ -18,13 +18,13 @@ export const RecipeSpecSchema = z.object({
     summary: z.string().default(''),
     steps: z.array(z.string()).default([]),
     guardrails: z.array(z.string()).default([])
-  }).default({}),
+  }).default(() => ({ summary: '', steps: [], guardrails: [] })),
   updateRules: z.object({
     patchPrefer: z.array(z.string()).default([]),
     replaceTriggers: z.array(z.string()).default([]),
     persistAcrossUpdates: z.array(z.string()).default([]),
     stableRegions: z.array(z.string()).default([])
-  }).default({})
+  }).default(() => ({ patchPrefer: [], replaceTriggers: [], persistAcrossUpdates: [], stableRegions: [] }))
 });
 export type RecipeSpec = z.infer<typeof RecipeSpecSchema>;
 
@@ -36,9 +36,9 @@ export const RecipeVersionEntrySchema = z.object({
 export type RecipeVersionEntry = z.infer<typeof RecipeVersionEntrySchema>;
 
 export const RecipeVersionSchema = RecipeVersionEntrySchema.extend({
-  manifest: z.record(z.unknown()),
-  runtime: z.record(z.unknown()),
-  spec: z.record(z.unknown()).nullable().default(null),
-  fixture: z.record(z.unknown()).nullable().default(null)
+  manifest: z.record(z.string(), z.unknown()),
+  runtime: z.record(z.string(), z.unknown()),
+  spec: z.record(z.string(), z.unknown()).nullable().default(null),
+  fixture: z.record(z.string(), z.unknown()).nullable().default(null)
 });
 export type RecipeVersion = z.infer<typeof RecipeVersionSchema>;

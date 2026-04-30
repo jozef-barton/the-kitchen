@@ -489,9 +489,7 @@ export const RecipeTemplateSectionSchema: z.ZodType<
       columns: Array<{ key: string; label: string }>;
       rows: Array<Record<string, string | number | null>>;
       filename?: string;
-    }),
-  z.ZodTypeDef,
-  unknown
+    })
 > = z.lazy(() =>
   z.discriminatedUnion('kind', [
     RecipeTemplateSectionBaseSchema.extend({

@@ -566,7 +566,7 @@ export type ChatStreamEvent =
   | ChatStreamRecipeBuildProgressEvent
   | ChatStreamErrorEvent;
 
-export const ChatStreamEventSchema: z.ZodType<ChatStreamEvent, z.ZodTypeDef, unknown> = z.discriminatedUnion('type', [
+export const ChatStreamEventSchema: z.ZodType<ChatStreamEvent> = z.discriminatedUnion('type', [
   ChatStreamProgressEventSchema,
   ChatStreamActivityEventSchema,
   ChatStreamAssistantSnapshotEventSchema,
