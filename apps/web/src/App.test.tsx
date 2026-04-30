@@ -2357,7 +2357,7 @@ describe('App', () => {
 
     await screen.findByText('Ready for updates.');
     await userEvent.type(screen.getByPlaceholderText('Ask Hermes something real.'), 'Update this recipe live.');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: /send/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('session-recipe-content-scroll')).toHaveTextContent('Updated while chatting');
@@ -2832,7 +2832,7 @@ describe('App', () => {
     expect(activityPane).toHaveTextContent(/⚠️\s+Reached maximum iterations/);
 
     await userEvent.type(screen.getByPlaceholderText('Ask Hermes something real.'), 'How many unread emails do I have?');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: /send/i }));
 
     await waitFor(
       () => {
@@ -3004,7 +3004,7 @@ describe('App', () => {
     expect(activityPane).not.toHaveTextContent('new cli trace');
 
     await userEvent.type(screen.getByPlaceholderText('Ask Hermes something real.'), 'Newest request');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: /send/i }));
 
     await waitFor(() => {
       expect(activityPane).toHaveTextContent('python scripts/check_mail.py');
@@ -3293,7 +3293,7 @@ describe('App', () => {
 
     await screen.findByText('Earlier answer');
     await userEvent.type(screen.getByPlaceholderText('Ask Hermes something real.'), 'Check inbox now');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: /send/i }));
 
     const activityPane = await screen.findByTestId('chat-activity-pane');
     expect(await within(activityPane).findByText('Hermes completed the active request.')).toBeInTheDocument();
@@ -3400,7 +3400,7 @@ describe('App', () => {
       expect(composerInput).not.toBeDisabled();
     });
     await userEvent.type(composerInput, 'Run the inbox check');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await userEvent.click(screen.getByRole('button', { name: /send/i }));
 
     expect(await screen.findByText('The inbox check completed.')).toBeInTheDocument();
     const activityPane = await screen.findByTestId('chat-activity-pane');

@@ -91,6 +91,190 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+  # A11y jobs build the web app once then fan out into 3 parallel projects.
+  # Each project (desktop / mobile / dark) runs its own fixture server in an
+  # isolated VM, so port conflicts are impossible.
+  build-web:
+    name: Build web (a11y)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web app
+        run: pnpm --filter @hermes-recipes/web build
+
+      - name: Upload web dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist-${{ github.run_id }}
+          path: apps/web/dist/
+          retention-days: 1
+
+  a11y-desktop:
+    name: A11y — desktop (WCAG 2.2 AA)
+    needs: build-web
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download web dist
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist-${{ github.run_id }}
+          path: apps/web/dist/
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run a11y tests (desktop)
+        run: pnpm exec playwright test --project=a11y-desktop
+        env:
+          A11Y_PROJECT: desktop
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report-desktop-${{ github.run_id }}
+          path: |
+            test-results/a11y/desktop.json
+            playwright-report/a11y-desktop/
+          retention-days: 14
+
+  a11y-mobile:
+    name: A11y — mobile (WCAG 2.2 AA)
+    needs: build-web
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download web dist
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist-${{ github.run_id }}
+          path: apps/web/dist/
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run a11y tests (mobile)
+        run: pnpm exec playwright test --project=a11y-mobile
+        env:
+          A11Y_PROJECT: mobile
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report-mobile-${{ github.run_id }}
+          path: |
+            test-results/a11y/mobile.json
+            playwright-report/a11y-mobile/
+          retention-days: 14
+
+  a11y-dark:
+    name: A11y — dark theme (WCAG 2.2 AA)
+    needs: build-web
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download web dist
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist-${{ github.run_id }}
+          path: apps/web/dist/
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run a11y tests (dark theme)
+        run: pnpm exec playwright test --project=a11y-dark
+        env:
+          A11Y_PROJECT: dark
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report-dark-${{ github.run_id }}
+          path: |
+            test-results/a11y/dark.json
+            playwright-report/a11y-dark/
+          retention-days: 14
+
   security:
     name: Security check
     runs-on: ubuntu-latest

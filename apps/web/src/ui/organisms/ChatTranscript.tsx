@@ -69,9 +69,10 @@ export const ChatTranscript = memo(function ChatTranscript({
   }, [assistantDraft, loading, showTypingIndicator, visibleMessages]);
 
   return (
-    <ScrollArea.Root flex="1" minH={0} variant="hover">
+    <ScrollArea.Root flex="1" minH={0} variant="hover" aria-label="Conversation transcript">
       <ScrollArea.Viewport ref={viewportRef} data-testid="chat-transcript-scroll">
-        <Box maxW="740px" mx="auto" w="100%">
+        {/* aria-live="polite" announces new messages to screen readers without interrupting */}
+        <Box maxW="740px" mx="auto" w="100%" aria-live="polite" aria-relevant="additions" aria-atomic="false">
         <VStack align="stretch" gap="6" px={{ base: '3', md: '5' }} pt="4" pb="3">
           {loading ? (
             <TranscriptBubble messageRole="system">

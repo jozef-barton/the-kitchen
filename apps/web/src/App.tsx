@@ -129,7 +129,17 @@ export function App() {
   if (controller.bootstrapStatus === 'loading' && !controller.bootstrap) {
     return (
       <Center h="100dvh" bg="transparent">
-        <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-elevated)" px="8" py="7" boxShadow="var(--shadow-md)">
+        <Box
+          role="status"
+          aria-live="polite"
+          aria-label="Connecting to the local Hermes bridge"
+          rounded="8px"
+          border="1px solid var(--border-subtle)"
+          bg="var(--surface-elevated)"
+          px="8"
+          py="7"
+          boxShadow="var(--shadow-md)"
+        >
           <Text fontWeight="750" color="var(--text-primary)">
             Connecting to the local Hermes bridge…
           </Text>
@@ -143,6 +153,7 @@ export function App() {
     return (
       <Center h="100dvh" bg="transparent">
         <VStack
+          role="alert"
           align="stretch"
           gap="4"
           maxW="560px"
@@ -153,7 +164,7 @@ export function App() {
           px="8"
           py="8"
         >
-          <Text fontSize="2xl" fontWeight="750" color="var(--text-primary)">
+          <Text as="h1" fontSize="2xl" fontWeight="750" color="var(--text-primary)">
             Bridge unavailable
           </Text>
           <Text color="var(--text-secondary)">

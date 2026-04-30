@@ -11,8 +11,8 @@ import { Sidebar } from '../organisms/Sidebar';
 function GatewayBanner({ detail, onDismiss }: { detail: string; onDismiss?: () => void }) {
   const isStopped = /stop|unavail/i.test(detail);
   return (
-    <div className="gateway-banner">
-      <span className="gateway-banner__dot" />
+    <div className="gateway-banner" role="alert" aria-live="assertive" aria-atomic="true">
+      <span className="gateway-banner__dot" aria-hidden="true" />
       <span className="gateway-banner__text">
         {isStopped ? 'Hermes gateway stopped — ' : 'Bridge issue — '}
         {detail}
@@ -20,6 +20,7 @@ function GatewayBanner({ detail, onDismiss }: { detail: string; onDismiss?: () =
       {onDismiss ? (
         <button
           type="button"
+          aria-label="Dismiss bridge issue notification"
           onClick={onDismiss}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -55,6 +56,7 @@ function ConnectionIndicator({ status }: { status: string }) {
     return (
       <Box
         as="span"
+        role="img"
         className={`status-dot status-dot--connected${pulse ? ' status-dot--connected-pulse' : ''}`}
         title="Connected"
         aria-label="Connected"
@@ -65,6 +67,7 @@ function ConnectionIndicator({ status }: { status: string }) {
     return (
       <Box
         as="span"
+        role="img"
         className="status-dot status-dot--reconnecting"
         title={status}
         aria-label={status}
@@ -140,8 +143,40 @@ export function ShellLayout({
       overflow="hidden"
       bg="var(--shell-bg)"
     >
+      {/* Skip to main content — first focusable element on the page */}
+      <a
+        href="#main-content"
+        className="skip-link"
+        style={{
+          position: 'absolute',
+          top: '-999px',
+          left: '-999px',
+          zIndex: 9999,
+          padding: '8px 16px',
+          background: 'var(--accent)',
+          color: 'var(--accent-contrast)',
+          borderRadius: '4px',
+          fontSize: '14px',
+          fontWeight: 600,
+          textDecoration: 'none',
+          outline: 'none',
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.top = '8px';
+          e.currentTarget.style.left = '8px';
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.top = '-999px';
+          e.currentTarget.style.left = '-999px';
+        }}
+      >
+        Skip to main content
+      </a>
+
       {/* Desktop sidebar */}
       <Box
+        as="nav"
+        aria-label="Main navigation"
         h={{ base: 0, lg: '100dvh' }}
         minH={0}
         overflow="hidden"
@@ -207,6 +242,7 @@ export function ShellLayout({
       >
         {/* ── Top bar ── */}
         <Box
+          as="header"
           flexShrink={0}
           h="var(--top-bar-height)"
           px="3"
@@ -277,6 +313,8 @@ export function ShellLayout({
         {versionMismatch ? (
           <Alert.Root
             status="warning"
+            role="alert"
+            aria-live="polite"
             borderRadius="0"
             borderBottom="1px solid rgba(234, 179, 8, 0.22)"
             bg="var(--surface-warning)"
@@ -293,7 +331,17 @@ export function ShellLayout({
         {tabBar ?? null}
 
         {/* Main content — noGutter for chat, padded for all other pages */}
-        <Box flex="1" minH={0} overflow="hidden" display="flex" flexDirection="column">
+        <Box
+          as="main"
+          id="main-content"
+          tabIndex={-1}
+          flex="1"
+          minH={0}
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
+          _focusVisible={{ outline: 'none' }}
+        >
           {noGutter ? children : (
             <Box
               flex="1"

@@ -1,9 +1,28 @@
-import { Text } from '@chakra-ui/react';
+import { Box, HStack } from '@chakra-ui/react';
 import type { JobEvent } from '../../../lib/coding-api';
 
 type CostEvent = Extract<JobEvent, { type: 'job.cost_update' }>;
 
 interface Props { latestCost: CostEvent | null; startedAt?: number; }
+
+function MetaTag({ label, title }: { label: string; title?: string }) {
+  return (
+    <Box
+      as="span"
+      rounded="full"
+      border="1px solid"
+      borderColor="var(--border-subtle)"
+      px="2"
+      py="0.5"
+      fontSize="11px"
+      color="var(--text-muted)"
+      title={title}
+      lineHeight="1.4"
+    >
+      {label}
+    </Box>
+  );
+}
 
 export function CostBadge({ latestCost, startedAt }: Props) {
   if (!latestCost) return null;
@@ -19,12 +38,14 @@ export function CostBadge({ latestCost, startedAt }: Props) {
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
   const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-  const tooltip = cacheRead > 0
-    ? `${cumulative.tokensIn.toLocaleString()} in (${cacheRead.toLocaleString()} cached) · ${cumulative.tokensOut.toLocaleString()} out · $${usd.toFixed(4)}`
+  const tokenTooltip = cacheRead > 0
+    ? `${cumulative.tokensIn.toLocaleString()} in (${cacheRead.toLocaleString()} cached) · ${cumulative.tokensOut.toLocaleString()} out`
     : undefined;
   return (
-    <Text fontSize="11px" color="var(--text-muted)" title={tooltip}>
-      {timeStr} · {tokens.toLocaleString()} tokens · ~${usd.toFixed(4)}
-    </Text>
+    <HStack gap="1.5" flexWrap="wrap">
+      <MetaTag label={timeStr} />
+      <MetaTag label={`${tokens.toLocaleString()} tokens`} title={tokenTooltip} />
+      <MetaTag label={`~$${usd.toFixed(4)}`} />
+    </HStack>
   );
 }

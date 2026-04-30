@@ -71,6 +71,7 @@ export function ChatComposer({
   return (
     <Box
       as="form"
+      aria-label="Chat message composer"
       position="relative"
       rounded="12px"
       border="1px solid"
@@ -177,6 +178,7 @@ export function ChatComposer({
         />
         <Textarea
           flex="1"
+          aria-label="Message"
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}
           placeholder={draggingOver ? 'Drop files to attach…' : 'Ask Hermes something real.'}
@@ -204,6 +206,7 @@ export function ChatComposer({
         />
         <Button
           type="submit"
+          aria-label={sending ? 'Sending message…' : 'Send message'}
           size="xs"
           h="7"
           px="3"
