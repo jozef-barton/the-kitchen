@@ -30,7 +30,7 @@ import {
   sanitizeImportedMessageContent
 } from '../transcript-runtime';
 
-export const HERMES_EXPECTED_VERSION = '0.11.0';
+export const HERMES_EXPECTED_VERSION = '0.12.0';
 
 interface HermesProviderMeta {
   displayName: string;

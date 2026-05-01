@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/jozef-barton/the-kitchen/actions/workflows/ci.yml/badge.svg)](https://github.com/jozef-barton/the-kitchen/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)](https://nodejs.org)
-[![Hermes CLI](https://img.shields.io/badge/hermes--cli-%3E%3D0.9.0-brightgreen)](https://hermes-agent.nousresearch.com/)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.11-brightgreen)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)](https://pnpm.io)
+[![Hermes CLI](https://img.shields.io/badge/hermes--cli-0.12.x-brightgreen)](https://hermes-agent.nousresearch.com/)
 
 A local-first browser frontend for [Hermes Agent](https://hermes-agent.nousresearch.com/) — streaming chat, structured recipe workspaces, provider settings, and a recipe template gallery.
 
@@ -11,14 +12,15 @@ A local-first browser frontend for [Hermes Agent](https://hermes-agent.nousresea
 
 ## Requirements
 
-- **Node.js 22.5 or later** — the bridge uses the built-in `node:sqlite` module added in v22.5. Node 24 LTS is recommended.
+- **Node.js 22.11 or later** — the bridge uses the built-in `node:sqlite` module. Node 24 LTS is recommended.
   - Check: `node --version`
   - Install via [nvm](https://github.com/nvm-sh/nvm): `nvm install 22 && nvm use 22`, or download from [nodejs.org](https://nodejs.org)
 - **pnpm 10+** — `npm install -g pnpm`
-- **Hermes Agent CLI v0.9.0+** — install from [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com/)
+- **Hermes Agent CLI 0.12.x** — install from [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com/)
   - Quick install (Linux/macOS/WSL2): `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`
-  - Verify: `hermes --version`
+  - Verify: `hermes --version` (must report `0.12.0` or later 0.12.x)
   - First-time setup: `hermes setup`
+  - The bridge pins to a specific Hermes major+minor; mismatched versions surface a banner in the UI.
 
 > **Important:** Clone or extract this repo to a path with **no spaces**. A path like `~/Desktop/the kitchen/` causes subprocess errors. Use `~/dev/the-kitchen/` or similar.
 
@@ -75,12 +77,21 @@ Default database location:
 - Open Settings and configure a provider API key
 - Run `hermes config show` to verify your current model and provider
 
-## How it works
+## Features
 
-- **Chat** — streaming responses from Hermes via SSE. Full Markdown rendering with syntax highlighting, tables, and lists.
-- **Recipes** — structured workspaces Hermes generates during chat. Select a template from the Recipe Book tab, or let Hermes generate one based on your request. Recipes are attached to sessions and persist across restarts.
-- **Settings** — configure Hermes providers with step-by-step guided setup for every supported provider, including API key links and example `hermes config set` commands.
-- **Coding** — agentic coding jobs backed by Claude Code or Codex. See [Coding agents](#coding-agents) below.
+| Surface | Route | What it does |
+|---|---|---|
+| **Chat** | `/` | Streaming Hermes responses over SSE with Markdown, syntax highlighting, tables, and image/file attachments. |
+| **Sessions** | `/sessions` | Browse, resume, and delete real Hermes sessions. Search by title, tag, or transcript content. |
+| **Jobs** | `/jobs` | Cron jobs and one-shot job runs surfaced from Hermes — status, history, and elapsed time. |
+| **Coding** | `/coding` | Agentic coding sessions via Claude Code or Codex. Repos, jobs, integrations. See [Coding agents](#coding-agents). |
+| **Tools** | `/tools` · `/tools/history` | Tool catalog (read-only) plus a reviewed-execution audit log. |
+| **Skills** | `/skills` · `/skills/finder` | Hermes skill library plus a finder for installed and bundled skills. |
+| **Recipes** | `/recipes` · `/recipes/ingredients` | Structured workspaces Hermes builds during chat. Pick a template from the Recipe Book or let Hermes choose one. Recipes attach to sessions and survive restart. |
+| **Settings** | `/settings/{models,persona,access,audit}` | Guided provider setup, persona/profile editing, capability boundaries, and an action audit trail. |
+| **Remote access** | `/remote-access` | Pairing UX for accessing the bridge from another device on your LAN. |
+
+All persistence is local SQLite. The bridge binds to `127.0.0.1` only and accepts same-origin requests.
 
 ## Coding agents
 
@@ -109,8 +120,6 @@ The `/coding` screen runs long-lived agentic coding sessions via Claude Code or 
 **Disconnect vs. Delete:**
 - **Disable in app** (toggle in the Integrations tab) — stops the Kitchen from offering the agent for new jobs, but does *not* sign out of the CLI. Your terminal sessions remain authenticated.
 - **Delete** (3-dot menu → Delete) — runs `claude auth logout` / `codex logout` and signs you out everywhere. You'll need to re-authenticate from the terminal.
-
-All state persists in a local SQLite database. The bridge accepts connections from `localhost` / `127.0.0.1` only.
 
 ## Architecture
 
