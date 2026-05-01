@@ -322,7 +322,13 @@ export function App() {
         }
       >
         {controller.page === 'dashboard' ? (
-          <DashboardPage />
+          <DashboardPage
+            activeProfileId={controller.activeProfileId}
+            jobsResponse={controller.jobsResponse}
+            jobsLoading={controller.jobsLoading}
+            onOpenSession={(sessionId) => { navigate(`/session/${sessionId}`); void controller.openSession(sessionId); }}
+            onOpenPage={(page) => { navigate(pageToPath(page)); void controller.openPage(page); }}
+          />
         ) : null}
 
         {controller.page === 'chat' ? (

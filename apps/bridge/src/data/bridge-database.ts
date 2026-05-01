@@ -4660,6 +4660,116 @@ export class BridgeDatabase {
     };
   }
 
+  loadDashboard(profileId: string, now: Date) {
+    // Bucket messages by ISO date (UTC) for the last 90 days. SQLite's date()
+    // works on ISO 8601 timestamps so a TEXT created_at column is fine.
+    const activityRows = this.database
+      .prepare(
+        `SELECT date(m.created_at) AS day, COUNT(*) AS msg_count
+         FROM messages m
+         JOIN session_profile_associations spa ON spa.session_id = m.session_id
+         WHERE spa.profile_id = ?
+           AND m.created_at >= date(?, '-89 days')
+         GROUP BY date(m.created_at)
+         ORDER BY day ASC`
+      )
+      .all(profileId, now.toISOString()) as { day: string; msg_count: number }[];
+
+    const dayMap = new Map<string, number>();
+    for (const row of activityRows) dayMap.set(row.day, row.msg_count);
+
+    const days: { date: string; messageCount: number }[] = [];
+    for (let i = 89; i >= 0; i -= 1) {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ date: key, messageCount: dayMap.get(key) ?? 0 });
+    }
+
+    const topSessionRows = this.database
+      .prepare(
+        `SELECT s.id AS id,
+                COALESCE(s.title_override, s.title) AS title,
+                s.last_updated_at AS last_updated_at,
+                COUNT(m.id) AS msg_count
+         FROM sessions s
+         JOIN session_profile_associations spa ON spa.session_id = s.id
+         JOIN messages m ON m.session_id = s.id
+         WHERE spa.profile_id = ?
+           AND s.deleted_at IS NULL
+           AND m.created_at >= date(?, '-6 days')
+         GROUP BY s.id
+         ORDER BY msg_count DESC, s.last_updated_at DESC
+         LIMIT 5`
+      )
+      .all(profileId, now.toISOString()) as {
+        id: string;
+        title: string;
+        last_updated_at: string;
+        msg_count: number;
+      }[];
+
+    const topSessions = topSessionRows.map((row) => ({
+      sessionId: row.id,
+      title: row.title,
+      messageCount: row.msg_count,
+      lastUpdatedAt: row.last_updated_at
+    }));
+
+    const totalSessionsRow = this.database
+      .prepare(
+        `SELECT COUNT(*) AS n
+         FROM sessions s
+         JOIN session_profile_associations spa ON spa.session_id = s.id
+         WHERE spa.profile_id = ? AND s.deleted_at IS NULL`
+      )
+      .get(profileId) as { n: number } | undefined;
+
+    // Streak math: derive from the per-day activity. Current streak = consecutive
+    // active days ending today (or yesterday — gives a one-day grace window).
+    const last30 = days.slice(-30);
+    const activeDaysLast30 = last30.filter((d) => d.messageCount > 0).length;
+    const totalMessagesLast30 = last30.reduce((s, d) => s + d.messageCount, 0);
+    const avgMessagesPerActiveDay =
+      activeDaysLast30 === 0 ? 0 : Math.round((totalMessagesLast30 / activeDaysLast30) * 10) / 10;
+
+    let longestStreakDays = 0;
+    let runStreak = 0;
+    for (const d of days) {
+      if (d.messageCount > 0) {
+        runStreak += 1;
+        if (runStreak > longestStreakDays) longestStreakDays = runStreak;
+      } else {
+        runStreak = 0;
+      }
+    }
+
+    let currentStreakDays = 0;
+    for (let i = days.length - 1; i >= 0; i -= 1) {
+      if (days[i].messageCount > 0) {
+        currentStreakDays += 1;
+      } else if (i === days.length - 1) {
+        // No activity today — peek yesterday and resume counting only if yesterday is active.
+        continue;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      activity: days,
+      topSessions,
+      streak: {
+        currentStreakDays,
+        longestStreakDays,
+        activeDaysLast30,
+        avgMessagesPerActiveDay
+      },
+      totalSessions: totalSessionsRow?.n ?? 0,
+      totalMessagesLast30
+    };
+  }
+
   replaceTools(profileId: string, tools: Tool[]) {
     this.database.prepare('DELETE FROM tools WHERE source = ? AND profile_id IS ?').run('hermes', profileId);
     const insertTool = this.database.prepare(

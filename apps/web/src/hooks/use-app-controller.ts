@@ -1485,7 +1485,10 @@ export function useAppController() {
   }, [activeProfileId, bootstrapStatus, loadSessions, page, sessionsPage, submittedSessionsQuery]);
 
   useEffect(() => {
-    if (bootstrapStatus !== 'ready' || page !== 'jobs' || !activeProfileId) {
+    if (bootstrapStatus !== 'ready' || !activeProfileId) {
+      return;
+    }
+    if (page !== 'jobs' && page !== 'dashboard') {
       return;
     }
 

@@ -641,6 +641,15 @@ export function createBridgeServer(options: {
         return;
       }
 
+      if (request.method === 'GET' && pathname === '/api/dashboard') {
+        const profileId = searchParams.get('profileId');
+        if (!profileId) {
+          throw new BridgeError(400, 'PROFILE_REQUIRED', 'profileId is required.');
+        }
+        sendJson(response, 200, await bridge.getDashboard(profileId), originDecision.allowOrigin);
+        return;
+      }
+
       if (request.method === 'GET' && pathname === '/api/tools') {
         const profileId = searchParams.get('profileId');
         if (!profileId) {

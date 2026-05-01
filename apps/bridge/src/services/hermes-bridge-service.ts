@@ -77,6 +77,7 @@ import type {
   ToolExecutionResolveRequest,
   ToolHistoryResponse,
   ToolsResponse,
+  DashboardResponse,
   UiState,
   UpdateRecipeRequest,
   UpdateRuntimeModelConfigRequest,
@@ -112,6 +113,7 @@ import {
   DeleteSkillRequestSchema,
   JobsFreshnessSchema,
   JobsResponseSchema,
+  DashboardResponseSchema,
   ModelProviderResponseSchema,
   OpenRecipeChatResponseSchema,
   RenameSessionRequestSchema,
@@ -12362,6 +12364,17 @@ Emit one corrected TSX module now.`;
         items: cachedJobs.items
       });
     }
+  }
+
+  async getDashboard(profileId: string): Promise<DashboardResponse> {
+    const profile = await this.ensureProfile(profileId);
+    const generatedAt = this.now();
+    const data = this.options.database.loadDashboard(profile.id, new Date(generatedAt));
+    return DashboardResponseSchema.parse({
+      generatedAt,
+      profileId: profile.id,
+      ...data
+    });
   }
 
   async getTools(profileId: string): Promise<ToolsResponse> {

@@ -38,6 +38,7 @@ import {
   ResolveImagesResponseSchema,
   SessionDeletionResponseSchema,
   JobsResponseSchema,
+  DashboardResponseSchema,
   ModelProviderResponseSchema,
   ProfilesMetricsResponseSchema,
   ProfilesResponseSchema,
@@ -378,6 +379,10 @@ export async function getAuditEvents(options: {
 
 export async function getJobs(profileId: string) {
   return parseJsonResponse(await apiFetch(`/api/jobs?profileId=${encodeURIComponent(profileId)}`), JobsResponseSchema);
+}
+
+export async function getDashboard(profileId: string) {
+  return parseJsonResponse(await apiFetch(`/api/dashboard?profileId=${encodeURIComponent(profileId)}`), DashboardResponseSchema);
 }
 
 export async function getTools(profileId: string) {
