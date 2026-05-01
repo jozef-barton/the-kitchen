@@ -11,65 +11,65 @@ export declare function synchronizeRecipeContentModel(options?: {
 export declare function isRecipeContentSynchronized(content: RecipeContentModel): boolean;
 export declare function isRecipeContentMeaningful(content: RecipeContentModel): boolean;
 export declare function createDefaultRecipeContentModel(format?: RecipeContentFormat): {
+    activeView: "table" | "card" | "markdown";
     entries: {
-        md: string;
         id: string;
-        metadata: Record<string, unknown>;
+        md: string;
+        row: Record<string, string | number | boolean | {
+            kind: "link" | "text" | "email";
+            text?: string | undefined;
+            href?: string | undefined;
+            imageUrl?: string | undefined;
+            imageAlt?: string | undefined;
+        } | null>;
         card: {
-            links: {
-                label: string;
-                kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-                url: string;
-            }[];
             id: string;
             title: string;
+            badges: string[];
             metadata: {
-                value: string;
                 label: string;
+                value: string;
                 link?: {
                     label: string;
-                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                     url: string;
+                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                 } | undefined;
             }[];
-            badges: string[];
+            links: {
+                label: string;
+                url: string;
+                kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+            }[];
+            description?: string | undefined;
+            eyebrow?: string | undefined;
             image?: {
                 url: string;
                 alt?: string | undefined;
             } | undefined;
-            eyebrow?: string | undefined;
-            description?: string | undefined;
         };
-        row: Record<string, string | number | boolean | {
-            kind: "link" | "text" | "email";
-            href?: string | undefined;
-            text?: string | undefined;
-            imageUrl?: string | undefined;
-            imageAlt?: string | undefined;
-        } | null>;
+        metadata: Record<string, unknown>;
         source?: {
-            kind: string;
-            metadata: Record<string, unknown>;
             integration: string;
+            kind: string;
             resourceId: string;
+            metadata: Record<string, unknown>;
             label?: string | undefined;
         } | undefined;
     }[];
-    activeView: "table" | "card" | "markdown";
     markdownRepresentation: {
         markdown: string;
     };
     tableRepresentation: {
         columns: {
-            label: string;
             id: string;
-            emphasis: "status" | "none" | "primary";
+            label: string;
+            emphasis: "none" | "status" | "primary";
             presentation: "link" | "image" | "text" | "email";
         }[];
         rows: Record<string, string | number | boolean | {
             kind: "link" | "text" | "email";
-            href?: string | undefined;
             text?: string | undefined;
+            href?: string | undefined;
             imageUrl?: string | undefined;
             imageAlt?: string | undefined;
         } | null>[];
@@ -77,29 +77,29 @@ export declare function createDefaultRecipeContentModel(format?: RecipeContentFo
     };
     cardRepresentation: {
         cards: {
-            links: {
-                label: string;
-                kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-                url: string;
-            }[];
             id: string;
             title: string;
+            badges: string[];
             metadata: {
-                value: string;
                 label: string;
+                value: string;
                 link?: {
                     label: string;
-                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                     url: string;
+                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                 } | undefined;
             }[];
-            badges: string[];
+            links: {
+                label: string;
+                url: string;
+                kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+            }[];
+            description?: string | undefined;
+            eyebrow?: string | undefined;
             image?: {
                 url: string;
                 alt?: string | undefined;
             } | undefined;
-            eyebrow?: string | undefined;
-            description?: string | undefined;
         }[];
         emptyMessage?: string | undefined;
     };
@@ -115,110 +115,110 @@ export declare function getRecipeContentTab(input: Pick<Recipe, 'tabs'> | Recipe
 export declare function getRecipeContentActiveView(input: Pick<Recipe, 'tabs'> | RecipeTab[]): "table" | "card" | "markdown";
 export declare function getRecipeContentFormat(input: Pick<Recipe, 'tabs'> | RecipeTab[]): "table" | "card" | "markdown";
 export declare function getRecipeContentEntries(input: Pick<Recipe, 'tabs'> | RecipeTab[] | RecipeContentTab): {
-    md: string;
     id: string;
-    metadata: Record<string, unknown>;
+    md: string;
+    row: Record<string, string | number | boolean | {
+        kind: "link" | "text" | "email";
+        text?: string | undefined;
+        href?: string | undefined;
+        imageUrl?: string | undefined;
+        imageAlt?: string | undefined;
+    } | null>;
     card: {
-        links: {
-            label: string;
-            kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-            url: string;
-        }[];
         id: string;
         title: string;
+        badges: string[];
         metadata: {
-            value: string;
             label: string;
+            value: string;
             link?: {
                 label: string;
-                kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                 url: string;
+                kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
             } | undefined;
         }[];
-        badges: string[];
+        links: {
+            label: string;
+            url: string;
+            kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+        }[];
+        description?: string | undefined;
+        eyebrow?: string | undefined;
         image?: {
             url: string;
             alt?: string | undefined;
         } | undefined;
-        eyebrow?: string | undefined;
-        description?: string | undefined;
     };
-    row: Record<string, string | number | boolean | {
-        kind: "link" | "text" | "email";
-        href?: string | undefined;
-        text?: string | undefined;
-        imageUrl?: string | undefined;
-        imageAlt?: string | undefined;
-    } | null>;
+    metadata: Record<string, unknown>;
     source?: {
-        kind: string;
-        metadata: Record<string, unknown>;
         integration: string;
+        kind: string;
         resourceId: string;
+        metadata: Record<string, unknown>;
         label?: string | undefined;
     } | undefined;
 }[];
 export declare function replaceRecipeContentEntries(input: Pick<Recipe, 'tabs'> | RecipeTab[], entries: RecipeContentEntry[]): [{
     content: {
+        activeView: "table" | "card" | "markdown";
         entries: {
-            md: string;
             id: string;
-            metadata: Record<string, unknown>;
+            md: string;
+            row: Record<string, string | number | boolean | {
+                kind: "link" | "text" | "email";
+                text?: string | undefined;
+                href?: string | undefined;
+                imageUrl?: string | undefined;
+                imageAlt?: string | undefined;
+            } | null>;
             card: {
-                links: {
-                    label: string;
-                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-                    url: string;
-                }[];
                 id: string;
                 title: string;
+                badges: string[];
                 metadata: {
-                    value: string;
                     label: string;
+                    value: string;
                     link?: {
                         label: string;
-                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                         url: string;
+                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                     } | undefined;
                 }[];
-                badges: string[];
+                links: {
+                    label: string;
+                    url: string;
+                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+                }[];
+                description?: string | undefined;
+                eyebrow?: string | undefined;
                 image?: {
                     url: string;
                     alt?: string | undefined;
                 } | undefined;
-                eyebrow?: string | undefined;
-                description?: string | undefined;
             };
-            row: Record<string, string | number | boolean | {
-                kind: "link" | "text" | "email";
-                href?: string | undefined;
-                text?: string | undefined;
-                imageUrl?: string | undefined;
-                imageAlt?: string | undefined;
-            } | null>;
+            metadata: Record<string, unknown>;
             source?: {
-                kind: string;
-                metadata: Record<string, unknown>;
                 integration: string;
+                kind: string;
                 resourceId: string;
+                metadata: Record<string, unknown>;
                 label?: string | undefined;
             } | undefined;
         }[];
-        activeView: "table" | "card" | "markdown";
         markdownRepresentation: {
             markdown: string;
         };
         tableRepresentation: {
             columns: {
-                label: string;
                 id: string;
-                emphasis: "status" | "none" | "primary";
+                label: string;
+                emphasis: "none" | "status" | "primary";
                 presentation: "link" | "image" | "text" | "email";
             }[];
             rows: Record<string, string | number | boolean | {
                 kind: "link" | "text" | "email";
-                href?: string | undefined;
                 text?: string | undefined;
+                href?: string | undefined;
                 imageUrl?: string | undefined;
                 imageAlt?: string | undefined;
             } | null>[];
@@ -226,29 +226,29 @@ export declare function replaceRecipeContentEntries(input: Pick<Recipe, 'tabs'> 
         };
         cardRepresentation: {
             cards: {
-                links: {
-                    label: string;
-                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-                    url: string;
-                }[];
                 id: string;
                 title: string;
+                badges: string[];
                 metadata: {
-                    value: string;
                     label: string;
+                    value: string;
                     link?: {
                         label: string;
-                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                         url: string;
+                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                     } | undefined;
                 }[];
-                badges: string[];
+                links: {
+                    label: string;
+                    url: string;
+                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+                }[];
+                description?: string | undefined;
+                eyebrow?: string | undefined;
                 image?: {
                     url: string;
                     alt?: string | undefined;
                 } | undefined;
-                eyebrow?: string | undefined;
-                description?: string | undefined;
             }[];
             emptyMessage?: string | undefined;
         };
@@ -259,82 +259,81 @@ export declare function replaceRecipeContentEntries(input: Pick<Recipe, 'tabs'> 
             entryCount: number;
         };
     };
-    label: string;
-    kind: "content";
     id: "content";
+    kind: "content";
+    label: string;
     metadata: Record<string, unknown>;
 }, ...{
-    label: string;
-    kind: string;
     id: string;
+    kind: string;
+    label: string;
     data: Record<string, unknown>;
     metadata: Record<string, unknown>;
 }[]];
 export declare function removeRecipeContentEntries(input: Pick<Recipe, 'tabs'> | RecipeTab[], entryIds: string[]): ({
-    label: string;
-    kind: "content";
     id: "content";
-    metadata: Record<string, unknown>;
+    kind: "content";
+    label: string;
     content: {
+        activeView: "table" | "card" | "markdown";
         entries: {
-            md: string;
             id: string;
-            metadata: Record<string, unknown>;
+            md: string;
+            row: Record<string, string | number | boolean | {
+                kind: "link" | "text" | "email";
+                text?: string | undefined;
+                href?: string | undefined;
+                imageUrl?: string | undefined;
+                imageAlt?: string | undefined;
+            } | null>;
             card: {
-                links: {
-                    label: string;
-                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-                    url: string;
-                }[];
                 id: string;
                 title: string;
+                badges: string[];
                 metadata: {
-                    value: string;
                     label: string;
+                    value: string;
                     link?: {
                         label: string;
-                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                         url: string;
+                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                     } | undefined;
                 }[];
-                badges: string[];
+                links: {
+                    label: string;
+                    url: string;
+                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+                }[];
+                description?: string | undefined;
+                eyebrow?: string | undefined;
                 image?: {
                     url: string;
                     alt?: string | undefined;
                 } | undefined;
-                eyebrow?: string | undefined;
-                description?: string | undefined;
             };
-            row: Record<string, string | number | boolean | {
-                kind: "link" | "text" | "email";
-                href?: string | undefined;
-                text?: string | undefined;
-                imageUrl?: string | undefined;
-                imageAlt?: string | undefined;
-            } | null>;
+            metadata: Record<string, unknown>;
             source?: {
-                kind: string;
-                metadata: Record<string, unknown>;
                 integration: string;
+                kind: string;
                 resourceId: string;
+                metadata: Record<string, unknown>;
                 label?: string | undefined;
             } | undefined;
         }[];
-        activeView: "table" | "card" | "markdown";
         markdownRepresentation: {
             markdown: string;
         };
         tableRepresentation: {
             columns: {
-                label: string;
                 id: string;
-                emphasis: "status" | "none" | "primary";
+                label: string;
+                emphasis: "none" | "status" | "primary";
                 presentation: "link" | "image" | "text" | "email";
             }[];
             rows: Record<string, string | number | boolean | {
                 kind: "link" | "text" | "email";
-                href?: string | undefined;
                 text?: string | undefined;
+                href?: string | undefined;
                 imageUrl?: string | undefined;
                 imageAlt?: string | undefined;
             } | null>[];
@@ -342,29 +341,29 @@ export declare function removeRecipeContentEntries(input: Pick<Recipe, 'tabs'> |
         };
         cardRepresentation: {
             cards: {
-                links: {
-                    label: string;
-                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
-                    url: string;
-                }[];
                 id: string;
                 title: string;
+                badges: string[];
                 metadata: {
-                    value: string;
                     label: string;
+                    value: string;
                     link?: {
                         label: string;
-                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                         url: string;
+                        kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
                     } | undefined;
                 }[];
-                badges: string[];
+                links: {
+                    label: string;
+                    url: string;
+                    kind: "map" | "website" | "place" | "booking" | "menu" | "email" | "other";
+                }[];
+                description?: string | undefined;
+                eyebrow?: string | undefined;
                 image?: {
                     url: string;
                     alt?: string | undefined;
                 } | undefined;
-                eyebrow?: string | undefined;
-                description?: string | undefined;
             }[];
             emptyMessage?: string | undefined;
         };
@@ -375,10 +374,11 @@ export declare function removeRecipeContentEntries(input: Pick<Recipe, 'tabs'> |
             entryCount: number;
         };
     };
+    metadata: Record<string, unknown>;
 } | {
-    label: string;
-    kind: string;
     id: string;
+    kind: string;
+    label: string;
     data: Record<string, unknown>;
     metadata: Record<string, unknown>;
 })[];

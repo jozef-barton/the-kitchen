@@ -5,7 +5,7 @@ const OptionalStringSchema = z.preprocess((value) => (value === null ? undefined
 const OptionalTextSchema = z.preprocess((value) => (value === null ? undefined : value), z.string().min(1).optional());
 const OptionalDateTimeSchema = z.preprocess((value) => (value === null ? undefined : value), z.string().datetime().optional());
 export const ThemeModeSchema = z.enum(['dark', 'light']);
-export const AppPageSchema = z.enum(['chat', 'recipes', 'sessions', 'jobs', 'tools', 'skills', 'settings', 'coding']);
+export const AppPageSchema = z.enum(['dashboard', 'chat', 'recipes', 'sessions', 'jobs', 'tools', 'skills', 'settings', 'coding', 'remote-access']);
 export const ToolsTabSchema = z.enum(['all', 'history']);
 export const SpacesTabSchema = z.enum(['recipes', 'history']);
 export const SessionAssociationSourceSchema = z.enum([
@@ -753,17 +753,18 @@ export const RecipeContentModelSchema = z.object({
     markdownRepresentation: RecipeMarkdownDataSchema.default({
         markdown: ''
     }),
-    tableRepresentation: RecipeTableDataSchema.default({
+    tableRepresentation: RecipeTableDataSchema.default(() => ({
         columns: [
             {
                 id: 'value',
                 label: 'Value',
-                emphasis: 'primary'
+                emphasis: 'primary',
+                presentation: 'text'
             }
         ],
         rows: [],
         emptyMessage: 'No rows yet.'
-    }),
+    })),
     cardRepresentation: RecipeCardDataSchema.default({
         cards: [],
         emptyMessage: 'No cards yet.'
@@ -2684,10 +2685,11 @@ const rawRecipeSchema = z.object({
     }),
     lastUpdatedBy: z.string().min(1).optional(),
     source: RecipeSourceSchema.default('user'),
-    metadata: RecipeMetadataSchema.default({
+    metadata: RecipeMetadataSchema.default(() => ({
         changeVersion: 1,
-        auditTags: []
-    }),
+        auditTags: [],
+        homeRecipe: false
+    })),
     renderMode: RecipeRenderModeSchema.default('legacy_content_v1'),
     dynamic: RecipeDynamicStateSchema.optional()
 });

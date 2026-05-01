@@ -7,34 +7,14 @@ export declare const RecipeManifestSchema: z.ZodObject<{
     category: z.ZodString;
     description: z.ZodDefault<z.ZodString>;
     author: z.ZodDefault<z.ZodString>;
-    source: z.ZodDefault<z.ZodEnum<["builtin", "user", "community"]>>;
+    source: z.ZodDefault<z.ZodEnum<{
+        user: "user";
+        builtin: "builtin";
+        community: "community";
+    }>>;
     enabled: z.ZodDefault<z.ZodBoolean>;
     protocolVersion: z.ZodDefault<z.ZodString>;
     createdAt: z.ZodOptional<z.ZodString>;
     updatedAt: z.ZodOptional<z.ZodString>;
-}, "strip", z.ZodTypeAny, {
-    id: string;
-    name: string;
-    description: string;
-    source: "user" | "builtin" | "community";
-    enabled: boolean;
-    category: string;
-    version: string;
-    author: string;
-    protocolVersion: string;
-    createdAt?: string | undefined;
-    updatedAt?: string | undefined;
-}, {
-    id: string;
-    name: string;
-    category: string;
-    description?: string | undefined;
-    source?: "user" | "builtin" | "community" | undefined;
-    createdAt?: string | undefined;
-    enabled?: boolean | undefined;
-    updatedAt?: string | undefined;
-    version?: string | undefined;
-    author?: string | undefined;
-    protocolVersion?: string | undefined;
-}>;
+}, z.core.$strip>;
 export type RecipeManifest = z.infer<typeof RecipeManifestSchema>;

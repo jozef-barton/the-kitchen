@@ -43,6 +43,31 @@ export const JobsResponseSchema = z.object({
     freshness: JobsFreshnessSchema,
     items: z.array(JobSchema)
 });
+export const DashboardActivityDaySchema = z.object({
+    date: z.string(),
+    messageCount: z.number().int().nonnegative()
+});
+export const DashboardTopSessionSchema = z.object({
+    sessionId: z.string(),
+    title: z.string(),
+    messageCount: z.number().int().nonnegative(),
+    lastUpdatedAt: z.string()
+});
+export const DashboardStreakSchema = z.object({
+    currentStreakDays: z.number().int().nonnegative(),
+    longestStreakDays: z.number().int().nonnegative(),
+    activeDaysLast30: z.number().int().nonnegative(),
+    avgMessagesPerActiveDay: z.number().nonnegative()
+});
+export const DashboardResponseSchema = z.object({
+    generatedAt: z.string(),
+    profileId: z.string(),
+    activity: z.array(DashboardActivityDaySchema),
+    topSessions: z.array(DashboardTopSessionSchema),
+    streak: DashboardStreakSchema,
+    totalSessions: z.number().int().nonnegative(),
+    totalMessagesLast30: z.number().int().nonnegative()
+});
 export const ToolsResponseSchema = z.object({
     connection: ConnectionStateSchema,
     items: z.array(ToolSchema)

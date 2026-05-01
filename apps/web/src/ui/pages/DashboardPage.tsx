@@ -19,9 +19,6 @@ import { listJobs, type CodingJob } from '../../lib/coding-api';
 
 // ── Shared helpers ────────────────────────────────────────────────
 
-const SPAN_FULL = { base: 'span 12', md: 'span 12', lg: 'span 12' };
-const SPAN_8 = { base: 'span 12', md: 'span 12', lg: 'span 8' };
-const SPAN_4 = { base: 'span 12', md: 'span 12', lg: 'span 4' };
 const SPAN_6 = { base: 'span 12', md: 'span 12', lg: 'span 6' };
 
 type WidgetCardProps = {
@@ -33,7 +30,7 @@ type WidgetCardProps = {
   children: ReactNode;
 };
 
-function WidgetCard({ title, subtitle, gridColumn = SPAN_FULL, minH = '200px', testId, children }: WidgetCardProps) {
+function WidgetCard({ title, subtitle, gridColumn = SPAN_6, minH = '200px', testId, children }: WidgetCardProps) {
   return (
     <Box
       gridColumn={gridColumn}
@@ -122,139 +119,6 @@ function ChartTooltip({
         </Text>
       ))}
     </Box>
-  );
-}
-
-// ── Activity heatmap ─────────────────────────────────────────────
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function intensityColor(count: number, max: number): string {
-  if (count === 0 || max === 0) return 'var(--surface-2)';
-  const ratio = Math.min(1, count / max);
-  if (ratio < 0.2) return 'color-mix(in srgb, var(--accent) 18%, var(--surface-2))';
-  if (ratio < 0.4) return 'color-mix(in srgb, var(--accent) 35%, var(--surface-2))';
-  if (ratio < 0.6) return 'color-mix(in srgb, var(--accent) 55%, var(--surface-2))';
-  if (ratio < 0.85) return 'color-mix(in srgb, var(--accent) 75%, var(--surface-2))';
-  return 'var(--accent)';
-}
-
-function ActivityHeatmap({ days }: { days: DashboardResponse['activity'] }) {
-  const max = useMemo(() => days.reduce((m, d) => Math.max(m, d.messageCount), 0), [days]);
-  if (days.length === 0) return <EmptyState message="No activity in the last 90 days." />;
-
-  // Build week columns: pad so first column starts on Sunday
-  const firstDate = new Date(days[0].date + 'T00:00:00Z');
-  const leadingBlanks = firstDate.getUTCDay();
-  const cells: ({ date: string; messageCount: number } | null)[] = [
-    ...Array.from({ length: leadingBlanks }, () => null),
-    ...days,
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const weeks: (typeof cells)[] = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
-
-  // Month labels: find first week for each month
-  const monthLabels: { weekIdx: number; label: string }[] = [];
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  let lastMonth = -1;
-  weeks.forEach((week, wi) => {
-    const firstReal = week.find((c) => c !== null);
-    if (firstReal) {
-      const m = new Date(firstReal.date + 'T00:00:00Z').getUTCMonth();
-      if (m !== lastMonth) {
-        monthLabels.push({ weekIdx: wi, label: MONTHS[m] ?? '' });
-        lastMonth = m;
-      }
-    }
-  });
-
-  const CELL = 14;
-  const GAP = 3;
-
-  return (
-    <Flex direction="column" gap="1" h="100%">
-      {/* Month labels row */}
-      <Box position="relative" h="14px" ml="30px" overflowX="hidden">
-        <HStack gap={`${GAP}px`} position="absolute" left={0} top={0}>
-          {weeks.map((_, wi) => {
-            const ml = monthLabels.find((m) => m.weekIdx === wi);
-            return (
-              <Box key={wi} w={`${CELL}px`} flexShrink={0}>
-                {ml ? (
-                  <Text fontSize="10px" color="var(--text-muted)" whiteSpace="nowrap">
-                    {ml.label}
-                  </Text>
-                ) : null}
-              </Box>
-            );
-          })}
-        </HStack>
-      </Box>
-
-      {/* Grid: day-labels on left + cell columns */}
-      <HStack gap={`${GAP}px`} align="start" overflowX="auto" pb="1" flex="1">
-        {/* Day-of-week labels */}
-        <VStack gap={`${GAP}px`} flexShrink={0} mr="1">
-          {DAY_LABELS.map((d) => (
-            <Box key={d} h={`${CELL}px`} w="26px" display="flex" alignItems="center">
-              <Text fontSize="10px" color="var(--text-muted)" lineHeight="1">
-                {d}
-              </Text>
-            </Box>
-          ))}
-        </VStack>
-
-        {/* Week columns */}
-        {weeks.map((week, wi) => (
-          <VStack key={wi} gap={`${GAP}px`} flexShrink={0}>
-            {week.map((cell, di) => {
-              if (!cell) {
-                return <Box key={di} w={`${CELL}px`} h={`${CELL}px`} rounded="2px" bg="transparent" />;
-              }
-              return (
-                <Box
-                  key={di}
-                  w={`${CELL}px`}
-                  h={`${CELL}px`}
-                  rounded="2px"
-                  bg={intensityColor(cell.messageCount, max)}
-                  border="1px solid"
-                  borderColor="var(--border-subtle)"
-                  title={`${cell.date} · ${cell.messageCount} msg${cell.messageCount === 1 ? '' : 's'}`}
-                  cursor="default"
-                  transition="opacity 0.1s"
-                  _hover={{ opacity: 0.8 }}
-                />
-              );
-            })}
-          </VStack>
-        ))}
-      </HStack>
-
-      {/* Legend */}
-      <HStack gap="2" align="center" flexShrink={0} mt="1">
-        <Text fontSize="10px" color="var(--text-muted)">Less</Text>
-        {[0, 1, 2, 3, 4].map((step) => (
-          <Box
-            key={step}
-            w="10px"
-            h="10px"
-            rounded="2px"
-            bg={intensityColor(step, 4)}
-            border="1px solid"
-            borderColor="var(--border-subtle)"
-          />
-        ))}
-        <Text fontSize="10px" color="var(--text-muted)">More</Text>
-        <Box flex="1" />
-        <Text fontSize="10px" color="var(--text-muted)">
-          {max} max/day · {days.reduce((s, d) => s + d.messageCount, 0).toLocaleString()} total
-        </Text>
-      </HStack>
-    </Flex>
   );
 }
 
@@ -689,9 +553,9 @@ function TokenCostRollup({ jobs, loading }: { jobs: CodingJob[] | null; loading:
   const costSeries = costByDay(jobs, 14);
 
   return (
-    <Flex gap="4" h="100%" direction={{ base: 'column', md: 'row' }}>
-      {/* Left: Coding column */}
-      <Flex direction="column" gap="2" flex="1" minW={0}>
+    <Flex gap="3" h="100%" direction="column">
+      {/* Top: Coding section */}
+      <Flex direction="column" gap="2">
         <Text fontSize="11px" fontWeight="600" color="var(--text-secondary)">
           Coding (Claude Code + Codex)
         </Text>
@@ -725,7 +589,7 @@ function TokenCostRollup({ jobs, loading }: { jobs: CodingJob[] | null; loading:
         </HStack>
 
         {/* 14-day cost area chart */}
-        <Box flex="1" minH="80px">
+        <Box h="120px">
           {costSeries.some((d) => d.cost > 0) ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={costSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -778,22 +642,16 @@ function TokenCostRollup({ jobs, loading }: { jobs: CodingJob[] | null; loading:
       </Flex>
 
       {/* Divider */}
-      <Box
-        w={{ base: '100%', md: '1px' }}
-        h={{ base: '1px', md: 'auto' }}
-        bg="var(--border-subtle)"
-        flexShrink={0}
-      />
+      <Box h="1px" bg="var(--border-subtle)" flexShrink={0} />
 
-      {/* Right: Hermes column */}
-      <Flex direction="column" gap="2" flex="1" minW={0}>
+      {/* Bottom: Hermes section */}
+      <Flex direction="column" gap="2">
         <Text fontSize="11px" fontWeight="600" color="var(--text-secondary)">
           Hermes (chat)
         </Text>
 
         <Box
-          flex="1"
-          minH="80px"
+          h="120px"
           rounded="var(--radius-control)"
           border="1px dashed var(--border-subtle)"
           position="relative"
@@ -840,8 +698,6 @@ function TokenCostRollup({ jobs, loading }: { jobs: CodingJob[] | null; loading:
           </Flex>
         </Box>
       </Flex>
-
-      {/* 7-day summary footer — spans both columns */}
     </Flex>
   );
 }
@@ -949,11 +805,11 @@ export function DashboardPage({
             templateColumns="repeat(12, 1fr)"
             gap="3"
           >
-            {/* Row 1: Streak + cadence (4 cols) | Activity heatmap (8 cols) */}
+            {/* Row 1: Streak + cadence (6 cols) | Token + cost rollup (6 cols) */}
             <WidgetCard
               title="Streak + cadence"
               subtitle="Active days, longest run, average"
-              gridColumn={SPAN_4}
+              gridColumn={SPAN_6}
               minH="220px"
               testId="dashboard-widget-streak"
             >
@@ -967,35 +823,16 @@ export function DashboardPage({
             </WidgetCard>
 
             <WidgetCard
-              title="Activity heatmap"
-              subtitle="Last 90 days · message volume per day"
-              gridColumn={SPAN_8}
-              minH="220px"
-              testId="dashboard-widget-activity-heatmap"
-            >
-              {dashboardLoading && !dashboard ? (
-                <LoadingState />
-              ) : dashboard ? (
-                <ActivityHeatmap days={dashboard.activity} />
-              ) : (
-                <EmptyState
-                  message={activeProfileId ? 'Loading…' : 'Pick a profile to see activity.'}
-                />
-              )}
-            </WidgetCard>
-
-            {/* Row 2: Token + cost rollup — full width */}
-            <WidgetCard
               title="Token + cost rollup"
               subtitle="7-day usage · coding jobs telemetry"
-              gridColumn={SPAN_FULL}
-              minH="280px"
+              gridColumn={SPAN_6}
+              minH="220px"
               testId="dashboard-widget-token-cost"
             >
               <TokenCostRollup jobs={codingJobs} loading={codingLoading} />
             </WidgetCard>
 
-            {/* Row 3: Live job ticker (6 cols) + coding jobs (6 cols) */}
+            {/* Row 2: Live job ticker (6 cols) + coding jobs (6 cols) */}
             <WidgetCard
               title="Live job ticker"
               subtitle="Cron jobs sorted by next run"
