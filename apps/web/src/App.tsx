@@ -42,7 +42,7 @@ function pathToSettingsTab(pathname: string): SettingsTabValue {
 }
 
 function pathToPage(pathname: string): AppPage {
-  if (pathname.startsWith('/dashboard')) return 'dashboard';
+  if (pathname === '/' || pathname.startsWith('/dashboard')) return 'dashboard';
   if (pathname.startsWith('/session/') || pathname === '/chat') return 'chat';
   if (pathname.startsWith('/settings')) return 'settings';
   if (pathname.startsWith('/recipes')) return 'recipes';
@@ -52,12 +52,12 @@ function pathToPage(pathname: string): AppPage {
   if (pathname === '/jobs') return 'jobs';
   if (pathname.startsWith('/coding')) return 'coding';
   if (pathname.startsWith('/remote-access')) return 'remote-access';
-  return 'chat';
+  return 'dashboard';
 }
 
 function pageToPath(page: AppPage): string {
   switch (page) {
-    case 'dashboard': return '/dashboard';
+    case 'dashboard': return '/';
     case 'sessions': return '/sessions';
     case 'recipes': return '/recipes';
     case 'tools': return '/tools';
@@ -66,7 +66,7 @@ function pageToPath(page: AppPage): string {
     case 'coding': return '/coding';
     case 'settings': return '/settings';
     case 'remote-access': return '/remote-access';
-    default: return '/';
+    default: return '/chat';
   }
 }
 

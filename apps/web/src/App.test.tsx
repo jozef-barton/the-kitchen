@@ -34,7 +34,7 @@ vi.mock('@hermes-recipes/ui', async () => {
   return {
     HermesUiProvider({ children }: PropsWithChildren) {
       return (
-        <MemoryRouter>
+        <MemoryRouter initialEntries={['/chat']}>
           <ChakraProvider value={defaultSystem}>{children}</ChakraProvider>
         </MemoryRouter>
       );
