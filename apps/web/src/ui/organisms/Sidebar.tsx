@@ -9,7 +9,7 @@ import { ErrorBanner } from '../molecules/ErrorBanner';
 import { SessionRow } from '../molecules/SessionRow';
 import { SessionRenameDialog } from '../molecules/SessionRenameDialog';
 
-type SidebarIconName = 'recipes' | 'sessions' | 'jobs' | 'coding' | 'tools' | 'skills' | 'settings' | 'new-session' | 'search' | 'gear' | 'plus' | 'trash' | 'user' | 'chevron-right' | 'remote-access';
+type SidebarIconName = 'dashboard' | 'recipes' | 'sessions' | 'jobs' | 'coding' | 'tools' | 'skills' | 'settings' | 'new-session' | 'search' | 'gear' | 'plus' | 'trash' | 'user' | 'chevron-right' | 'remote-access';
 
 function CollapseIcon() {
   const Svg = chakra('svg');
@@ -31,6 +31,7 @@ function ExpandIcon() {
 
 /* All nav items in a single flat list */
 const allNav: Array<{ page: AppPage; label: string; icon: SidebarIconName; shortcut?: string; requiresRuntime: boolean }> = [
+  { page: 'dashboard', label: 'Dashboard', icon: 'dashboard', requiresRuntime: false },
   { page: 'sessions', label: 'All sessions', icon: 'sessions', shortcut: '⌘⇧S', requiresRuntime: true },
   { page: 'recipes', label: 'Recipes', icon: 'recipes', shortcut: '⌘R', requiresRuntime: false },
   { page: 'coding', label: 'Coding', icon: 'coding', requiresRuntime: false },
@@ -747,6 +748,12 @@ function SidebarIcon({ name, size = 'sm' }: { name: SidebarIconName; size?: 'sm'
   const Svg = chakra('svg');
   const content = (() => {
     switch (name) {
+      case 'dashboard':
+        return (
+          <>
+            <path d="M2.5 2.5h4.5v6H2.5zM9 2.5h4.5v3.5H9zM9 8h4.5v5.5H9zM2.5 10h4.5v3.5H2.5z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </>
+        );
       case 'new-session':
         return (
           <>

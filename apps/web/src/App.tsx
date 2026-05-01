@@ -5,6 +5,7 @@ import { testModelConfig } from './lib/api';
 import { Box, Button, Center, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
 import { useAppController } from './hooks/use-app-controller';
 import { ChatPage } from './ui/pages/ChatPage';
+import { DashboardPage } from './ui/pages/DashboardPage';
 import { JobsPage } from './ui/pages/JobsPage';
 import { SessionsPage } from './ui/pages/SessionsPage';
 import { SkillsPage } from './ui/pages/SkillsPage';
@@ -41,6 +42,7 @@ function pathToSettingsTab(pathname: string): SettingsTabValue {
 }
 
 function pathToPage(pathname: string): AppPage {
+  if (pathname.startsWith('/dashboard')) return 'dashboard';
   if (pathname.startsWith('/session/') || pathname === '/chat') return 'chat';
   if (pathname.startsWith('/settings')) return 'settings';
   if (pathname.startsWith('/recipes')) return 'recipes';
@@ -55,6 +57,7 @@ function pathToPage(pathname: string): AppPage {
 
 function pageToPath(page: AppPage): string {
   switch (page) {
+    case 'dashboard': return '/dashboard';
     case 'sessions': return '/sessions';
     case 'recipes': return '/recipes';
     case 'tools': return '/tools';
@@ -318,6 +321,10 @@ export function App() {
           ) : undefined
         }
       >
+        {controller.page === 'dashboard' ? (
+          <DashboardPage />
+        ) : null}
+
         {controller.page === 'chat' ? (
           showRuntimeConfigBlocker ? (
             <RuntimeConfigBlockedState
@@ -586,6 +593,7 @@ function RuntimeConfigBlockedState({
 
 function pageTitle(page: string) {
   switch (page) {
+    case 'dashboard': return 'Dashboard';
     case 'sessions': return 'Sessions';
     case 'recipes': return 'Recipes';
     case 'jobs': return 'Jobs';

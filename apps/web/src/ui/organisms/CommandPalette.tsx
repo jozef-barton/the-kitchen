@@ -10,6 +10,7 @@ type CommandItem = {
 };
 
 const NAV_LABELS: Record<AppPage, string> = {
+  dashboard: 'Dashboard',
   chat: 'Chat',
   recipes: 'Recipes',
   sessions: 'All Sessions',

@@ -19,7 +19,7 @@ const OptionalDateTimeSchema = z.preprocess((value) => (value === null ? undefin
 export const ThemeModeSchema = z.enum(['dark', 'light']);
 export type ThemeMode = z.infer<typeof ThemeModeSchema>;
 
-export const AppPageSchema = z.enum(['chat', 'recipes', 'sessions', 'jobs', 'tools', 'skills', 'settings', 'coding', 'remote-access']);
+export const AppPageSchema = z.enum(['dashboard', 'chat', 'recipes', 'sessions', 'jobs', 'tools', 'skills', 'settings', 'coding', 'remote-access']);
 export type AppPage = z.infer<typeof AppPageSchema>;
 
 export const ToolsTabSchema = z.enum(['all', 'history']);
