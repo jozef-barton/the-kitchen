@@ -258,52 +258,6 @@ function ActivityHeatmap({ days }: { days: DashboardResponse['activity'] }) {
   );
 }
 
-// ── Daily message bar chart ──────────────────────────────────────
-function DailyMessagesChart({ days }: { days: DashboardResponse['activity'] }) {
-  const data = useMemo(() => {
-    return days.slice(-30).map((d) => ({
-      date: d.date.slice(5), // MM-DD
-      count: d.messageCount,
-    }));
-  }, [days]);
-
-  if (data.length === 0) return <EmptyState message="No message data yet." />;
-
-  return (
-    <Flex direction="column" h="100%">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barSize={6}>
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
-            tickLine={false}
-            axisLine={false}
-            interval={6}
-          />
-          <YAxis
-            tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
-            tickLine={false}
-            axisLine={false}
-            width={28}
-          />
-          <Tooltip
-            content={({ active, payload, label }) => (
-              <ChartTooltip
-                active={active}
-                payload={payload}
-                label={label as string}
-                formatter={(v) => `${v} message${v === 1 ? '' : 's'}`}
-              />
-            )}
-            cursor={{ fill: 'var(--surface-hover)' }}
-          />
-          <Bar dataKey="count" fill="var(--accent)" radius={[2, 2, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </Flex>
-  );
-}
-
 // ── Streak + cadence ─────────────────────────────────────────────
 function StreakCadence({
   streak,
@@ -995,42 +949,7 @@ export function DashboardPage({
             templateColumns="repeat(12, 1fr)"
             gap="3"
           >
-            {/* Row 1: Activity heatmap — full width */}
-            <WidgetCard
-              title="Activity heatmap"
-              subtitle="Last 90 days · message volume per day"
-              gridColumn={SPAN_FULL}
-              minH="240px"
-              testId="dashboard-widget-activity-heatmap"
-            >
-              {dashboardLoading && !dashboard ? (
-                <LoadingState />
-              ) : dashboard ? (
-                <ActivityHeatmap days={dashboard.activity} />
-              ) : (
-                <EmptyState
-                  message={activeProfileId ? 'Loading…' : 'Pick a profile to see activity.'}
-                />
-              )}
-            </WidgetCard>
-
-            {/* Row 2: Daily messages bar (8 cols) + streak (4 cols) */}
-            <WidgetCard
-              title="Daily messages"
-              subtitle="Last 30 days"
-              gridColumn={SPAN_8}
-              minH="220px"
-              testId="dashboard-widget-top-sessions"
-            >
-              {dashboardLoading && !dashboard ? (
-                <LoadingState />
-              ) : dashboard ? (
-                <DailyMessagesChart days={dashboard.activity} />
-              ) : (
-                <EmptyState message="No data yet." />
-              )}
-            </WidgetCard>
-
+            {/* Row 1: Streak + cadence (4 cols) | Activity heatmap (8 cols) */}
             <WidgetCard
               title="Streak + cadence"
               subtitle="Active days, longest run, average"
@@ -1047,7 +966,25 @@ export function DashboardPage({
               )}
             </WidgetCard>
 
-            {/* Row 3: Token + cost rollup — full width */}
+            <WidgetCard
+              title="Activity heatmap"
+              subtitle="Last 90 days · message volume per day"
+              gridColumn={SPAN_8}
+              minH="220px"
+              testId="dashboard-widget-activity-heatmap"
+            >
+              {dashboardLoading && !dashboard ? (
+                <LoadingState />
+              ) : dashboard ? (
+                <ActivityHeatmap days={dashboard.activity} />
+              ) : (
+                <EmptyState
+                  message={activeProfileId ? 'Loading…' : 'Pick a profile to see activity.'}
+                />
+              )}
+            </WidgetCard>
+
+            {/* Row 2: Token + cost rollup — full width */}
             <WidgetCard
               title="Token + cost rollup"
               subtitle="7-day usage · coding jobs telemetry"
@@ -1058,7 +995,7 @@ export function DashboardPage({
               <TokenCostRollup jobs={codingJobs} loading={codingLoading} />
             </WidgetCard>
 
-            {/* Row 4: Live job ticker (6 cols) + coding jobs (6 cols) */}
+            {/* Row 3: Live job ticker (6 cols) + coding jobs (6 cols) */}
             <WidgetCard
               title="Live job ticker"
               subtitle="Cron jobs sorted by next run"
