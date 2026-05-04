@@ -33,7 +33,33 @@ pnpm install
 pnpm kitchen
 ```
 
-`pnpm kitchen` runs `pnpm build`, starts the bridge serving the built web app, picks a free port if 8787 is busy, and opens your default browser. Ctrl-C shuts it down cleanly.
+`pnpm kitchen` runs `pnpm build`, starts the bridge serving the built web app on port **8787** (pinned), and opens your default browser. Ctrl-C shuts it down cleanly.
+
+If port 8787 is already in use, the command exits with:
+
+```
+Port 8787 is in use. Free it (e.g. lsof -i :8787) or pass --port=NNNN.
+```
+
+Use `--port=N` or `BRIDGE_PORT=N` to choose a different port.
+
+## Hosting modes
+
+| Mode | Command | Who can connect |
+|---|---|---|
+| **Local only** (default) | `pnpm kitchen` | Only this machine (`127.0.0.1`) |
+| **Tailscale** | Start Tailscale, then `pnpm kitchen` | Devices on your Tailscale network |
+| **Public LAN** | `pnpm kitchen --public` | Any device on your local network |
+
+### Public LAN (`--public`)
+
+Binds the bridge to `0.0.0.0` and admits `Host:` headers in RFC1918 ranges (`10/8`, `172.16/12`, `192.168/16`) and link-local ranges (`169.254/16`, `fe80::/10`, `fc00::/7`). The terminal lists every LAN URL on startup and keeps them visible so you can copy them at any time.
+
+> **Security:** There is no authentication in `--public` mode. Anyone on your local network can access The Kitchen and all conversations/data stored in it. Only use `--public` on networks you trust. The CSRF header check (`x-hermes-bridge: 1`) and Origin validation remain active.
+
+### Tailscale + `--public`
+
+Both can be active at the same time. The bridge binds to `0.0.0.0`; both the Tailscale URL and LAN URLs are listed in the terminal and on the Remote Access page.
 
 For development with hot reload (web on 5173, bridge on 8787):
 
@@ -52,7 +78,7 @@ pnpm start
 
 | Variable | Default | Description |
 |---|---|---|
-| `BRIDGE_PORT` | `8787` | Bridge HTTP port. `pnpm kitchen` falls back to a free ephemeral port if this one is busy. |
+| `BRIDGE_PORT` | `8787` | Bridge HTTP port. Also override with `--port=N`. |
 | `BRIDGE_DB_PATH` | See below | Path to the local SQLite database. |
 | `HERMES_CLI_PATH` | `hermes` | Path to the Hermes binary if it isn't on `PATH`. |
 

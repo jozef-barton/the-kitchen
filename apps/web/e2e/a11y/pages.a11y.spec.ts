@@ -232,6 +232,11 @@ test.describe('Remote access page', () => {
   test('default state passes axe', async ({ a11y }) => {
     await a11y.checkA11y();
   });
+
+  test('local-network tab passes axe', async ({ page, a11y }) => {
+    await goto(page, '/remote-access/local-network');
+    await a11y.checkA11y();
+  });
 });
 
 // ──────────────────────────────────────────────────

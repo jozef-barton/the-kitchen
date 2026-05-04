@@ -148,10 +148,21 @@ The top-right theme toggle persists to SQLite through the bridge.
 
 Connected, degraded, disconnected, and error states are explicit in the UI and grounded in bridge responses.
 
+## Bridge CLI flags
+
+| Flag | Description |
+|---|---|
+| `--port=N` | Listen port (default 8787; exits if port is busy) |
+| `--static-dir=PATH` | Serve built web app from this directory |
+| `--db-path=PATH` | Override SQLite database path |
+| `--cli-path=PATH` | Override Hermes CLI binary path |
+| `--public` | Bind to `0.0.0.0`; admit RFC1918 / link-local Host headers |
+| `--fixture` | Use the test fixture CLI instead of the real one |
+
 ## Security boundaries
 
 - the browser app never executes Hermes-authored code
-- the bridge rejects non-local browser origins on both JSON and SSE endpoints
+- the bridge rejects non-local browser origins on both JSON and SSE endpoints; in `--public` mode, RFC1918 and link-local Host headers are additionally admitted via predicate
 - all bridge payloads are runtime-validated with Zod
 - reviewed shell execution uses a strict allowlist and no shell interpolation
 - unrestricted access is an explicit local opt-in with persisted audit events
