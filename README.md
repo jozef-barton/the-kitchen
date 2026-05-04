@@ -1,4 +1,8 @@
-# The Kitchen
+<div align="center">
+  <img src="docs/banner.svg" alt="The Kitchen — local-first browser frontend for Hermes Agent" width="100%"/>
+</div>
+
+<div align="center">
 
 [![CI](https://github.com/jozef-barton/the-kitchen/actions/workflows/ci.yml/badge.svg)](https://github.com/jozef-barton/the-kitchen/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -6,203 +10,149 @@
 [![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)](https://pnpm.io)
 [![Hermes CLI](https://img.shields.io/badge/hermes--cli-0.12.x-brightgreen)](https://hermes-agent.nousresearch.com/)
 
-A local-first browser frontend for [Hermes Agent](https://hermes-agent.nousresearch.com/) — streaming chat, structured recipe workspaces, provider settings, and a recipe template gallery.
+</div>
 
-> **Status:** pre-1.0. The protocol, persistence schema, and bridge surface area can change between releases. Pin to a commit if you depend on it.
+<br>
+
+<div align="center">
+
+A local-first browser frontend for **[Hermes Agent](https://hermes-agent.nousresearch.com/)** —
+streaming chat, structured recipe workspaces, provider settings, and a recipe template gallery.
+
+</div>
+
+<br>
+
+> **pre-1.0** — protocol, persistence schema, and bridge surface area can change between releases. Pin to a commit if you depend on it.
+
+<br>
 
 ## Requirements
 
-- **Node.js 22.11 or later** — the bridge uses the built-in `node:sqlite` module. Node 24 LTS is recommended.
-  - Check: `node --version`
-  - Install via [nvm](https://github.com/nvm-sh/nvm): `nvm install 22 && nvm use 22`, or download from [nodejs.org](https://nodejs.org)
-- **pnpm 10+** — `npm install -g pnpm`
-- **Hermes Agent CLI 0.12.x** — install from [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com/)
-  - Quick install (Linux/macOS/WSL2): `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`
-  - Verify: `hermes --version` (must report `0.12.0` or later 0.12.x)
-  - First-time setup: `hermes setup`
-  - The bridge pins to a specific Hermes major+minor; mismatched versions surface a banner in the UI.
+| | |
+|:--|:--|
+| **Node.js ≥ 22.11** | Uses built-in `node:sqlite`. Node 24 LTS recommended — `nvm install 22` or [nodejs.org](https://nodejs.org) |
+| **pnpm ≥ 10** | `npm install -g pnpm` |
+| **Hermes CLI 0.12.x** | `curl -fsSL https://hermes-agent.nousresearch.com/install.sh \| bash` then `hermes setup` |
 
-> **Important:** Clone or extract this repo to a path with **no spaces**. A path like `~/Desktop/the kitchen/` causes subprocess errors. Use `~/dev/the-kitchen/` or similar.
+> Clone to a path with **no spaces** — e.g. `~/dev/the-kitchen/`. Spaces in the path cause subprocess errors.
+
+<br>
 
 ## Quick start
-
-The friendliest single-command path — builds the workspace and opens the app in your browser:
 
 ```bash
 pnpm install
 pnpm kitchen
 ```
 
-`pnpm kitchen` runs `pnpm build`, starts the bridge serving the built web app on port **8787** (pinned), and opens your default browser. Ctrl-C shuts it down cleanly.
+Builds the workspace, starts the bridge on port **8787**, and opens your browser. Ctrl-C to stop cleanly. If 8787 is in use, the command exits with a friendly message — pass `--port=N` or set `BRIDGE_PORT=N` to override.
 
-If port 8787 is already in use, the command exits with:
-
-```
-Port 8787 is in use. Free it (e.g. lsof -i :8787) or pass --port=NNNN.
-```
-
-Use `--port=N` or `BRIDGE_PORT=N` to choose a different port.
+<br>
 
 ## Hosting modes
 
 | Mode | Command | Who can connect |
-|---|---|---|
+|:--|:--|:--|
 | **Local only** (default) | `pnpm kitchen` | Only this machine (`127.0.0.1`) |
 | **Tailscale** | Start Tailscale, then `pnpm kitchen` | Devices on your Tailscale network |
 | **Public LAN** | `pnpm kitchen --public` | Any device on your local network |
 
-### Public LAN (`--public`)
+`--public` binds to `0.0.0.0` and admits `Host:` headers in RFC1918 (`10/8`, `172.16/12`, `192.168/16`) and link-local (`169.254/16`, `fe80::/10`, `fc00::/7`) ranges. Every LAN URL is printed on startup and stays visible so you can copy it. Tailscale and `--public` compose — both can be active at once.
 
-Binds the bridge to `0.0.0.0` and admits `Host:` headers in RFC1918 ranges (`10/8`, `172.16/12`, `192.168/16`) and link-local ranges (`169.254/16`, `fe80::/10`, `fc00::/7`). The terminal lists every LAN URL on startup and keeps them visible so you can copy them at any time.
-
-> **Security:** There is no authentication in `--public` mode. Anyone on your local network can access The Kitchen and all conversations/data stored in it. Only use `--public` on networks you trust. The CSRF header check (`x-hermes-bridge: 1`) and Origin validation remain active.
-
-### Tailscale + `--public`
-
-Both can be active at the same time. The bridge binds to `0.0.0.0`; both the Tailscale URL and LAN URLs are listed in the terminal and on the Remote Access page.
-
-For development with hot reload (web on 5173, bridge on 8787):
+> **Security:** `--public` has no authentication. Anyone on your local network can read and modify everything stored in The Kitchen. Only use it on networks you trust. CSRF header (`x-hermes-bridge: 1`) and Origin validation remain enforced.
 
 ```bash
-pnpm dev
+pnpm dev                  # hot reload — web :5173, bridge :8787
+pnpm build && pnpm start  # production bundle, manual
 ```
 
-Or build and serve the production bundle manually:
+<br>
 
-```bash
-pnpm build
-pnpm start
-```
+## Surfaces
 
-## Configuration
+<div align="center">
+  <img src="docs/features.svg" alt="The Kitchen feature surfaces" width="100%"/>
+</div>
 
-| Variable | Default | Description |
-|---|---|---|
-| `BRIDGE_PORT` | `8787` | Bridge HTTP port. Also override with `--port=N`. |
-| `BRIDGE_DB_PATH` | See below | Path to the local SQLite database. |
-| `HERMES_CLI_PATH` | `hermes` | Path to the Hermes binary if it isn't on `PATH`. |
+All persistence is local SQLite. The bridge binds to `127.0.0.1` by default; see [Hosting modes](#hosting-modes) to expose it over Tailscale or your local network.
 
-Default database location:
-
-- **macOS:** `~/Library/Application Support/Hermes Recipes Browser/hermes-recipes.db`
-- **Linux:** `~/.local/share/Hermes Recipes Browser/hermes-recipes.db`
-- **Windows:** `%APPDATA%\Hermes Recipes Browser\hermes-recipes.db`
-
-## Troubleshooting
-
-**Bridge exits with code 1 immediately**
-- Check Node.js version: `node --version` — must be ≥ 22.5
-- Make sure the repo path has no spaces
-- Make sure `hermes` is on your `PATH`: `hermes --version`
-
-**"Hermes is not fully healthy" banner**
-- Run `hermes profile list` in your terminal to confirm Hermes works
-- If you just installed Hermes, run `hermes setup` first
-
-**Model selector or Settings shows nothing**
-- Open Settings and configure a provider API key
-- Run `hermes config show` to verify your current model and provider
-
-## Features
-
-| Surface | Route | What it does |
-|---|---|---|
-| **Chat** | `/` | Streaming Hermes responses over SSE with Markdown, syntax highlighting, tables, and image/file attachments. |
-| **Sessions** | `/sessions` | Browse, resume, and delete real Hermes sessions. Search by title, tag, or transcript content. |
-| **Jobs** | `/jobs` | Cron jobs and one-shot job runs surfaced from Hermes — status, history, and elapsed time. |
-| **Coding** | `/coding` | Agentic coding sessions via Claude Code or Codex. Repos, jobs, integrations. See [Coding agents](#coding-agents). |
-| **Tools** | `/tools` · `/tools/history` | Tool catalog (read-only) plus a reviewed-execution audit log. |
-| **Skills** | `/skills` · `/skills/finder` | Hermes skill library plus a finder for installed and bundled skills. |
-| **Recipes** | `/recipes` · `/recipes/ingredients` | Structured workspaces Hermes builds during chat. Pick a template from the Recipe Book or let Hermes choose one. Recipes attach to sessions and survive restart. |
-| **Settings** | `/settings/{models,persona,access,audit}` | Guided provider setup, persona/profile editing, capability boundaries, and an action audit trail. |
-| **Remote access** | `/remote-access` | Pairing UX for accessing the bridge from another device on your LAN. |
-
-All persistence is local SQLite. The bridge binds to `127.0.0.1` only and accepts same-origin requests.
+<br>
 
 ## Coding agents
 
-The `/coding` screen runs long-lived agentic coding sessions via Claude Code or Codex.
+The `/coding` screen runs long-lived agentic sessions via **Claude Code** or **Codex**.
 
-**Tabs:**
-- **Jobs** — projects list, job list, live job view with two-column layout (response left, activity right).
-- **Repos** — same project list for quick navigation without leaving the coding context.
-- **Integrations** — connect and manage Claude Code and Codex. Status is auto-detected every 30 s, on focus, and after any connect/disconnect operation.
+| Agent | Install | Min. version |
+|:--|:--|:--|
+| Claude Code | `npm install -g @anthropic-ai/claude-code` | 2.0+ |
+| Codex | `npm install -g @openai/codex` | 0.120+ |
 
-**Required CLIs** (installed separately from the Kitchen):
-
-| Agent | Install | Min. version | Auth status check |
-|---|---|---|---|
-| Claude Code | `npm install -g @anthropic-ai/claude-code` | 2.0+ | `claude auth status` |
-| Codex | `npm install -g @openai/codex` | 0.120+ | `codex login status` |
-
-**Approval modes:**
+**Approval modes**
 
 | Mode | Claude Code | Codex |
-|---|---|---|
+|:--|:--|:--|
 | Manual | *(no flag)* | `-a on-request -s read-only` |
 | Auto-safe | `--permission-mode acceptEdits` | `--full-auto` |
 | Bypass | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` |
 
-**Disconnect vs. Delete:**
-- **Disable in app** (toggle in the Integrations tab) — stops the Kitchen from offering the agent for new jobs, but does *not* sign out of the CLI. Your terminal sessions remain authenticated.
-- **Delete** (3-dot menu → Delete) — runs `claude auth logout` / `codex logout` and signs you out everywhere. You'll need to re-authenticate from the terminal.
+**Disable** (Integrations tab toggle) stops new jobs without signing out of the CLI. **Delete** (3-dot → Delete) runs `claude auth logout` / `codex logout` everywhere.
+
+<br>
+
+## Configuration
+
+| Variable | Default | Description |
+|:--|:--|:--|
+| `BRIDGE_PORT` | `8787` | Pinned. Override with `--port=N` if 8787 is in use. |
+| `BRIDGE_DB_PATH` | Platform default¹ | Path to the local SQLite database. |
+| `HERMES_CLI_PATH` | `hermes` | Override if the binary isn't on `PATH`. |
+
+¹ **macOS:** `~/Library/Application Support/Hermes Recipes Browser/hermes-recipes.db` · **Linux:** `~/.local/share/…` · **Windows:** `%APPDATA%\…`
+
+<br>
 
 ## Architecture
 
-Monorepo layout:
+```
+apps/
+  bridge/      Node runtime — Hermes CLI execution, origin policy, SQLite, SSE streaming
+  web/         Vite + React + Chakra UI — talks to the bridge over HTTP/SSE only
+packages/
+  protocol/    Zod-validated request, response, event, and entity schemas
+  ui/          Shared Chakra provider and theme helpers
+  config/      Shared ESLint configuration
+  testing/     Cross-package test utilities
+```
 
-- [`apps/bridge`](apps/bridge) — local Node runtime: Hermes CLI execution, origin policy, SQLite persistence, SSE streaming.
-- [`apps/web`](apps/web) — Vite + React + Chakra browser app that talks only to the bridge over HTTP/SSE.
-- [`packages/protocol`](packages/protocol) — Zod-validated request, response, event, and entity schemas.
-- [`packages/ui`](packages/ui) — shared Chakra provider and theme helpers.
-- [`packages/config`](packages/config) — shared lint configuration.
-- [`packages/testing`](packages/testing) — cross-package test utilities.
+Canonical specs live in [`docs/specs/`](docs/specs/) — architecture, product, protocol, spaces, and threat model.
 
-Canonical specs live under [`docs/specs`](docs/specs):
-
-- [architecture.md](docs/specs/architecture.md) — runtime surfaces, bridge API, persistence model, failure behavior.
-- [product-spec.md](docs/specs/product-spec.md) — product goals, required behavior, and data expectations.
-- [protocol.md](docs/specs/protocol.md) — shared HTTP/SSE schemas between the bridge and browser.
-- [spaces.md](docs/specs/spaces.md) — session-attached Spaces framework and build pipeline.
-- [spaces-template-library.md](docs/specs/spaces-template-library.md) — curated Spaces template gallery.
-- [hermes-ui-workspaces.md](docs/specs/hermes-ui-workspaces.md) — Hermes-to-bridge space data contract.
-- [threat-model.md](docs/specs/threat-model.md) — threats, mitigations, and reviewed-tool allowlist.
+<br>
 
 ## Development
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+pnpm ci:full              # lint + typecheck + unit tests + security check
+pnpm exec playwright test # E2E against fixture bridge (not in ci:full)
 ```
 
-The full path used by [CI](.github/workflows/ci.yml) bundles those into one command:
+<br>
 
-```bash
-pnpm ci:full   # lint + typecheck + unit tests + security check
-```
+## Troubleshooting
 
-End-to-end Playwright tests live under [`apps/web/e2e`](apps/web/e2e) and run against a fixture bridge configured in [`playwright.config.ts`](playwright.config.ts). Run them locally with `pnpm exec playwright test`; they are not currently part of `pnpm ci:full`.
+| Symptom | Fix |
+|:--|:--|
+| Bridge exits immediately | Node ≥ 22.5 · no spaces in repo path · `hermes` on `PATH` |
+| "Hermes not fully healthy" | `hermes setup` · `hermes profile list` |
+| Settings shows nothing | Add a provider API key in Settings · `hermes config show` |
 
-## Contributing
+<br>
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, and pull-request expectations. A few load-bearing project rules to keep in mind:
+---
 
-- The browser app only talks to the bridge over HTTP/SSE. The bridge is the only place that calls the Hermes CLI.
-- Persistence is SQLite-backed via Node.js `node:sqlite`. Do not add file-system state outside the database.
-- Provider API keys flow through Hermes auth/config only — the bridge caches only masked metadata locally.
-- Recipes must stay schema-driven. The production path is template selection plus structured fill/update JSON with bridge-owned normalization and rendering.
-- Reviewed shell execution is intentionally narrow. Expand the allowlist only with tests.
+<div align="center">
 
-## Security
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Apache 2.0](LICENSE) · Built around [Hermes Agent](https://hermes-agent.nousresearch.com/) by Nous Research
 
-The bridge binds to `127.0.0.1` only and accepts same-origin requests. To report a vulnerability, see [SECURITY.md](SECURITY.md). Do not file public issues for security problems.
-
-## License
-
-Apache License 2.0 — see [LICENSE](LICENSE).
-
-## Acknowledgements
-
-Built around [Hermes Agent](https://hermes-agent.nousresearch.com/) by Nous Research.
+</div>

@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 326" width="900" height="326">
+  <defs>
+    <linearGradient id="fbg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="hsl(220,14%,8%)"/>
+      <stop offset="100%" stop-color="hsl(220,12%,11%)"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="326" fill="url(#fbg)" rx="16"/>
+  <rect width="898" height="324" fill="none" stroke="hsla(220,15%,100%,0.08)" stroke-width="1" rx="16" x="1" y="1"/>
+
+  <!-- Row 1 -->
+
+  <!-- Chat (16, 16) -->
+  <g opacity="0">
+    <rect x="16" y="16" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="36" y="61" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">💬</text>
+    <text x="66" y="34" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Chat</text>
+    <text x="66" y="52" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/</text>
+    <text x="66" y="72" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Streaming chat &amp; attachments</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.1s" fill="freeze"/>
+  </g>
+
+  <!-- Sessions (310, 16) -->
+  <g opacity="0">
+    <rect x="310" y="16" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="330" y="61" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🗂</text>
+    <text x="360" y="34" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Sessions</text>
+    <text x="360" y="52" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/sessions</text>
+    <text x="360" y="72" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Browse, resume &amp; search history</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.22s" fill="freeze"/>
+  </g>
+
+  <!-- Jobs (604, 16) -->
+  <g opacity="0">
+    <rect x="604" y="16" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="624" y="61" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">📅</text>
+    <text x="654" y="34" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Jobs</text>
+    <text x="654" y="52" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/jobs</text>
+    <text x="654" y="72" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Cron &amp; one-shot job runs</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.34s" fill="freeze"/>
+  </g>
+
+  <!-- Row 2 -->
+
+  <!-- Coding (16, 118) -->
+  <g opacity="0">
+    <rect x="16" y="118" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="36" y="163" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">⌨️</text>
+    <text x="66" y="136" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Coding</text>
+    <text x="66" y="154" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/coding</text>
+    <text x="66" y="174" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Claude Code or Codex sessions</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.46s" fill="freeze"/>
+  </g>
+
+  <!-- Tools (310, 118) -->
+  <g opacity="0">
+    <rect x="310" y="118" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="330" y="163" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🔧</text>
+    <text x="360" y="136" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Tools</text>
+    <text x="360" y="154" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/tools</text>
+    <text x="360" y="174" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Tool catalog &amp; audit log</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.58s" fill="freeze"/>
+  </g>
+
+  <!-- Skills (604, 118) -->
+  <g opacity="0">
+    <rect x="604" y="118" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="624" y="163" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">✨</text>
+    <text x="654" y="136" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Skills</text>
+    <text x="654" y="154" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/skills</text>
+    <text x="654" y="174" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Skill library &amp; finder</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.70s" fill="freeze"/>
+  </g>
+
+  <!-- Row 3 -->
+
+  <!-- Recipes (16, 220) -->
+  <g opacity="0">
+    <rect x="16" y="220" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="36" y="265" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">📋</text>
+    <text x="66" y="238" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Recipes</text>
+    <text x="66" y="256" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/recipes</text>
+    <text x="66" y="276" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Structured workspaces &amp; templates</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.82s" fill="freeze"/>
+  </g>
+
+  <!-- Settings (310, 220) -->
+  <g opacity="0">
+    <rect x="310" y="220" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="330" y="265" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">⚙️</text>
+    <text x="360" y="238" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Settings</text>
+    <text x="360" y="256" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/settings</text>
+    <text x="360" y="276" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Providers, persona &amp; audit trail</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="0.94s" fill="freeze"/>
+  </g>
+
+  <!-- Remote Access (604, 220) -->
+  <g opacity="0">
+    <rect x="604" y="220" width="280" height="90" rx="10" fill="hsl(220,12%,13%)" stroke="hsla(220,15%,100%,0.08)" stroke-width="1"/>
+    <text x="624" y="265" font-size="26" text-anchor="middle" dominant-baseline="middle" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">📡</text>
+    <text x="654" y="238" font-size="13" font-weight="700" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,15%,96%)">Remote Access</text>
+    <text x="654" y="256" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(245,55%,65%)">/remote-access</text>
+    <text x="654" y="276" font-size="11" font-family="'Segoe UI',system-ui,sans-serif" fill="hsl(220,10%,68%)">Access bridge over LAN</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="1.06s" fill="freeze"/>
+  </g>
+</svg>

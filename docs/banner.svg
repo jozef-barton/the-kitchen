@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" width="900" height="280">
+  <defs>
+    <!-- Dark mode backgrounds matching hsl(220,14%,8%) → hsl(220,12%,13%) -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="hsl(220,14%,8%)"/>
+      <stop offset="100%" stop-color="hsl(220,12%,13%)"/>
+    </linearGradient>
+    <!-- Brand accent: indigo-violet hsl(245,55%,65%) ramp -->
+    <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="hsl(245,55%,75%)"/>
+      <stop offset="50%"  stop-color="hsl(245,55%,65%)"/>
+      <stop offset="100%" stop-color="hsl(245,55%,57%)"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="280" fill="url(#bg)" rx="16"/>
+  <!-- Border: hsla(220,15%,100%,0.10) -->
+  <rect width="898" height="278" fill="none" stroke="hsla(220,15%,100%,0.10)" stroke-width="1" rx="16" x="1" y="1"/>
+
+  <!-- Subtle accent glow behind emoji -->
+  <circle cx="160" cy="140" r="110" fill="hsl(245,55%,65%)" opacity="0.07"/>
+
+  <!-- Large chef emoji -->
+  <text x="160" y="175" font-size="130" text-anchor="middle"
+        font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🧑‍🍳</text>
+
+  <!-- Title — fades in -->
+  <g>
+    <text x="530" y="105" font-size="58" font-weight="900"
+          font-family="'Segoe UI',system-ui,-apple-system,sans-serif"
+          fill="url(#titleGrad)" text-anchor="middle" filter="url(#glow)" opacity="0">
+      The Kitchen
+      <animate attributeName="opacity" values="0;1" dur="0.8s" begin="0.2s" fill="freeze"/>
+    </text>
+  </g>
+
+  <!-- Divider line draws itself outward — accent color -->
+  <line x1="530" y1="125" x2="530" y2="125"
+        stroke="hsl(245,55%,65%)" stroke-width="1.5" opacity="0.6">
+    <animate attributeName="x1" values="530;310" dur="0.7s" begin="0.9s" fill="freeze"/>
+    <animate attributeName="x2" values="530;750" dur="0.7s" begin="0.9s" fill="freeze"/>
+  </line>
+
+  <!-- Subtitle — text-secondary hsl(220,10%,68%) -->
+  <text x="530" y="155" font-size="16"
+        font-family="'Segoe UI',system-ui,sans-serif"
+        fill="hsl(220,10%,68%)" text-anchor="middle" opacity="0">
+    Local-first browser frontend for Hermes Agent
+    <animate attributeName="opacity" values="0;1" dur="0.8s" begin="1.4s" fill="freeze"/>
+  </text>
+
+  <!-- Feature pill: Chat -->
+  <g opacity="0">
+    <rect x="310" y="178" width="100" height="26" rx="13"
+          fill="hsl(220,12%,13%)" stroke="hsl(245,55%,65%)" stroke-width="1"/>
+    <text x="360" y="195" font-size="12"
+          font-family="'Segoe UI',system-ui,sans-serif"
+          fill="hsl(245,55%,75%)" text-anchor="middle" font-weight="500">💬 Chat</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="1.9s" fill="freeze"/>
+  </g>
+
+  <!-- Feature pill: Recipes -->
+  <g opacity="0">
+    <rect x="422" y="178" width="116" height="26" rx="13"
+          fill="hsl(220,12%,13%)" stroke="hsl(245,55%,60%)" stroke-width="1"/>
+    <text x="480" y="195" font-size="12"
+          font-family="'Segoe UI',system-ui,sans-serif"
+          fill="hsl(245,55%,72%)" text-anchor="middle" font-weight="500">📋 Recipes</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="2.1s" fill="freeze"/>
+  </g>
+
+  <!-- Feature pill: Sessions -->
+  <g opacity="0">
+    <rect x="550" y="178" width="120" height="26" rx="13"
+          fill="hsl(220,12%,13%)" stroke="hsl(245,55%,57%)" stroke-width="1"/>
+    <text x="610" y="195" font-size="12"
+          font-family="'Segoe UI',system-ui,sans-serif"
+          fill="hsl(245,55%,70%)" text-anchor="middle" font-weight="500">🗂 Sessions</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="2.3s" fill="freeze"/>
+  </g>
+
+  <!-- Feature pill: Coding — uses amber #f2b84b for a single warm accent -->
+  <g opacity="0">
+    <rect x="682" y="178" width="110" height="26" rx="13"
+          fill="hsl(220,12%,13%)" stroke="#f2b84b" stroke-width="1"/>
+    <text x="737" y="195" font-size="12"
+          font-family="'Segoe UI',system-ui,sans-serif"
+          fill="#f2b84b" text-anchor="middle" font-weight="500">⌨️ Coding</text>
+    <animate attributeName="opacity" values="0;1" dur="0.4s" begin="2.5s" fill="freeze"/>
+  </g>
+
+  <!-- Bottom tagline — text-muted hsl(220,8%,48%) -->
+  <text x="530" y="245" font-size="13"
+        font-family="'Segoe UI',system-ui,sans-serif"
+        fill="hsl(220,8%,48%)" text-anchor="middle" letter-spacing="2" opacity="0">
+    STREAMING · STRUCTURED · LOCAL-FIRST
+    <animate attributeName="opacity" values="0;1" dur="1s" begin="2.8s" fill="freeze"/>
+  </text>
+</svg>
