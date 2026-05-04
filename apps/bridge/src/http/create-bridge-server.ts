@@ -187,6 +187,12 @@ export function createBridgeServer(options: {
   // Drives /api/remote-access/refresh: re-detect Tailscale, rebind the listener if needed, and
   // return the new state. Falls back to a plain detect() when not provided (no rebind happens).
   refreshRemoteAccess?: () => Promise<{ tailscale: TailscaleStatus; bindAddress: string; rebound: boolean }>;
+  // --public mode: set to true when the bridge is started with --public flag.
+  publicMode?: boolean;
+  // Returns current LAN hostnames/IPs for the status endpoint.
+  getPublicHostnames?: () => string[];
+  // Predicate for admitting private-range Host headers (RFC1918, link-local, etc.).
+  isAllowedPublicHostname?: (hostname: string) => boolean;
 }) {
   const database = new BridgeDatabase(options.databasePath);
   migrateLegacySnapshotIfNeeded(database, {
@@ -263,7 +269,8 @@ export function createBridgeServer(options: {
 
     const tailscaleHostname = options.getTailscaleDnsName?.() ?? null;
     const originDecision = evaluateLocalOriginPolicy(request, {
-      additionalAllowedHostnames: tailscaleHostname ? [tailscaleHostname] : []
+      additionalAllowedHostnames: tailscaleHostname ? [tailscaleHostname] : [],
+      additionalAllowedHostnamePredicate: options.isAllowedPublicHostname
     });
     if (!originDecision.allowed) {
       sendJson(
@@ -1168,7 +1175,16 @@ export function createBridgeServer(options: {
         if (tailscale.running && tailscale.dnsName) {
           database.setRemoteAccess({ enabled: stored.enabled, lastKnownDnsName: tailscale.dnsName });
         }
-        sendJson(response, 200, { tailscale, url, enabled: stored.enabled }, originDecision.allowOrigin);
+        const publicHostnames = options.getPublicHostnames?.() ?? [];
+        const publicUrls = publicHostnames.map((h) => `http://${h}:${serverPort}`);
+        const currentBindAddress = (server.address() as { address?: string } | null)?.address ?? '127.0.0.1';
+        sendJson(response, 200, {
+          tailscale,
+          url,
+          enabled: stored.enabled,
+          public: { enabled: options.publicMode ?? false, hostnames: publicHostnames, urls: publicUrls },
+          bindAddress: currentBindAddress
+        }, originDecision.allowOrigin);
         return;
       }
 
@@ -1191,10 +1207,19 @@ export function createBridgeServer(options: {
             ? (result.tailscale.dnsName ?? stored.lastKnownDnsName)
             : stored.lastKnownDnsName
         });
+        const publicHostnames = options.getPublicHostnames?.() ?? [];
+        const publicUrls = publicHostnames.map((h) => `http://${h}:${serverPort}`);
         sendJson(
           response,
           200,
-          { tailscale: result.tailscale, url, enabled: stored.enabled, bindAddress: result.bindAddress, rebound: result.rebound },
+          {
+            tailscale: result.tailscale,
+            url,
+            enabled: stored.enabled,
+            bindAddress: result.bindAddress,
+            rebound: result.rebound,
+            public: { enabled: options.publicMode ?? false, hostnames: publicHostnames, urls: publicUrls }
+          },
           originDecision.allowOrigin
         );
         return;

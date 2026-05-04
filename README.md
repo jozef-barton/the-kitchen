@@ -46,7 +46,21 @@ pnpm install
 pnpm kitchen
 ```
 
-Builds the workspace, starts the bridge, picks a free port if `8787` is busy, and opens your browser. Ctrl-C to stop cleanly.
+Builds the workspace, starts the bridge on port **8787**, and opens your browser. Ctrl-C to stop cleanly. If 8787 is in use, the command exits with a friendly message — pass `--port=N` or set `BRIDGE_PORT=N` to override.
+
+<br>
+
+## Hosting modes
+
+| Mode | Command | Who can connect |
+|:--|:--|:--|
+| **Local only** (default) | `pnpm kitchen` | Only this machine (`127.0.0.1`) |
+| **Tailscale** | Start Tailscale, then `pnpm kitchen` | Devices on your Tailscale network |
+| **Public LAN** | `pnpm kitchen --public` | Any device on your local network |
+
+`--public` binds to `0.0.0.0` and admits `Host:` headers in RFC1918 (`10/8`, `172.16/12`, `192.168/16`) and link-local (`169.254/16`, `fe80::/10`, `fc00::/7`) ranges. Every LAN URL is printed on startup and stays visible so you can copy it. Tailscale and `--public` compose — both can be active at once.
+
+> **Security:** `--public` has no authentication. Anyone on your local network can read and modify everything stored in The Kitchen. Only use it on networks you trust. CSRF header (`x-hermes-bridge: 1`) and Origin validation remain enforced.
 
 ```bash
 pnpm dev                  # hot reload — web :5173, bridge :8787
@@ -61,7 +75,7 @@ pnpm build && pnpm start  # production bundle, manual
   <img src="docs/features.svg" alt="The Kitchen feature surfaces" width="100%"/>
 </div>
 
-All persistence is local SQLite. The bridge binds to `127.0.0.1` only and accepts same-origin requests.
+All persistence is local SQLite. The bridge binds to `127.0.0.1` by default; see [Hosting modes](#hosting-modes) to expose it over Tailscale or your local network.
 
 <br>
 
@@ -90,7 +104,7 @@ The `/coding` screen runs long-lived agentic sessions via **Claude Code** or **C
 
 | Variable | Default | Description |
 |:--|:--|:--|
-| `BRIDGE_PORT` | `8787` | Falls back to a free ephemeral port if busy. |
+| `BRIDGE_PORT` | `8787` | Pinned. Override with `--port=N` if 8787 is in use. |
 | `BRIDGE_DB_PATH` | Platform default¹ | Path to the local SQLite database. |
 | `HERMES_CLI_PATH` | `hermes` | Override if the binary isn't on `PATH`. |
 

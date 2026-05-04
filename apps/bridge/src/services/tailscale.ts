@@ -77,8 +77,8 @@ export async function detectTailscale(): Promise<TailscaleStatus> {
 export const LOCAL_BIND_ADDRESS = '127.0.0.1';
 export const TAILNET_BIND_ADDRESS = '0.0.0.0';
 
-export function desiredBindAddress(status: TailscaleStatus): string {
-  return status.running ? TAILNET_BIND_ADDRESS : LOCAL_BIND_ADDRESS;
+export function desiredBindAddress(input: { tailscale: TailscaleStatus; publicMode: boolean }): string {
+  return input.tailscale.running || input.publicMode ? TAILNET_BIND_ADDRESS : LOCAL_BIND_ADDRESS;
 }
 
 export interface RemoteAccessSnapshot {
@@ -90,6 +90,7 @@ export interface RemoteAccessSnapshot {
 export interface RemoteAccessController {
   getDnsName(): string | null;
   getBindAddress(): string;
+  getPublicMode(): boolean;
   refresh(): Promise<RemoteAccessSnapshot>;
 }
 
@@ -98,15 +99,20 @@ export interface RemoteAccessController {
  * Both depend on Tailscale state, which can change after server startup (e.g. user starts Tailscale
  * after launching the bridge). Calling refresh() re-detects, rebinds the listener if the desired
  * address changed, and updates the dns allow-list so requests with Host: <dns>:port are accepted.
+ *
+ * When publicMode is true the bind address is always 0.0.0.0 regardless of Tailscale state;
+ * toggling Tailscale off will not rebind back to 127.0.0.1.
  */
 export function createRemoteAccessController(args: {
   server: Server;
   port: number;
   initial: TailscaleStatus;
+  publicMode?: boolean;
   detect?: () => Promise<TailscaleStatus>;
 }): RemoteAccessController {
   const detect = args.detect ?? detectTailscale;
-  let bindAddress = desiredBindAddress(args.initial);
+  const publicMode = args.publicMode ?? false;
+  let bindAddress = desiredBindAddress({ tailscale: args.initial, publicMode });
   let dnsName = args.initial.running ? args.initial.dnsName : null;
 
   async function rebind(target: string): Promise<void> {
@@ -136,9 +142,12 @@ export function createRemoteAccessController(args: {
     getBindAddress() {
       return bindAddress;
     },
+    getPublicMode() {
+      return publicMode;
+    },
     async refresh() {
       const status = await detect();
-      const desired = desiredBindAddress(status);
+      const desired = desiredBindAddress({ tailscale: status, publicMode });
       let rebound = false;
       if (desired !== bindAddress) {
         await rebind(desired);

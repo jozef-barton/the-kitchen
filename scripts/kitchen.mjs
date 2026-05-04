@@ -1,10 +1,27 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import net from 'node:net';
-import { platform } from 'node:os';
+import { platform, networkInterfaces } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const PREFERRED_PORT = Number.parseInt(process.env.BRIDGE_PORT ?? '8787', 10);
+// Parse --public and --port=N / --port N from argv.
+const argv = process.argv.slice(2);
+const publicMode = argv.includes('--public');
+
+function parsePortArg(args) {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--port' && args[i + 1]) {
+      return Number.parseInt(args[i + 1], 10);
+    }
+    const match = /^--port=(\d+)$/.exec(args[i]);
+    if (match) {
+      return Number.parseInt(match[1], 10);
+    }
+  }
+  return null;
+}
+
+const PREFERRED_PORT = parsePortArg(argv) ?? Number.parseInt(process.env.BRIDGE_PORT ?? '8787', 10);
 // KITCHEN_RAW=1 → fall back to raw streaming output (useful for debugging).
 // Otherwise, when stdout is a TTY we run the polished progress UI.
 const FANCY = process.stdout.isTTY && process.env.KITCHEN_RAW !== '1';
@@ -36,7 +53,7 @@ const BAR_EMPTY = '░';
 // no-control-regex rule.
 const ANSI_SGR_RE = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, 'g');
 
-function tryPort(port) {
+function checkPort(port) {
   return new Promise((resolve) => {
     const srv = net.createServer();
     srv.unref();
@@ -45,21 +62,18 @@ function tryPort(port) {
   });
 }
 
-function pickEphemeralPort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.unref();
-    srv.once('error', reject);
-    srv.listen(0, '0.0.0.0', () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-async function findFreePort() {
-  if (await tryPort(PREFERRED_PORT)) return PREFERRED_PORT;
-  return pickEphemeralPort();
+function getLanIpv4s() {
+  const ifaces = networkInterfaces();
+  const results = [];
+  for (const iface of Object.values(ifaces)) {
+    if (!iface) continue;
+    for (const entry of iface) {
+      if (entry.family === 'IPv4' && !entry.internal) {
+        results.push(entry.address);
+      }
+    }
+  }
+  return results;
 }
 
 function openBrowser(url) {
@@ -276,14 +290,18 @@ async function main() {
   ui.start();
 
   try {
-    // ── Stage 1: pick a port ─────────────────────────────────────
+    // ── Stage 1: check port ──────────────────────────────────────
     ui.beginStage('setup');
-    const port = await findFreePort();
-    if (port !== PREFERRED_PORT) {
-      ui.setActivity(`port ${PREFERRED_PORT} in use, falling back to ${port}`);
-    } else {
-      ui.setActivity(`port ${port} reserved`);
+    const portAvailable = await checkPort(PREFERRED_PORT);
+    if (!portAvailable) {
+      ui.stop();
+      process.stderr.write(
+        `${C.red}Port ${PREFERRED_PORT} is in use. Free it (e.g. lsof -i :${PREFERRED_PORT}) or pass --port=NNNN.${C.reset}\n`
+      );
+      process.exit(1);
     }
+    const port = PREFERRED_PORT;
+    ui.setActivity(`port ${port} reserved`);
     // Tiny delay so the user sees the stage before it flips.
     await delay(150);
     ui.finishStage('setup');
@@ -309,6 +327,7 @@ async function main() {
       '--port',
       String(port),
     ];
+    if (publicMode) bridgeArgs.push('--public');
     const bridge = spawn('pnpm', bridgeArgs, {
       stdio: FANCY ? ['ignore', 'pipe', 'pipe'] : ['inherit', 'pipe', 'inherit'],
       env: { ...process.env, BRIDGE_PORT: String(port), FORCE_COLOR: FANCY ? '0' : process.env.FORCE_COLOR ?? '1' },
@@ -357,16 +376,30 @@ async function main() {
 
     ui.stop();
 
-    // Final summary panel.
+    // Final summary panel — URLs are printed as plain log lines so they persist in the
+    // terminal scroll buffer and the user can copy them at any time during the run.
     const totalElapsed = fmtElapsed(Date.now() - ui.startedAt);
+    const lanIps = getLanIpv4s();
     if (FANCY) {
-      process.stdout.write(
-        `\n  ${C.green}● Ready${C.reset}  ${C.bold}${url}${C.reset}  ${C.dim}(${totalElapsed})${C.reset}\n` +
-          `  ${C.dim}Press Ctrl-C to stop. Set KITCHEN_RAW=1 to see verbose logs.${C.reset}\n\n`,
-      );
+      process.stdout.write(`\n  ${C.green}● Ready${C.reset}  ${C.dim}(${totalElapsed})${C.reset}\n`);
     } else {
-      process.stdout.write(`[kitchen] ready at ${url}\n`);
+      process.stdout.write(`[kitchen] ready (${totalElapsed})\n`);
     }
+    // Always show the loopback URL.
+    process.stdout.write(`  Open ${C.bold}${C.cyan}${url}${C.reset}\n`);
+    // In --public mode, list every LAN URL.
+    if (publicMode) {
+      for (const ip of lanIps) {
+        process.stdout.write(`  Open on your LAN: ${C.bold}${C.cyan}http://${ip}:${port}${C.reset}\n`);
+      }
+      process.stdout.write(
+        `\n  ${C.yellow}⚠  No authentication. Only use --public on a trusted network.${C.reset}\n`
+      );
+    }
+    if (FANCY) {
+      process.stdout.write(`  ${C.dim}Press Ctrl-C to stop. Set KITCHEN_RAW=1 to see verbose logs.${C.reset}\n`);
+    }
+    process.stdout.write('\n');
 
     for (const sig of ['SIGINT', 'SIGTERM']) {
       process.on(sig, () => bridge.kill(sig));

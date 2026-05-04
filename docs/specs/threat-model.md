@@ -46,6 +46,17 @@ The bridge currently allows reviewed execution only for:
 
 Any expansion must update tests and this document together.
 
+## `--public` mode (LAN binding)
+
+`--public` is an explicit opt-in CLI flag that widens the bridge's trust surface beyond loopback:
+
+- The bridge binds to `0.0.0.0` instead of `127.0.0.1`.
+- Host headers in RFC1918 ranges (`10/8`, `172.16/12`, `192.168/16`), IPv4 link-local (`169.254/16`), IPv6 ULA (`fc00::/7`), and IPv6 link-local (`fe80::/10`) are admitted via a predicate-based extension to `evaluateLocalOriginPolicy`. Public IP addresses are still rejected.
+- CSRF header checking (`x-hermes-bridge: 1`) and Origin validation remain active — any state-changing request without the CSRF header is still rejected.
+- There is **no authentication**. Any device that can reach the bridge over the local network has full access. The trust boundary is the network itself.
+- `--public` is a process-config flag; it is not persisted in the database and cannot be toggled via the UI.
+- A security banner is printed to stderr on startup and shown in the terminal and the Local Network tab of the Remote Access page.
+
 ## Verification hooks
 
 - `pnpm security` runs dependency audit plus a repository scan for unsafe DOM/code-execution patterns.

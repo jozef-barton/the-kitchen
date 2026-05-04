@@ -9,6 +9,7 @@ import {
   detectTailscale,
   type RemoteAccessController
 } from './services/tailscale';
+import { getLocalNetworkIpv4s, isPrivateNetworkHostname } from './services/local-network';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,7 @@ export { createBridgeServer } from './http/create-bridge-server';
 async function main() {
   const args = process.argv.slice(2);
   const port = Number.parseInt(getArgValue('--port', args) ?? process.env.BRIDGE_PORT ?? '8787', 10);
+  const publicMode = args.includes('--public');
   const staticDirectoryArg = getArgValue('--static-dir', args);
   const fixtureMode = args.includes('--fixture');
   const staticDirectory = resolveOptionalPath(staticDirectoryArg ?? process.env.BRIDGE_STATIC_DIR);
@@ -56,11 +58,20 @@ async function main() {
   // Detect Tailscale up-front so the initial bind address matches the live state. The controller
   // (created after the listener starts) can re-detect later via /api/remote-access/refresh.
   const initialTailscale = await detectTailscale();
-  const bindAddress = desiredBindAddress(initialTailscale);
+  const bindAddress = desiredBindAddress({ tailscale: initialTailscale, publicMode });
   process.stdout.write(
     `[bridge] Tailscale: installed=${initialTailscale.installed} running=${initialTailscale.running}${initialTailscale.dnsName ? ` dns=${initialTailscale.dnsName}` : ''}\n`
   );
-  process.stdout.write(`[bridge] Binding to ${bindAddress}\n`);
+  process.stdout.write(`[bridge] Binding to ${bindAddress}${publicMode ? ' (public mode)' : ''}\n`);
+
+  if (publicMode) {
+    process.stderr.write(
+      '[bridge] WARNING: --public mode is active. The bridge accepts connections from any device on your local network. ' +
+      'There is no authentication. Only use this on trusted networks.\n'
+    );
+  }
+
+  const lanIpv4s = publicMode ? getLocalNetworkIpv4s() : [];
 
   // Holder so the create-bridge-server callbacks can resolve to the controller created after listen().
   const remoteAccessRef: { controller: RemoteAccessController | null } = { controller: null };
@@ -71,6 +82,9 @@ async function main() {
     staticDirectory,
     recipeRoot: process.cwd(),
     legacySnapshotPaths: fixtureMode ? [] : resolveLegacySnapshotCandidates(),
+    publicMode,
+    getPublicHostnames: () => lanIpv4s,
+    isAllowedPublicHostname: publicMode ? isPrivateNetworkHostname : undefined,
     getTailscaleDnsName: () => remoteAccessRef.controller?.getDnsName() ?? null,
     refreshRemoteAccess: async () => {
       if (!remoteAccessRef.controller) {
@@ -89,7 +103,8 @@ async function main() {
     remoteAccessRef.controller = createRemoteAccessController({
       server,
       port,
-      initial: initialTailscale
+      initial: initialTailscale,
+      publicMode
     });
   });
 }

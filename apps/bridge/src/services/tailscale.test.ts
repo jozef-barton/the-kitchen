@@ -35,11 +35,19 @@ async function close(server: http.Server): Promise<void> {
 
 describe('desiredBindAddress', () => {
   it('returns 0.0.0.0 when Tailscale is running', () => {
-    expect(desiredBindAddress(runningStatus('foo.ts.net'))).toBe(TAILNET_BIND_ADDRESS);
+    expect(desiredBindAddress({ tailscale: runningStatus('foo.ts.net'), publicMode: false })).toBe(TAILNET_BIND_ADDRESS);
   });
 
-  it('returns 127.0.0.1 when Tailscale is not running', () => {
-    expect(desiredBindAddress(notRunningStatus())).toBe(LOCAL_BIND_ADDRESS);
+  it('returns 127.0.0.1 when Tailscale is not running and publicMode is false', () => {
+    expect(desiredBindAddress({ tailscale: notRunningStatus(), publicMode: false })).toBe(LOCAL_BIND_ADDRESS);
+  });
+
+  it('returns 0.0.0.0 when publicMode is true even without Tailscale', () => {
+    expect(desiredBindAddress({ tailscale: notRunningStatus(), publicMode: true })).toBe(TAILNET_BIND_ADDRESS);
+  });
+
+  it('returns 0.0.0.0 when both Tailscale and publicMode are on', () => {
+    expect(desiredBindAddress({ tailscale: runningStatus('foo.ts.net'), publicMode: true })).toBe(TAILNET_BIND_ADDRESS);
   });
 });
 
@@ -71,6 +79,52 @@ describe('createRemoteAccessController', () => {
 
     expect(controller.getBindAddress()).toBe(LOCAL_BIND_ADDRESS);
     expect(controller.getDnsName()).toBeNull();
+    expect(controller.getPublicMode()).toBe(false);
+  });
+
+  it('reports publicMode=true when created with publicMode option', async () => {
+    await close(server);
+    server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
+    port = await listen(server, TAILNET_BIND_ADDRESS);
+
+    const controller = createRemoteAccessController({
+      server,
+      port,
+      initial: notRunningStatus(),
+      publicMode: true,
+      detect: async () => notRunningStatus()
+    });
+
+    expect(controller.getBindAddress()).toBe(TAILNET_BIND_ADDRESS);
+    expect(controller.getPublicMode()).toBe(true);
+  });
+
+  it('stays bound to 0.0.0.0 when publicMode=true and Tailscale goes down', async () => {
+    await close(server);
+    server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
+    port = await listen(server, TAILNET_BIND_ADDRESS);
+
+    let status: TailscaleStatus = runningStatus('host.ts.net');
+    const controller = createRemoteAccessController({
+      server,
+      port,
+      initial: status,
+      publicMode: true,
+      detect: async () => status
+    });
+
+    status = notRunningStatus();
+    const result = await controller.refresh();
+
+    expect(result.rebound).toBe(false);
+    expect(result.bindAddress).toBe(TAILNET_BIND_ADDRESS);
+    expect(controller.getBindAddress()).toBe(TAILNET_BIND_ADDRESS);
   });
 
   it('rebinds 127.0.0.1 → 0.0.0.0 and exposes dns name when Tailscale comes online', async () => {

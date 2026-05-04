@@ -22,6 +22,7 @@ import { CommandPalette } from './ui/organisms/CommandPalette';
 import { AppToaster } from './ui/toaster';
 
 type SettingsTabValue = 'general' | 'model' | 'soul_md' | 'access_audit' | 'telemetry';
+type RemoteAccessTabValue = 'tailscale' | 'local-network';
 
 function tabToPath(tab: SettingsTabValue): string {
   switch (tab) {
@@ -39,6 +40,15 @@ function pathToSettingsTab(pathname: string): SettingsTabValue {
   if (pathname === '/settings/access') return 'access_audit';
   if (pathname === '/settings/audit') return 'telemetry';
   return 'general';
+}
+
+function pathToRemoteAccessTab(pathname: string): RemoteAccessTabValue {
+  if (pathname === '/remote-access/local-network') return 'local-network';
+  return 'tailscale';
+}
+
+function remoteAccessTabToPath(tab: RemoteAccessTabValue): string {
+  return tab === 'local-network' ? '/remote-access/local-network' : '/remote-access';
 }
 
 function pathToPage(pathname: string): AppPage {
@@ -124,6 +134,10 @@ export function App() {
   const settingsTabFromUrl: SettingsTabValue = location.pathname.startsWith('/settings')
     ? pathToSettingsTab(location.pathname)
     : 'general';
+
+  const remoteAccessTabFromUrl: RemoteAccessTabValue = location.pathname.startsWith('/remote-access')
+    ? pathToRemoteAccessTab(location.pathname)
+    : 'tailscale';
 
   const recipesTabFromUrl = location.pathname === '/recipes/ingredients' ? 'ingredients' : 'book' as const;
   const skillsTabFromUrl = location.pathname === '/skills/finder' ? 'finder' : 'installed' as const;
@@ -522,7 +536,12 @@ export function App() {
           />
         ) : null}
 
-        {controller.page === 'remote-access' ? <RemoteAccessPage /> : null}
+        {controller.page === 'remote-access' ? (
+          <RemoteAccessPage
+            requestedTab={remoteAccessTabFromUrl}
+            onTabChange={(tab) => navigate(remoteAccessTabToPath(tab), { replace: true })}
+          />
+        ) : null}
       </ShellLayout>
       <AppToaster />
     </>

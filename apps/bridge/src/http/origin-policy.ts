@@ -10,8 +10,18 @@ const BRIDGE_REQUEST_HEADER = 'x-hermes-bridge';
 const BRIDGE_REQUEST_HEADER_VALUE = '1';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-function isLocalHostname(hostname: string, additionalHostnames: string[] = []) {
-  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || additionalHostnames.includes(hostname);
+function isLocalHostname(
+  hostname: string,
+  additionalHostnames: string[] = [],
+  additionalPredicate?: (h: string) => boolean
+) {
+  return (
+    hostname === '127.0.0.1' ||
+    hostname === 'localhost' ||
+    hostname === '::1' ||
+    additionalHostnames.includes(hostname) ||
+    (additionalPredicate !== undefined && additionalPredicate(hostname))
+  );
 }
 
 function normalizePortFromOrigin(origin: URL) {
@@ -42,13 +52,15 @@ export function evaluateLocalOriginPolicy(
   options: {
     allowedPorts?: string[];
     additionalAllowedHostnames?: string[];
+    additionalAllowedHostnamePredicate?: (hostname: string) => boolean;
   } = {}
 ): OriginPolicyDecision {
   const extraHostnames = options.additionalAllowedHostnames ?? [];
+  const extraPredicate = options.additionalAllowedHostnamePredicate;
 
   // Defense-in-depth against DNS rebinding: reject requests whose Host header is not localhost.
   const parsedHost = parseHost(request.headers.host);
-  if (!parsedHost || !isLocalHostname(parsedHost.hostname, extraHostnames)) {
+  if (!parsedHost || !isLocalHostname(parsedHost.hostname, extraHostnames, extraPredicate)) {
     return {
       allowed: false,
       message: 'The Hermes bridge only accepts requests with a localhost Host header.'
@@ -93,7 +105,7 @@ export function evaluateLocalOriginPolicy(
     };
   }
 
-  if (!isLocalHostname(origin.hostname, extraHostnames)) {
+  if (!isLocalHostname(origin.hostname, extraHostnames, extraPredicate)) {
     return {
       allowed: false,
       message: `The Hermes bridge only accepts localhost or 127.0.0.1 origins. Rejected ${origin.origin}.`
