@@ -490,6 +490,50 @@ export const RecipeTemplateSectionSchema: z.ZodType<
       rows: Array<Record<string, string | number | null>>;
       filename?: string;
     })
+  | ({
+      slotId: string;
+      kind: 'accordion-list';
+      title?: string;
+      items: Array<{
+        id: string;
+        title: string;
+        subtitle?: string;
+        count?: string;
+        tone?: RecipeTemplateTone;
+        subjects: string[];
+        recommendation?: string;
+        recommendationTone?: RecipeTemplateTone;
+        detailHeader?: string;
+        detailText?: string;
+        evidenceBullets: string[];
+        actions: RecipeTemplateActionReference[];
+      }>;
+    })
+  | ({
+      slotId: string;
+      kind: 'interactive-checklist';
+      title: string;
+      items: Array<{ id: string; label: string; checked: boolean }>;
+    })
+  | ({
+      slotId: string;
+      kind: 'interactive-guest-list';
+      title: string;
+      guests: Array<{ id: string; name: string; meta?: string }>;
+    })
+  | ({
+      slotId: string;
+      kind: 'step-by-step-preview';
+      prerequisites: Array<{ id: string; label: string }>;
+      steps: Array<{ id: string; label: string; detail?: string; code?: string; checked: boolean }>;
+      actions: RecipeTemplateActionReference[];
+    })
+  | ({
+      slotId: string;
+      kind: 'editable-notes';
+      title: string;
+      notes: string[];
+    })
 > = z.lazy(() =>
   z.discriminatedUnion('kind', [
     RecipeTemplateSectionBaseSchema.extend({
@@ -772,6 +816,72 @@ export const RecipeTemplateSectionSchema: z.ZodType<
       ).default([]),
       rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.null()]))).default([]),
       filename: OptionalTextSchema
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('accordion-list'),
+      title: OptionalTextSchema,
+      items: z.array(
+        z.object({
+          id: z.string().min(1),
+          title: z.string().min(1),
+          subtitle: OptionalTextSchema,
+          count: OptionalTextSchema,
+          tone: RecipeTemplateToneSchema.optional(),
+          subjects: z.array(z.string().min(1)).default([]),
+          recommendation: OptionalTextSchema,
+          recommendationTone: RecipeTemplateToneSchema.optional(),
+          detailHeader: OptionalTextSchema,
+          detailText: OptionalTextSchema,
+          evidenceBullets: z.array(z.string().min(1)).default([]),
+          actions: z.array(RecipeTemplateActionReferenceSchema).default([])
+        }).strict()
+      ).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('interactive-checklist'),
+      title: z.string().min(1),
+      items: z.array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          checked: z.boolean().default(false)
+        }).strict()
+      ).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('interactive-guest-list'),
+      title: z.string().min(1),
+      guests: z.array(
+        z.object({
+          id: z.string().min(1),
+          name: z.string().min(1),
+          meta: OptionalTextSchema
+        }).strict()
+      ).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('step-by-step-preview'),
+      prerequisites: z.array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string().min(1)
+        }).strict()
+      ).default([]),
+      steps: z.array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          detail: OptionalTextSchema,
+          code: OptionalTextSchema,
+          checked: z.boolean().default(false)
+        }).strict()
+      ).default([]),
+      actions: z.array(RecipeTemplateActionReferenceSchema).default([])
+    }).strict(),
+    RecipeTemplateSectionBaseSchema.extend({
+      kind: z.literal('editable-notes'),
+      title: z.string().min(1),
+      notes: z.array(z.string().min(1)).default([])
     }).strict()
   ])
 );

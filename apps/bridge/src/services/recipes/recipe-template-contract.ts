@@ -21,6 +21,7 @@ import type {
   RecipeTemplateSelection,
   RecipeTemplateState,
   RecipeTemplateText,
+  RecipeTemplateTone,
   RecipeTemplateUpdate,
   RecipeTemplateUpdateOperation,
   RecipeTemplateViewPhase
@@ -1168,13 +1169,15 @@ function normalizeTemplateFillData(templateId: RecipeTemplateId, rawData: unknow
       return {
         eyebrow: preferString(record, ['eyebrow', 'kicker'], repairs, 'eyebrow'),
         heroChips: coerceChips(preferValue(record, ['heroChips', 'badges', 'tags'], repairs, 'heroChips'), repairs, 'data.heroChips'),
-        prerequisites: asStringArray(preferValue(record, ['prerequisites', 'prereqs', 'requirements'], repairs, 'prerequisites') ?? []),
+        prerequisites: asStringArray(preferValue(record, ['prerequisites', 'prereqs', 'requirements'], repairs, 'prerequisites') ?? [])
+          .map((label, index) => ({ id: `prereq-${index + 1}`, label })),
         steps: stepsArray.map((item, index) => {
           const stepRecord = toRecord(item);
           return {
             id: preferString(stepRecord, ['id', 'key'], repairs, 'id') ?? `step-${index + 1}`,
             label: preferString(stepRecord, ['label', 'title', 'name', 'text', 'instruction'], repairs, 'label') ?? `Step ${index + 1}`,
-            detail: preferString(stepRecord, ['detail', 'description', 'summary'], repairs, 'detail')
+            detail: preferString(stepRecord, ['detail', 'description', 'summary'], repairs, 'detail'),
+            code: preferString(stepRecord, ['code', 'codeSnippet', 'command', 'snippet'], repairs, 'code')
           };
         }),
         noteLines: coerceNoteLines(preferValue(record, ['noteLines', 'notes'], repairs, 'noteLines'), repairs, 'data.noteLines')
@@ -2934,29 +2937,26 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
     }
     case 'inbox-triage-board': {
       const data = fill.data;
+      const accordionItems = (data.groups as Array<{ id?: string; label: string; tone?: string; items?: Array<{ id?: string; title: string; subtitle?: string }> }>).map((group, index) => {
+        const groupItems = group.items ?? [];
+        return {
+          id: group.id ?? `group-${index}`,
+          title: group.label,
+          subtitle: groupItems[0]?.subtitle,
+          count: `${groupItems.length} emails`,
+          tone: group.tone as RecipeTemplateTone | undefined,
+          subjects: groupItems.map((item) => item.title).filter(Boolean),
+          evidenceBullets: [] as string[],
+          actions: createActionRefs(definition, ['archive-sender-group', 'unsubscribe-sender-group', 'send-to-folder'])
+        };
+      });
       return [
         createStatsSection('stats', 'Queue health', data.stats),
         {
-          slotId: 'triage-board',
-          kind: 'split',
-          ratio: 'list-detail',
-          left: [
-            {
-              slotId: 'triage-groups',
-              kind: 'grouped-list',
-              title: 'Sender groups',
-              groups: toGroups(definition, data.groups, [], 'triage')
-            }
-          ],
-          right: [
-            createDetailPanelSection(
-              definition,
-              'triage-detail',
-              'Sender detail',
-              normalizeDetailValue(data.detail, 'Selected sender', 'Select a sender group to review the next cleanup step.')
-            )
-          ]
-        }
+          slotId: 'triage-list',
+          kind: 'accordion-list',
+          items: accordionItems
+        } as unknown as RecipeTemplateSection
       ];
     }
     case 'restaurant-finder':
@@ -3168,37 +3168,26 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
     }
     case 'security-review-board': {
       const data = fill.data as Extract<RecipeTemplateFill, { templateId: 'security-review-board' }>['data'];
+      const accordionItems = (data.groups as Array<{ id?: string; label: string; tone?: string; items?: Array<{ id?: string; title: string; subtitle?: string; bullets?: string[]; tone?: string }> }>).flatMap((group) =>
+        (group.items ?? []).map((item) => ({
+          id: item.id ?? item.title,
+          title: item.title,
+          subtitle: item.subtitle,
+          count: group.label,
+          tone: (group.tone ?? item.tone) as RecipeTemplateTone | undefined,
+          subjects: [] as string[],
+          evidenceBullets: (item.bullets ?? []) as string[],
+          actions: createActionRefs(definition, ['remediate-finding', 'ignore-finding'])
+        }))
+      );
       return compactArray<RecipeTemplateSection>([
         data.stats.length > 0 ? createStatsSection('stats', 'Findings by severity', data.stats) : null,
         {
-          slotId: 'findings',
-          kind: 'split',
-          ratio: 'list-detail',
-          left: [
-            {
-              slotId: 'findings-list',
-              kind: 'grouped-list',
-              title: 'Findings by severity',
-              groups: toGroups(definition, data.groups, [], 'security-findings')
-            }
-          ],
-          right: compactArray<RecipeTemplateSection>([
-            createDetailPanelSection(
-              definition,
-              'selected-finding',
-              'Selected finding',
-              normalizeDetailValue(data.detail, 'Selected finding', 'Review evidence, status, and recommended next steps.')
-            ),
-            data.remediationMarkdown
-              ? createNotesSection(
-                  definition,
-                  'remediation',
-                  data.remediationTitle ?? 'Proposed remediation',
-                  data.remediationMarkdown.split('\n').map((line: string) => line.trim()).filter(Boolean)
-                )
-              : null
-          ])
-        }
+          slotId: 'findings-list',
+          kind: 'accordion-list',
+          title: 'Findings by severity',
+          items: accordionItems
+        } as unknown as RecipeTemplateSection
       ]);
     }
     case 'vendor-evaluation-matrix': {
@@ -3235,8 +3224,21 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
         { id: 'venues', label: 'Venues' },
         { id: 'guests', label: 'Guests' },
         { id: 'checklist', label: 'Checklist' },
-        { id: 'itinerary', label: 'Itinerary' }
+        { id: 'itinerary', label: 'Itinerary' },
+        { id: 'notes', label: 'Notes' }
       ];
+      const flatGuests = (data.guestGroups as Array<{ items?: Array<{ id?: string; title: string; subtitle?: string; meta?: string }> }>).flatMap((group) =>
+        (group.items ?? []).map((item) => ({
+          id: item.id ?? item.title,
+          name: item.title,
+          meta: item.subtitle ?? item.meta
+        }))
+      );
+      const flatChecklistItems = (data.checklistItems as Array<{ id?: string; title: string; checked?: boolean }>).map((item) => ({
+        id: item.id ?? item.title,
+        label: item.title,
+        checked: item.checked ?? false
+      }));
       return [
         {
           slotId: 'event-tabs',
@@ -3258,18 +3260,18 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
               createActionBarSection(definition, 'guest-actions', 'Guest actions', ['add-event-guest']),
               {
                 slotId: 'guests',
-                kind: 'grouped-list',
+                kind: 'interactive-guest-list',
                 title: 'Guest list',
-                groups: toGroups(definition, data.guestGroups, [], 'event-guests')
-              }
+                guests: flatGuests
+              } as unknown as RecipeTemplateSection
             ],
             checklist: [
               {
                 slotId: 'checklist',
-                kind: 'grouped-list',
+                kind: 'interactive-checklist',
                 title: 'Checklist',
-                groups: toChecklistGroups(definition, data.checklistItems, ['toggle-template-checklist'])
-              }
+                items: flatChecklistItems
+              } as unknown as RecipeTemplateSection
             ],
             itinerary: [
               {
@@ -3278,27 +3280,35 @@ function compileTemplateSections(fill: RecipeTemplateFill, definition: RecipeTem
                 title: 'Itinerary',
                 items: toTimelineItems(definition, data.itineraryItems, [], 'event-itinerary')
               }
+            ],
+            notes: [
+              {
+                slotId: 'event-notes',
+                kind: 'editable-notes',
+                title: 'Planning notes',
+                notes: (data.noteLines as string[]) ?? []
+              } as unknown as RecipeTemplateSection
             ]
           }
         }
       ];
     }
     case 'step-by-step-instructions': {
-      const data = fill.data as {
-        prerequisites: string[];
-        steps: Array<{ id: string; label: string; detail?: string }>;
+      const data = fill.data as unknown as {
+        prerequisites: Array<{ id: string; label: string }>;
+        steps: Array<{ id: string; label: string; detail?: string; code?: string }>;
         noteLines: string[];
       };
       return compactArray<RecipeTemplateSection>([
         {
-          slotId: 'checklist',
-          kind: 'checklist',
-          title: 'Instructions',
+          slotId: 'steps',
+          kind: 'step-by-step-preview',
           prerequisites: data.prerequisites,
           steps: data.steps.map((step) => ({
             id: step.id,
             label: step.label,
             detail: step.detail,
+            code: step.code,
             checked: false
           })),
           actions: createActionRefs(definition, [])

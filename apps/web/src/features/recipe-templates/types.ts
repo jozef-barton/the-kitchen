@@ -207,8 +207,8 @@ export type RecipeTemplatePreviewSection =
       kind: 'confirmation';
       title: string;
       message: string;
-      confirmLabel: string;
-      secondaryLabel?: string;
+      confirmAction: TemplateAction;
+      secondaryAction?: TemplateAction;
       tone?: TemplateTone;
     }
   | {
@@ -248,18 +248,88 @@ export type RecipeTemplatePreviewSection =
       }>;
     }
   | {
-      kind: 'selectable-table';
-      title?: string;
-      columns: TemplateTableColumn[];
-      rows: TemplateTableRow[];
-      primaryAction: string;
-      secondaryAction?: string;
-    }
-  | {
       kind: 'report';
       title: string;
       body: string;
       footnotes?: Array<{ id: string; label: string; url?: string }>;
+    }
+  | {
+      kind: 'image';
+      title?: string;
+      image: { src: string | null; alt: string; caption?: string; borderRadius?: string; aspect?: string; };
+    }
+  | {
+      kind: 'audio';
+      title: string;
+      src: string;
+      subtitle?: string;
+      transcript?: string;
+    }
+  | {
+      kind: 'bar-chart';
+      title: string;
+      xKey: string;
+      series: Array<{ id: string; label: string; tone?: TemplateTone }>;
+      data: Array<Record<string, string | number>>;
+      orientation?: 'vertical' | 'horizontal';
+      stacked?: boolean;
+      valueFormat?: 'number' | 'currency' | 'percent';
+    }
+  | {
+      kind: 'line-chart';
+      title: string;
+      xKey: string;
+      series: Array<{ id: string; label: string; tone?: TemplateTone }>;
+      data: Array<Record<string, string | number>>;
+      smooth?: boolean;
+      valueFormat?: 'number' | 'currency' | 'percent';
+    }
+  | {
+      kind: 'pie-chart';
+      title: string;
+      data: Array<{ id: string; label: string; value: number; tone?: TemplateTone }>;
+      variant?: 'pie' | 'donut';
+      valueFormat?: 'number' | 'currency' | 'percent';
+    }
+  | {
+      kind: 'time-series';
+      title: string;
+      xKey: string;
+      series: Array<{ id: string; label: string; tone?: TemplateTone }>;
+      data: Array<Record<string, string | number>>;
+      valueFormat?: 'number' | 'currency' | 'percent';
+    }
+  | {
+      kind: 'video';
+      title: string;
+      src: string;
+      poster?: string;
+      subtitle?: string;
+    }
+  | {
+      kind: 'file-attachment';
+      title: string;
+      files: Array<{ id: string; filename: string; mimeType: string; size: number; kind: string; url: string; }>;
+    }
+  | {
+      kind: 'pdf-viewer';
+      title: string;
+      src: string;
+      filename?: string;
+    }
+  | {
+      kind: 'code-block';
+      title: string;
+      language: string;
+      code: string;
+      filename?: string;
+    }
+  | {
+      kind: 'data-table';
+      title: string;
+      columns: Array<{ key: string; label: string }>;
+      rows: Array<Record<string, string | number | null>>;
+      filename?: string;
     }
   | {
       kind: 'interactive-guest-list';
@@ -278,14 +348,18 @@ export type RecipeTemplatePreviewSection =
     }
   | {
       kind: 'step-by-step-preview';
+      title?: string;
       prerequisites?: Array<{ id: string; label: string }>;
       steps: Array<{
         id: string;
         label: string;
         detail?: string;
         code?: string;
+        checked?: boolean;
       }>;
+      actions?: TemplateAction[];
     };
+
 
 export interface RecipeTemplatePreviewSpec {
   headline: string;

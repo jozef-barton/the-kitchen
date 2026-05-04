@@ -16,7 +16,7 @@ import {
   TemplateKanbanBoard,
   TemplateNotesPanel,
   TemplateReportSection,
-  TemplateSelectableTable,
+
   TemplateStatStrip,
   TemplateStepByStepPreview,
   TemplateSurface,
@@ -71,8 +71,7 @@ function RecipeTemplatePreviewSectionRenderer({ section }: { section: RecipeTemp
       return <TemplateConfirmationBlock {...section} />;
     case 'accordion-list':
       return <TemplateAccordionList {...section} />;
-    case 'selectable-table':
-      return <TemplateSelectableTable {...section} />;
+
     case 'report':
       return <TemplateReportSection {...section} />;
     case 'interactive-guest-list':

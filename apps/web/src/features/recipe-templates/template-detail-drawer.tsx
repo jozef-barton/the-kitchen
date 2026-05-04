@@ -467,20 +467,6 @@ function LoadingSectionSkeleton({ section }: { section: RecipeTemplatePreviewSec
           </VStack>
         </TemplateSurface>
       );
-    case 'selectable-table':
-      return (
-        <TemplateSurface>
-          <VStack align="stretch" gap="3">
-            <Skeleton height="16px" width="30%" rounded="4px" />
-            {(section.rows ?? []).map((row, idx) => (
-              <Flex key={row.id ?? idx} gap="3" align="center">
-                <Skeleton height="14px" width="14px" rounded="3px" flexShrink={0} />
-                <Skeleton height="13px" width={idx % 2 === 0 ? '55%' : '42%'} rounded="4px" />
-              </Flex>
-            ))}
-          </VStack>
-        </TemplateSurface>
-      );
     default:
       return (
         <TemplateSurface>

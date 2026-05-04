@@ -784,8 +784,8 @@ export function TemplateKanbanBoard({
 export function TemplateConfirmationBlock({
   title,
   message,
-  confirmLabel,
-  secondaryLabel,
+  confirmAction,
+  secondaryAction,
   tone: inputTone
 }: Extract<RecipeTemplatePreviewSection, { kind: 'confirmation' }>) {
   const tone = templateToneStyles(inputTone);
@@ -800,8 +800,8 @@ export function TemplateConfirmationBlock({
           {message}
         </Text>
         <Flex gap="2" wrap="wrap">
-          <TemplateActionButton action={{ label: confirmLabel, tone: inputTone === 'danger' ? 'danger' : 'accent' }} />
-          {secondaryLabel ? <TemplateActionButton action={{ label: secondaryLabel }} /> : null}
+          <TemplateActionButton action={{ label: confirmAction.label, tone: inputTone === 'danger' ? 'danger' : 'accent' }} />
+          {secondaryAction ? <TemplateActionButton action={{ label: secondaryAction.label }} /> : null}
         </Flex>
       </VStack>
     </TemplateSurface>
@@ -958,147 +958,6 @@ export function TemplateAccordionList({
             </Box>
           );
         })}
-      </VStack>
-    </TemplateSurface>
-  );
-}
-
-export function TemplateSelectableTable({
-  title,
-  columns,
-  rows,
-  primaryAction,
-  secondaryAction
-}: Extract<RecipeTemplatePreviewSection, { kind: 'selectable-table' }>) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  function toggleRow(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    if (selectedIds.size === rows.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(rows.map((r) => r.id)));
-    }
-  }
-
-  const allSelected = rows.length > 0 && selectedIds.size === rows.length;
-  const someSelected = selectedIds.size > 0 && selectedIds.size < rows.length;
-
-  return (
-    <TemplateSurface>
-      <VStack align="stretch" gap="4">
-        {title ? <TemplateSectionHeader title={title} /> : null}
-        <Table.ScrollArea>
-          <Table.Root size="sm" variant="line">
-            <Table.Header>
-              <Table.Row>
-                <Table.ColumnHeader w="36px" px="3">
-                  <Checkbox.Root
-                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-                    onCheckedChange={toggleAll}
-                    cursor="pointer"
-                    position="relative"
-                  >
-                    <Checkbox.HiddenInput />
-                    <Checkbox.Control w="4" h="4" />
-                  </Checkbox.Root>
-                </Table.ColumnHeader>
-                <Table.ColumnHeader>Item</Table.ColumnHeader>
-                {columns.map((col) => (
-                  <Table.ColumnHeader key={col.id} textAlign={col.align ?? 'start'}>
-                    {col.label}
-                  </Table.ColumnHeader>
-                ))}
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {rows.map((row) => {
-                const isSelected = selectedIds.has(row.id);
-                return (
-                  <Table.Row
-                    key={row.id}
-                    bg={isSelected ? 'var(--surface-accent)' : undefined}
-                    _hover={{ bg: isSelected ? 'var(--surface-accent)' : 'var(--surface-2)' }}
-                    cursor="pointer"
-                    onClick={() => toggleRow(row.id)}
-                  >
-                    <Table.Cell px="3">
-                      <Checkbox.Root
-                        checked={isSelected}
-                        onCheckedChange={() => toggleRow(row.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        cursor="pointer"
-                        position="relative"
-                      >
-                        <Checkbox.HiddenInput />
-                        <Checkbox.Control w="4" h="4" />
-                      </Checkbox.Root>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text fontWeight="600" color="var(--text-primary)">
-                        {row.label}
-                      </Text>
-                    </Table.Cell>
-                    {row.cells.map((cell, idx) => {
-                      const tone = templateToneStyles(cell.tone);
-                      const col = columns[idx];
-                      if (cell.tone === 'accent') {
-                        return (
-                          <Table.Cell key={`${row.id}-${col?.id ?? idx}`} textAlign={col?.align ?? 'start'}>
-                            <Text
-                              fontSize="sm"
-                              color="var(--accent)"
-                              textDecoration="underline"
-                              textUnderlineOffset="3px"
-                            >
-                              {cell.value}
-                            </Text>
-                          </Table.Cell>
-                        );
-                      }
-                      return (
-                        <Table.Cell key={`${row.id}-${col?.id ?? idx}`} textAlign={col?.align ?? 'start'}>
-                          <Text
-                            fontWeight={cell.emphasis ? '700' : '500'}
-                            color={cell.tone ? tone.color : 'var(--text-primary)'}
-                            _dark={cell.tone ? { color: tone.darkColor } : undefined}
-                          >
-                            {cell.value}
-                          </Text>
-                          {cell.subvalue ? (
-                            <Text fontSize="xs" color="var(--text-muted)">
-                              {cell.subvalue}
-                            </Text>
-                          ) : null}
-                        </Table.Cell>
-                      );
-                    })}
-                  </Table.Row>
-                );
-              })}
-            </Table.Body>
-          </Table.Root>
-        </Table.ScrollArea>
-        <Flex gap="2" wrap="wrap">
-          <TemplateActionButton
-            action={{ label: primaryAction, tone: 'accent' }}
-            disabled={selectedIds.size === 0}
-          />
-          {secondaryAction ? (
-            <TemplateActionButton action={{ label: secondaryAction }} />
-          ) : null}
-        </Flex>
       </VStack>
     </TemplateSurface>
   );
