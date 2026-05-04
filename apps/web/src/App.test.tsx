@@ -44,7 +44,11 @@ vi.mock('@hermes-recipes/ui', async () => {
         themeMode: 'dark' as const,
         setThemeMode: setThemeModeMock
       };
-    }
+    },
+    useHermesAccentColor() {
+      return { accent: 'blue' as const, setAccent: vi.fn() };
+    },
+    ACCENT_COLORS: [{ id: 'blue', label: 'Blue', swatch: '#3b82f6' }]
   };
 });
 

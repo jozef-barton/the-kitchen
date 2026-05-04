@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
-import { Badge, Box, Button, Checkbox, Flex, HStack, Image, Input, Separator, SimpleGrid, Table, Text, VStack, chakra } from '@chakra-ui/react';
+import { Badge, Box, Button, Checkbox, Flex, HStack, Image, Input, Separator, SimpleGrid, Text, VStack, chakra } from '@chakra-ui/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
