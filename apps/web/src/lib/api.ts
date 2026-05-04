@@ -603,6 +603,8 @@ export interface RemoteAccessStatus {
   tailscale: { installed: boolean; running: boolean; dnsName: string | null; ipv4: string | null; error?: string };
   url: string | null;
   enabled: boolean;
+  public: { enabled: boolean; hostnames: string[]; urls: string[] };
+  bindAddress: string;
 }
 
 export async function getRemoteAccessStatus(): Promise<RemoteAccessStatus> {

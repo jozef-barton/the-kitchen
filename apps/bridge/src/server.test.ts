@@ -386,15 +386,33 @@ describe.sequential('bridge server', () => {
     const server = await startServer(tempRoot);
 
     const status = await fetch(`${server.baseUrl}/api/remote-access/status`).then((r) =>
-      r.json() as Promise<{ tailscale: { running: boolean; installed: boolean }; url: string | null; enabled: boolean }>
+      r.json() as Promise<{
+        tailscale: { running: boolean; installed: boolean };
+        url: string | null;
+        enabled: boolean;
+        public: { enabled: boolean; hostnames: string[]; urls: string[] };
+        bindAddress: string;
+      }>
     );
 
     expect(status.tailscale).toBeDefined();
     expect(typeof status.tailscale.running).toBe('boolean');
     expect(typeof status.enabled).toBe('boolean');
+    expect(status.public).toBeDefined();
+    expect(typeof status.public.enabled).toBe('boolean');
+    expect(status.public.enabled).toBe(false);
+    expect(Array.isArray(status.public.hostnames)).toBe(true);
+    expect(Array.isArray(status.public.urls)).toBe(true);
+    expect(typeof status.bindAddress).toBe('string');
 
     const refresh = await fetch(`${server.baseUrl}/api/remote-access/refresh`, { method: 'POST' }).then((r) =>
-      r.json() as Promise<{ tailscale: { running: boolean }; bindAddress: string; rebound: boolean; url: string | null }>
+      r.json() as Promise<{
+        tailscale: { running: boolean };
+        bindAddress: string;
+        rebound: boolean;
+        url: string | null;
+        public: { enabled: boolean; hostnames: string[]; urls: string[] };
+      }>
     );
 
     expect(typeof refresh.bindAddress).toBe('string');
@@ -402,8 +420,46 @@ describe.sequential('bridge server', () => {
     // The fallback path used in tests (no controller wiring) reports rebound=false even if the
     // detected state changed — server.test.ts uses createBridgeServer directly, not server.ts main().
     expect(refresh.rebound).toBe(false);
+    expect(refresh.public).toBeDefined();
+    expect(typeof refresh.public.enabled).toBe('boolean');
 
     await server.close();
+  });
+
+  it('returns remote-access status with public mode enabled when configured', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bridge-public-mode-'));
+    tempRoots.push(tempRoot);
+
+    const { server: srv, database } = createBridgeServer({
+      databasePath: path.join(tempRoot, 'bridge.db'),
+      publicMode: true,
+      getPublicHostnames: () => ['192.168.1.100', '10.0.0.5'],
+      isAllowedPublicHostname: (h) => h.startsWith('192.168.') || h.startsWith('10.')
+    });
+
+    await new Promise<void>((resolve) => srv.listen(0, '0.0.0.0', () => resolve()));
+    const { port } = srv.address() as { port: number };
+    const baseUrl = `http://127.0.0.1:${port}`;
+    void database;
+
+    const status = await fetch(`${baseUrl}/api/remote-access/status`).then((r) =>
+      r.json() as Promise<{
+        public: { enabled: boolean; hostnames: string[]; urls: string[] };
+        bindAddress: string;
+      }>
+    );
+
+    expect(status.public.enabled).toBe(true);
+    expect(status.public.hostnames).toEqual(['192.168.1.100', '10.0.0.5']);
+    expect(status.public.urls).toEqual([
+      `http://192.168.1.100:${port}`,
+      `http://10.0.0.5:${port}`
+    ]);
+
+    await new Promise<void>((resolve, reject) => {
+      srv.closeAllConnections?.();
+      srv.close((err) => (err ? reject(err) : resolve()));
+    });
   });
 
   it('returns skills and model/provider state and persists provider updates', async () => {
