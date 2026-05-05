@@ -287,6 +287,16 @@ function sectionHasRenderableContent(section: RecipeTemplateSection): boolean {
       return section.data.length > 0 && section.series.length > 0;
     case 'pie-chart':
       return section.data.length > 0;
+    case 'accordion-list':
+      return section.items.length > 0;
+    case 'interactive-checklist':
+      return section.items.length > 0;
+    case 'interactive-guest-list':
+      return section.guests.length > 0;
+    case 'step-by-step-preview':
+      return section.steps.length > 0;
+    case 'editable-notes':
+      return section.notes.length > 0;
     default:
       return false;
   }
@@ -501,6 +511,73 @@ function renderGhostSectionBody(section: RecipeTemplateSection) {
               </Box>
             ))}
           </VStack>
+        </VStack>
+      );
+    case 'accordion-list':
+      return (
+        <VStack align="stretch" gap="0">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Box key={`ghost-accordion-${index}`} py="2.5" px="1" borderBottom="1px solid var(--border-subtle)">
+              <Flex justify="space-between" align="center" gap="3">
+                <VStack align="start" gap="1.5" flex="1">
+                  {ghostBar(`${54 + index * 10}%`)}
+                  {ghostBar('40%')}
+                </VStack>
+                <Box w="6" h="3" rounded="full" bg="rgba(148, 163, 184, 0.18)" />
+              </Flex>
+            </Box>
+          ))}
+        </VStack>
+      );
+    case 'interactive-checklist':
+      return (
+        <VStack align="stretch" gap="2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <HStack key={`ghost-ic-${index}`} gap="3" align="center" py="2" px="3" rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)">
+              <Box w="4" h="4" rounded="4px" border="1px dashed var(--border-subtle)" flexShrink={0} />
+              {ghostBar(`${60 + index * 12}%`)}
+            </HStack>
+          ))}
+        </VStack>
+      );
+    case 'interactive-guest-list':
+      return (
+        <VStack align="stretch" gap="1.5">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Box key={`ghost-guest-${index}`} py="2.5" px="3" rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)">
+              <VStack align="start" gap="1.5">
+                {ghostBar(`${50 + index * 14}%`)}
+                {ghostBar('36%')}
+              </VStack>
+            </Box>
+          ))}
+        </VStack>
+      );
+    case 'step-by-step-preview':
+      return (
+        <VStack align="stretch" gap="1.5">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <HStack key={`ghost-step-${index}`} gap="3" align="start" rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="2.5">
+              <Box mt="1" w="4" h="4" rounded="4px" border="1px dashed var(--border-subtle)" flexShrink={0} />
+              <VStack align="stretch" gap="2" flex="1">
+                {ghostBar(`${60 + index * 8}%`)}
+                {ghostBar('48%')}
+              </VStack>
+            </HStack>
+          ))}
+        </VStack>
+      );
+    case 'editable-notes':
+      return (
+        <VStack align="stretch" gap="2">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <Box key={`ghost-enote-${index}`} rounded="8px" border="1px dashed var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+              <VStack align="stretch" gap="2">
+                {ghostBar(`${70 + index * 10}%`)}
+                {ghostBar('55%')}
+              </VStack>
+            </Box>
+          ))}
         </VStack>
       );
     default:
@@ -1826,111 +1903,6 @@ export function RecipeTemplateRenderer({
           </TemplateSurface>
         );
       case 'split': {
-        const tid = templateState.templateId;
-        const isExpandableSplit = tid === 'security-review-board' || tid === 'inbox-triage-board';
-        if (isExpandableSplit && !ghost) {
-          const leftGroupedList = section.left.find((s) => s.kind === 'grouped-list');
-          const rightDetailPanel = section.right.find((s) => s.kind === 'detail-panel');
-          if (leftGroupedList?.kind === 'grouped-list' && rightDetailPanel?.kind === 'detail-panel') {
-            const detailPanel = rightDetailPanel;
-            return wrap(
-              <Box key={section.slotId}>
-                <VStack align="stretch" gap="0">
-                  {leftGroupedList.title ? <Box pb="3"><TemplateSectionHeader title={leftGroupedList.title} /></Box> : null}
-                  {leftGroupedList.groups.map((group, groupIndex) => {
-                    const gTone = templateToneStyles(group.tone);
-                    return (
-                      <VStack key={group.id} align="stretch" gap="0">
-                        <HStack gap="2" py="2" px="1">
-                          <Box w="2" h="2" rounded="full" bg={gTone.color} _dark={{ bg: gTone.darkColor }} flexShrink={0} />
-                          <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)">
-                            {group.label}
-                          </Text>
-                        </HStack>
-                        <VStack align="stretch" gap="0">
-                          {group.items.map((item, itemIndex) => {
-                            const itemKey = item.id ?? item.title;
-                            const isSelected = selectedItemId === itemKey;
-                            const isToneColored = group.tone === 'danger' || group.tone === 'warning';
-                            return (
-                              <Box key={`${group.id}-${itemKey}`} py="0.5">
-                                {itemIndex > 0 ? <Separator borderColor="var(--border-subtle)" /> : null}
-                                <Box
-                                  py="2.5"
-                                  px="1"
-                                  cursor="pointer"
-                                  bg={isSelected ? 'var(--surface-accent)' : 'transparent'}
-                                  rounded="6px"
-                                  onClick={() => setSelectedItemId((prev) => (prev === itemKey ? null : itemKey))}
-                                  _hover={{ bg: isSelected ? 'var(--surface-accent)' : 'var(--surface-2)' }}
-                                >
-                                  <Flex justify="space-between" align="center" gap="3">
-                                    <VStack align="start" gap="0.5" minW={0} flex="1">
-                                      <Text
-                                        fontWeight="600"
-                                        fontSize="sm"
-                                        color={isToneColored ? gTone.color : 'var(--text-primary)'}
-                                        _dark={isToneColored ? { color: gTone.darkColor } : undefined}
-                                      >
-                                        {item.title}
-                                      </Text>
-                                      {item.subtitle ? (
-                                        <Text fontSize="xs" color="var(--text-secondary)">{item.subtitle}</Text>
-                                      ) : null}
-                                    </VStack>
-                                    <Text fontSize="xs" color="var(--text-muted)" flexShrink={0}>
-                                      {isSelected ? '▲' : '▼'}
-                                    </Text>
-                                  </Flex>
-                                </Box>
-                                {isSelected ? (
-                                  <Box
-                                    px="3"
-                                    py="2"
-                                    borderLeft="3px solid"
-                                    borderLeftColor={gTone.color}
-                                    _dark={{ borderLeftColor: gTone.darkColor }}
-                                    mb="2"
-                                    ml="1"
-                                  >
-                                    <VStack align="stretch" gap="3">
-                                      {detailPanel.summary ? (
-                                        <Text fontSize="sm" color="var(--text-secondary)" pt="2">
-                                          {detailPanel.summary}
-                                        </Text>
-                                      ) : null}
-                                      {detailPanel.fields.map((field) => (
-                                        <Box key={`${field.label}-${field.value ?? ''}`}>
-                                          <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)" mb="1">
-                                            {field.label}
-                                          </Text>
-                                          {renderFieldBody(field, { showCopyButtons: true })}
-                                        </Box>
-                                      ))}
-                                      {detailPanel.actions.length > 0 ? (
-                                        <Box pt="1">
-                                          {renderActionRefs(detailPanel.actions, {
-                                            contextKey: `${section.slotId}:${itemKey}`,
-                                            fallbackSelectedItemIds: item.id ? [item.id] : undefined
-                                          })}
-                                        </Box>
-                                      ) : null}
-                                    </VStack>
-                                  </Box>
-                                ) : null}
-                              </Box>
-                            );
-                          })}
-                        </VStack>
-                        {groupIndex < leftGroupedList.groups.length - 1 ? <Separator borderColor="var(--border-subtle)" my="2" /> : null}
-                      </VStack>
-                    );
-                  })}
-                </VStack>
-              </Box>
-            );
-          }
-        }
         return wrap(
           <Flex
             key={section.slotId}
@@ -2455,6 +2427,309 @@ export function RecipeTemplateRenderer({
                     </Box>
                   ) : null}
                 </>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      case 'accordion-list': {
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              {section.title ? <TemplateSectionHeader title={section.title} /> : null}
+              {ghost ? renderGhostSectionBody(section) : (
+                <VStack align="stretch" gap="0">
+                  {section.items.map((item, itemIndex) => {
+                    const itemKey = `${section.slotId}-${item.id}`;
+                    const isExpanded = selectedItemId === itemKey;
+                    const tone = templateToneStyles(item.tone);
+                    const isToneColored = item.tone === 'danger' || item.tone === 'warning';
+                    return (
+                      <Box key={item.id}>
+                        {itemIndex > 0 ? <Separator borderColor="var(--border-subtle)" /> : null}
+                        <Box
+                          py="2.5"
+                          px="1"
+                          cursor="pointer"
+                          bg={isExpanded ? 'var(--surface-accent)' : 'transparent'}
+                          rounded="6px"
+                          onClick={() => setSelectedItemId((prev) => (prev === itemKey ? null : itemKey))}
+                          _hover={{ bg: isExpanded ? 'var(--surface-accent)' : 'var(--surface-2)' }}
+                        >
+                          <Flex justify="space-between" align="center" gap="3">
+                            <VStack align="start" gap="0.5" minW={0} flex="1">
+                              <Text
+                                fontWeight="600"
+                                fontSize="sm"
+                                color={isToneColored ? tone.color : 'var(--text-primary)'}
+                                _dark={isToneColored ? { color: tone.darkColor } : undefined}
+                              >
+                                {item.title}
+                              </Text>
+                              {item.subtitle ? (
+                                <Text fontSize="xs" color="var(--text-secondary)">{item.subtitle}</Text>
+                              ) : null}
+                            </VStack>
+                            <HStack gap="2" align="center" flexShrink={0}>
+                              {item.count ? (
+                                <Badge
+                                  rounded="6px"
+                                  px="2"
+                                  py="0.5"
+                                  fontSize="10px"
+                                  fontWeight="700"
+                                  border="1px solid"
+                                  borderColor={isToneColored ? tone.border : 'var(--border-subtle)'}
+                                  bg={isToneColored ? tone.bg : 'var(--surface-2)'}
+                                  color={isToneColored ? tone.color : 'var(--text-secondary)'}
+                                  _dark={isToneColored ? { bg: tone.darkBg, borderColor: tone.darkBorder, color: tone.darkColor } : undefined}
+                                >
+                                  {item.count}
+                                </Badge>
+                              ) : null}
+                              <Text fontSize="xs" color="var(--text-muted)">{isExpanded ? '▲' : '▼'}</Text>
+                            </HStack>
+                          </Flex>
+                        </Box>
+                        {isExpanded ? (
+                          <Box
+                            px="3"
+                            py="2"
+                            borderLeft="3px solid"
+                            borderLeftColor={isToneColored ? tone.color : 'var(--border-subtle)'}
+                            _dark={{ borderLeftColor: isToneColored ? tone.darkColor : 'var(--border-subtle)' }}
+                            mb="2"
+                            ml="1"
+                          >
+                            <VStack align="stretch" gap="3">
+                              {item.subjects && item.subjects.length > 0 ? (
+                                <Box>
+                                  <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)" mb="1.5">
+                                    Emails
+                                  </Text>
+                                  <VStack align="stretch" gap="1">
+                                    {item.subjects.map((subject, idx) => (
+                                      <HStack key={`${item.id}-subj-${idx}`} gap="2" align="start">
+                                        <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--text-muted)" flexShrink={0} />
+                                        <Text fontSize="xs" color="var(--text-secondary)">{subject}</Text>
+                                      </HStack>
+                                    ))}
+                                  </VStack>
+                                </Box>
+                              ) : null}
+                              {item.detailHeader ? (
+                                <Box>
+                                  <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)" mb="1">
+                                    {item.detailHeader}
+                                  </Text>
+                                  {item.detailText ? (
+                                    <Text fontSize="sm" color="var(--text-secondary)">{item.detailText}</Text>
+                                  ) : null}
+                                </Box>
+                              ) : null}
+                              {item.evidenceBullets && item.evidenceBullets.length > 0 ? (
+                                <Box>
+                                  <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)" mb="1.5">
+                                    Evidence
+                                  </Text>
+                                  <VStack align="stretch" gap="1">
+                                    {item.evidenceBullets.map((bullet, idx) => (
+                                      <HStack key={`${item.id}-bullet-${idx}`} gap="2" align="start">
+                                        <Box mt="1.5" w="1.5" h="1.5" rounded="full" bg="var(--accent)" flexShrink={0} />
+                                        <Text fontSize="xs" color="var(--text-secondary)">{bullet}</Text>
+                                      </HStack>
+                                    ))}
+                                  </VStack>
+                                </Box>
+                              ) : null}
+                              {item.recommendation ? (
+                                <Box
+                                  rounded="6px"
+                                  border="1px solid"
+                                  borderColor={templateToneStyles(item.recommendationTone).border}
+                                  bg={templateToneStyles(item.recommendationTone).bg}
+                                  px="3"
+                                  py="2"
+                                  _dark={{
+                                    bg: templateToneStyles(item.recommendationTone).darkBg,
+                                    borderColor: templateToneStyles(item.recommendationTone).darkBorder
+                                  }}
+                                >
+                                  <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)" mb="1">
+                                    Recommendation
+                                  </Text>
+                                  <Text fontSize="sm" color="var(--text-secondary)">{item.recommendation}</Text>
+                                </Box>
+                              ) : null}
+                              {item.actions.length > 0 ? (
+                                <Box pt="1">
+                                  {renderActionRefs(item.actions, {
+                                    contextKey: `${section.slotId}:${item.id}`,
+                                    fallbackSelectedItemIds: [item.id]
+                                  })}
+                                </Box>
+                              ) : null}
+                            </VStack>
+                          </Box>
+                        ) : null}
+                      </Box>
+                    );
+                  })}
+                </VStack>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      }
+      case 'interactive-checklist':
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="4">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? renderGhostSectionBody(section) : (
+                <VStack align="stretch" gap="2.5">
+                  {section.items.map((item) => (
+                    <HStack key={item.id} gap="3" align="center" py="2" px="3" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)">
+                      <Box
+                        w="4" h="4" rounded="4px" flexShrink={0}
+                        border="1.5px solid"
+                        borderColor={item.checked ? 'var(--accent)' : 'var(--border-subtle)'}
+                        bg={item.checked ? 'var(--accent)' : 'transparent'}
+                        display="flex" alignItems="center" justifyContent="center"
+                      >
+                        {item.checked ? <Text fontSize="xs" color="white" fontWeight="700">✓</Text> : null}
+                      </Box>
+                      <Text
+                        fontSize="sm"
+                        color={item.checked ? 'var(--text-muted)' : 'var(--text-primary)'}
+                        textDecoration={item.checked ? 'line-through' : 'none'}
+                      >
+                        {item.label}
+                      </Text>
+                    </HStack>
+                  ))}
+                </VStack>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      case 'interactive-guest-list':
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="4">
+              <Flex justify="space-between" align="center">
+                <TemplateSectionHeader title={section.title} />
+                <Text fontSize="sm" color="var(--text-muted)">{section.guests.length} guests</Text>
+              </Flex>
+              {ghost ? renderGhostSectionBody(section) : (
+                <VStack align="stretch" gap="1.5">
+                  {section.guests.map((guest) => (
+                    <HStack key={guest.id} justify="space-between" align="center" py="2.5" px="3" rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)">
+                      <VStack align="start" gap="0.5">
+                        <Text fontWeight="600" fontSize="sm" color="var(--text-primary)">{guest.name}</Text>
+                        {guest.meta ? <Text fontSize="xs" color="var(--text-secondary)">{guest.meta}</Text> : null}
+                      </VStack>
+                    </HStack>
+                  ))}
+                </VStack>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      case 'step-by-step-preview':
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="3">
+              {ghost ? renderGhostSectionBody(section) : (
+                <>
+                  {section.prerequisites.length > 0 ? (
+                    <Box rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+                      <Text fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0" color="var(--text-muted)" mb="2">
+                        Prerequisites
+                      </Text>
+                      <Flex gap="2" wrap="wrap">
+                        {section.prerequisites.map((prereq) => (
+                          <Box
+                            key={prereq.id}
+                            rounded="6px"
+                            border="1px solid var(--border-subtle)"
+                            bg="var(--surface-1)"
+                            px="2.5"
+                            py="1"
+                          >
+                            <Text fontSize="xs" color="var(--text-secondary)">{prereq.label}</Text>
+                          </Box>
+                        ))}
+                      </Flex>
+                    </Box>
+                  ) : null}
+                  <VStack align="stretch" gap="1.5">
+                    {section.steps.map((step, index) => {
+                      const isChecked = step.checked ?? false;
+                      return (
+                        <Box
+                          key={step.id}
+                          rounded="8px"
+                          border="1px solid"
+                          borderColor="var(--border-subtle)"
+                          bg={isChecked ? 'transparent' : 'var(--surface-2)'}
+                          px="3.5"
+                          py="2.5"
+                        >
+                          <HStack align="start" gap="3">
+                            <Box pt="1" flexShrink={0}>
+                              <Box
+                                w="4" h="4" rounded="4px"
+                                border="1.5px solid"
+                                borderColor={isChecked ? 'var(--accent)' : 'var(--border-subtle)'}
+                                bg={isChecked ? 'var(--accent)' : 'transparent'}
+                                display="flex" alignItems="center" justifyContent="center"
+                              >
+                                {isChecked ? <Text fontSize="xs" color="white" fontWeight="700">✓</Text> : null}
+                              </Box>
+                            </Box>
+                            <Box flex="1" minW={0}>
+                              <HStack align="baseline" gap="1.5" wrap="nowrap">
+                                <Text as="span" fontWeight="700" fontSize="sm" color={isChecked ? 'var(--text-muted)' : 'var(--accent)'} flexShrink={0}>
+                                  {index + 1}.
+                                </Text>
+                                <Text
+                                  fontWeight="600"
+                                  fontSize="sm"
+                                  color={isChecked ? 'var(--text-muted)' : 'var(--text-primary)'}
+                                  textDecoration={isChecked ? 'line-through' : 'none'}
+                                >
+                                  {step.label}
+                                </Text>
+                              </HStack>
+                              {step.detail ? (
+                                <Text mt="1" fontSize="sm" color="var(--text-secondary)" opacity={isChecked ? 0.5 : 1}>{step.detail}</Text>
+                              ) : null}
+                              {step.code ? <ChecklistCodeBlock code={step.code} dimmed={isChecked} /> : null}
+                            </Box>
+                          </HStack>
+                        </Box>
+                      );
+                    })}
+                  </VStack>
+                  {section.actions.length > 0 ? renderActionRefs(section.actions, { contextKey: section.slotId }) : null}
+                </>
+              )}
+            </VStack>
+          </TemplateSurface>
+        );
+      case 'editable-notes':
+        return wrap(
+          <TemplateSurface key={section.slotId}>
+            <VStack align="stretch" gap="4">
+              <TemplateSectionHeader title={section.title} />
+              {ghost ? renderGhostSectionBody(section) : (
+                <VStack align="stretch" gap="2">
+                  {section.notes.map((note, index) => (
+                    <Box key={`${section.slotId}-note-${index}`} rounded="8px" border="1px solid var(--border-subtle)" bg="var(--surface-2)" px="3.5" py="3">
+                      <Text fontSize="sm" color="var(--text-primary)">{note}</Text>
+                    </Box>
+                  ))}
+                </VStack>
               )}
             </VStack>
           </TemplateSurface>

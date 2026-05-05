@@ -129,9 +129,9 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     selectionSignals: ['unread email', 'inbox triage', 'sender cleanup', 'bulk archive'],
     slots: [
       { id: 'stats', kind: 'stats', required: true },
-      { id: 'triage-board', kind: 'split', required: true }
+      { id: 'triage-list', kind: 'accordion-list', required: true }
     ],
-    allowedUpdateOps: ['set_header', 'upsert_groups', 'set_detail', 'set_status'],
+    allowedUpdateOps: ['set_header', 'upsert_groups', 'set_status'],
     transitions: []
   }),
   'restaurant-finder': withDefaults({
@@ -235,9 +235,9 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     selectionSignals: ['security review', 'threat findings', 'audit board', 'severity triage'],
     slots: [
       { id: 'stats', kind: 'stats' },
-      { id: 'findings', kind: 'split', required: true }
+      { id: 'findings-list', kind: 'accordion-list', required: true }
     ],
-    allowedUpdateOps: ['set_header', 'upsert_groups', 'set_detail', 'set_status'],
+    allowedUpdateOps: ['set_header', 'upsert_groups', 'set_status'],
     actions: {
       'ignore-finding': bridgeAction('ignore-finding', 'Ignore', 'remove_selected_items', {
         intent: 'neutral',
@@ -357,7 +357,7 @@ export const WORKRECIPE_TEMPLATE_RUNTIME_REGISTRY: Record<RecipeTemplateId, Reci
     useCase: 'Follow a procedure with prerequisites and numbered steps that can be checked off.',
     selectionSignals: ['how to', 'step by step', 'instructions', 'tutorial', 'guide'],
     slots: [
-      { id: 'checklist', kind: 'checklist', required: true },
+      { id: 'steps', kind: 'step-by-step-preview', required: true },
       { id: 'notes', kind: 'notes' }
     ],
     allowedUpdateOps: ['set_header', 'append_note_lines'],

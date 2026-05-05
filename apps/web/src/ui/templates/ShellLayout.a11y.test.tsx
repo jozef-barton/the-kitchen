@@ -9,6 +9,8 @@ import { expectNoA11yViolations } from '../../test/axe';
 
 vi.mock('@hermes-recipes/ui', () => ({
   useHermesTheme: () => ({ themeMode: 'light', setThemeMode: vi.fn() }),
+  useHermesAccentColor: () => ({ accent: 'blue', setAccent: vi.fn() }),
+  ACCENT_COLORS: [{ id: 'blue', label: 'Blue', swatch: '#3b82f6' }]
 }));
 vi.mock('next-themes', () => ({
   useTheme: () => ({ theme: 'light', resolvedTheme: 'light', setTheme: vi.fn() }),
